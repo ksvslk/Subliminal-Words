@@ -1,7 +1,6 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.indest.subliminalwords">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="Subliminal Words"
+        android:label="operation_hermes"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -25,21 +24,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Google Mobile Ads -->
-        <!-- TODO: Replace the sample AdMob app ID with an actual app ID.
-                   See README.txt for details. -->
-        <meta-data
-            android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>
-       <!-- Google Play Games -->
-       <!-- Warning: Never include the Play Games app_id directly here.
-                     It won't work. Use the XML file in res/values. -->
-       <meta-data
-           android:name="com.google.android.gms.games.APP_ID"
-           android:value="@string/app_id" />
-       <meta-data
-           android:name="com.google.android.gms.version"
-           android:value="@integer/google_play_services_version" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
