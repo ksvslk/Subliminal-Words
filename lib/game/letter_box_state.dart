@@ -1,0 +1,1 @@
+enum LetterBoxState { letter, empty, gone }

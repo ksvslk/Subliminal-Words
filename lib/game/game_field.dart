@@ -1,8 +1,15 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/game/letter_box.dart';
+import 'package:operation_hermes/game/letter_box_state.dart';
 
 class GameField extends StatefulWidget {
-  const GameField({super.key, required this.word, required this.picture, this.solution = const []});
+  const GameField(
+      {super.key,
+      required this.word,
+      required this.picture,
+      this.solution = const []});
 
   final String word;
   final String picture;
@@ -15,6 +22,8 @@ class GameField extends StatefulWidget {
 }
 
 class _GameFieldState extends State<GameField> {
+  final List random21Letters = List.generate(21, (index) => randomLetter());
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -40,27 +49,20 @@ class _GameFieldState extends State<GameField> {
                     ),
                   ),
                   Column(
-                    children: [
-                      Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            for (var char in widget.word.characters)
-                              LetterBox(letter: char)
-                          ]),
-                      Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            for (var char in widget.word.characters)
-                              LetterBox(letter: char)
-                          ]),
-                      Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            for (var char in widget.word.characters)
-                              LetterBox(letter: char)
-                          ]),
-                    ],
-                  )
+                    children: List.generate(
+                      3,
+                      (_) => Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(
+                          7,
+                          (_) => LetterBox(
+                              letter: random21Letters.removeLast(),
+                              state: LetterBoxState.letter,
+                              callback: () => grow(context)),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -69,4 +71,15 @@ class _GameFieldState extends State<GameField> {
       ),
     );
   }
+}
+
+String randomLetter() {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  final random = Random();
+  return letters[random.nextInt(letters.length)];
+}
+
+
+void grow(context) {
+     print("IT WORKED!");
 }
