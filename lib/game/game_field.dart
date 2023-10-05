@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
+import 'package:operation_hermes/game/puzzle.dart';
 
 class GameField extends StatefulWidget {
   const GameField(
@@ -26,28 +27,20 @@ class _GameFieldState extends State<GameField> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
+    return Scaffold(
         body: SafeArea(
           child: Center(
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,children: [
                     for (var char in widget.word.characters)
-                      LetterBox(letter: char)
+                      Flexible(child: LetterBox(letter: char))
                   ]),
-                  Flexible(
-                    child: Padding(
-                      padding: const EdgeInsets.all(4.0),
-                      child: Image.asset(
-                        widget.picture,
-                        fit: BoxFit.scaleDown,
-                      ),
-                    ),
-                  ),
+                  Puzzle(picturePath: widget.picture),
                   Column(
                     children: List.generate(
                       3,
@@ -55,10 +48,10 @@ class _GameFieldState extends State<GameField> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: List.generate(
                           7,
-                          (_) => LetterBox(
+                          (_) => Flexible(child: LetterBox(
                               letter: random21Letters.removeLast(),
                               state: LetterBoxState.letter,
-                              callback: () => grow(context)),
+                              callback: () => grow(context))),
                         ),
                       ),
                     ),
@@ -68,7 +61,6 @@ class _GameFieldState extends State<GameField> {
             ),
           ),
         ),
-      ),
     );
   }
 }

@@ -1,0 +1,32 @@
+import 'package:flutter/material.dart';
+
+class Puzzle extends StatefulWidget {
+  const Puzzle({super.key, required this.picturePath});
+
+  final String picturePath;
+
+  @override
+  State<Puzzle> createState() => _PuzzleState();
+}
+
+class _PuzzleState extends State<Puzzle> {
+  @override
+  Widget build(BuildContext context) {
+    return Flexible(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: Theme.of(context).colorScheme.secondaryContainer, width: 4),
+          borderRadius: BorderRadius.circular(8),
+        ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Image.asset(
+              widget.picturePath,
+              fit: BoxFit.fill,
+            ),
+          ),
+      ),
+    );
+  }
+}
