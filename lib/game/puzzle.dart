@@ -15,12 +15,11 @@ class _PuzzleState extends State<Puzzle> {
     return Flexible(
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: Theme.of(context).colorScheme.secondaryContainer, width: 4),
-          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Theme.of(context).colorScheme.secondary, width: 2),
+          borderRadius: BorderRadius.circular(4),
         ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(2),
             child: Image.asset(
               widget.picturePath,
               fit: BoxFit.fill,
