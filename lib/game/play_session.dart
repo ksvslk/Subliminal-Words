@@ -21,7 +21,7 @@ class PlaySession extends StatefulWidget {
 
 class _PlaySessionState extends State<PlaySession> {
   final initialQueue = List.generate(7, (index) => (index:index, letter: LetterBoxState.slot.name, state: LetterBoxState.slot), growable: false);
-  final random21Letters = List.generate(16, (index) => (index: index, letter: randomLetter(), state: LetterBoxState.pick), growable: false);
+  final random21Letters = List.generate(14, (index) => (index: index, letter: randomLetter(), state: LetterBoxState.pick), growable: false);
 
   @override
   Widget build(BuildContext context) {

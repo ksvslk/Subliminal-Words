@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
+import 'package:operation_hermes/game/nice_button.dart';
 import 'package:operation_hermes/game/puzzle.dart';
 
 class GameField extends StatefulWidget {
@@ -51,8 +52,6 @@ class _GameFieldState extends State<GameField> {
           state: LetterBoxState.chosen
         );
       });
-      print(_solutionStack);
-      print(_chooseStack);
       return true;
     }
   }
@@ -75,8 +74,32 @@ class _GameFieldState extends State<GameField> {
           state: LetterBoxState.slot
         );
       });
-      print(_solutionStack);
-      print(_chooseStack);
+      return true;
+    }
+  }
+
+  bool _handleEmptySlotTouch() {
+    var lastPlacedSlotLetter = _solutionStack
+        .lastIndexWhere((element) => element.state == LetterBoxState.placed);
+
+    var firstFreeSpot = _chooseStack
+        .indexWhere((element) => element.state == LetterBoxState.chosen);
+
+    if (lastPlacedSlotLetter == -1) {
+      return false;
+    } else {
+      setState(() {
+        _chooseStack[firstFreeSpot] = (
+          index: firstFreeSpot,
+          letter: _solutionStack[lastPlacedSlotLetter].letter,
+          state: LetterBoxState.pick
+        );
+        _solutionStack[lastPlacedSlotLetter] = (
+          index: lastPlacedSlotLetter,
+          letter: "",
+          state: LetterBoxState.slot
+        );
+      });
       return true;
     }
   }
@@ -89,70 +112,60 @@ class _GameFieldState extends State<GameField> {
           child: Padding(
             padding: const EdgeInsets.all(8.0),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
+                Puzzle(picturePath: widget.picture),
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   for (final (i, letterData) in _solutionStack.indexed)
                     Flexible(
                       child: LetterBox(
                         callback: (data) {
-                          return (data.state == LetterBoxState.placed)
-                              ? _handleSlotLetterTouch(data)
-                              : false;
+                          if (data.state == LetterBoxState.placed) {
+                            return _handleSlotLetterTouch(data);
+                          } else if (data.state == LetterBoxState.slot) {
+                            return _handleEmptySlotTouch();
+                          } else {
+                            return false;
+                          }
                         },
                         data: letterData,
                       ),
                     ),
                 ]),
-                Puzzle(picturePath: widget.picture),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Expanded(
-                        flex: 1,
-                        child: Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                            ])),
-                    Expanded(
-                      flex: 3,
-                      child: Column(
-                        children: List.generate(
-                          4,
-                          (rowIndex) => Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(
-                              4,
-                              (columnIndex) {
-                                var index = rowIndex * 4 + columnIndex;
-                                var letterData = _chooseStack[index];
-                                return Flexible(
-                                  child: LetterBox(
-                                    callback: (data) {
-                                      return (data.state == LetterBoxState.pick)
-                                          ? _handlePickLetterTouch(data)
-                                          : false;
-                                    },
-                                    data: letterData,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
+                Divider(),
+                Column(
+                  children: List.generate(
+                    2,
+                    (rowIndex) => Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
+                        7,
+                        (columnIndex) {
+                          var index = rowIndex * 7 + columnIndex;
+                          var letterData = _chooseStack[index];
+                          return Flexible(
+                              flex: 1,
+                              child: LetterBox(
+                                callback: (data) {
+                                  return (data.state == LetterBoxState.pick)
+                                      ? _handlePickLetterTouch(data)
+                                      : false;
+                                },
+                                data: letterData,
+                              ));
+                        },
                       ),
                     ),
-                    const Expanded(
-                        flex: 1,
-                        child: Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              ColoredBox(color: Colors.red),
-                              ColoredBox(color: Colors.green),
-                              ColoredBox(color: Colors.blue),
-                            ])),
+                  ),
+                ),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(child: NiceButton(buttonText: "Pinch")),
+                    Flexible(child: NiceButton(buttonText: "Pinch")),
+                    Flexible(child: NiceButton(buttonText: "Pinch")),
                   ],
-                )
+                ),
               ],
             ),
           ),

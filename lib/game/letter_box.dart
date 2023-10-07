@@ -21,7 +21,7 @@ class LetterBox extends StatelessWidget {
         case LetterBoxState.slot:
           return Theme.of(context).colorScheme.secondaryContainer;
         case LetterBoxState.placed:
-          return Theme.of(context).colorScheme.primaryContainer;
+          return Theme.of(context).colorScheme.tertiaryContainer;
         case LetterBoxState.pick:
           return Theme.of(context).colorScheme.primaryContainer;
         case LetterBoxState.chosen:
@@ -36,7 +36,7 @@ class LetterBox extends StatelessWidget {
         case LetterBoxState.slot:
           return Colors.transparent;
         case LetterBoxState.placed:
-          return Theme.of(context).colorScheme.onPrimaryContainer;
+          return Theme.of(context).colorScheme.onTertiaryContainer;
         case LetterBoxState.pick:
           return Theme.of(context).colorScheme.onPrimaryContainer;
         case LetterBoxState.chosen:
