@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+
 class Puzzle extends StatefulWidget {
   const Puzzle({super.key, required this.picturePath});
 
@@ -12,6 +13,7 @@ class Puzzle extends StatefulWidget {
 class _PuzzleState extends State<Puzzle> {
   @override
   Widget build(BuildContext context) {
+    
     return Flexible(
       child: Container(
         decoration: BoxDecoration(

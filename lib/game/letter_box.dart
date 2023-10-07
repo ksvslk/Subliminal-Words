@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:operation_hermes/audio/audio_controller.dart';
+import 'package:operation_hermes/audio/sounds.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
+import 'package:provider/provider.dart';
 
 typedef LetterData = ({int index, String letter, LetterBoxState state});
 
 class LetterBox extends StatelessWidget {
-  const LetterBox(
-      {super.key,
-      this.callback,
-      required this.data});
+  const LetterBox({super.key, this.callback, required this.data});
 
   final bool Function(LetterData)? callback;
   final LetterData data;
 
   @override
   Widget build(BuildContext context) {
+    final audioController = context.read<AudioController>();
 
     Color getContainerColor() {
       switch (data.state) {
@@ -46,22 +47,22 @@ class LetterBox extends StatelessWidget {
       }
     }
 
-   int getDuration() {
+    int getDuration() {
       switch (data.state) {
         case LetterBoxState.slot:
-          return 200;
-        case LetterBoxState.placed:
-          return 200;
-        case LetterBoxState.pick:
-          return 200;
-        case LetterBoxState.chosen:
           return 300;
-        case LetterBoxState.gone:
+        case LetterBoxState.placed:
+          return 300;
+        case LetterBoxState.pick:
+          return 100;
+        case LetterBoxState.chosen:
           return 200;
+        case LetterBoxState.gone:
+          return 300;
       }
     }
 
-      Curve getCurve() {
+    Curve getCurve() {
       switch (data.state) {
         case LetterBoxState.slot:
           return Curves.easeIn;
@@ -90,7 +91,7 @@ class LetterBox extends StatelessWidget {
     }
 
     Matrix4 getContainerTransformMatrix() {
-    switch (data.state) {
+      switch (data.state) {
         case LetterBoxState.slot:
           return Matrix4.identity();
         case LetterBoxState.placed:
@@ -104,9 +105,26 @@ class LetterBox extends StatelessWidget {
       }
     }
 
+    void playSoundEffect(bool actionSuccessful) {
+      switch (data.state) {
+        case LetterBoxState.pick:
+        if (actionSuccessful) {
+          audioController.playSfx(SfxType.pickLetter);
+          }
+        case LetterBoxState.placed:
+          audioController.playSfx(SfxType.freeLetter);
+        case LetterBoxState.slot:
+          if (actionSuccessful) {
+            audioController.playSfx(SfxType.freeLetter);
+          }
+        default:
+      }
+    }
+
     return GestureDetector(
       onTap: () {
         var result = callback?.call(data);
+        playSoundEffect(result == true);
         if (result == true) {
           HapticFeedback.selectionClick();
         }

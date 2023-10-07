@@ -1,8 +1,13 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
 import 'package:operation_hermes/game/nice_button.dart';
 import 'package:operation_hermes/game/puzzle.dart';
+import 'package:operation_hermes/settings/settings.dart';
+import 'package:provider/provider.dart';
 
 class GameField extends StatefulWidget {
   const GameField(
@@ -106,6 +111,7 @@ class _GameFieldState extends State<GameField> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsController>();
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -114,6 +120,11 @@ class _GameFieldState extends State<GameField> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
+                IconButton(
+                    onPressed: () {
+                      settings.toggleMusicOn();
+                    },
+                    icon: const Icon(Icons.music_note)),
                 Puzzle(picturePath: widget.picture),
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   for (final (i, letterData) in _solutionStack.indexed)
