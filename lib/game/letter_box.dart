@@ -1,135 +1,129 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
 import 'package:operation_hermes/audio/sounds.dart';
+import 'package:operation_hermes/game/letter_box_data.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
 import 'package:provider/provider.dart';
 
-typedef LetterData = ({int index, String letter, LetterBoxState state});
 
-class LetterBox extends StatelessWidget {
-  const LetterBox({super.key, this.callback, required this.data});
+class LetterBox extends StatefulWidget {
+  const LetterBox({super.key, required this.data});
 
-  final bool Function(LetterData)? callback;
-  final LetterData data;
+  final LetterBoxData data;
+
+  @override
+  State<LetterBox> createState() => _LetterBoxState();
+}
+
+class _LetterBoxState extends State<LetterBox> {
 
   @override
   Widget build(BuildContext context) {
-    final audioController = context.read<AudioController>();
+    print("Building ${widget.data.letter}");
 
     Color getContainerColor() {
-      switch (data.state) {
-        case LetterBoxState.slot:
+      switch (widget.data.state) {
+        case LetterBoxState.solutionSlot:
           return Theme.of(context).colorScheme.secondaryContainer;
-        case LetterBoxState.placed:
+        case LetterBoxState.solutionPick:
           return Theme.of(context).colorScheme.tertiaryContainer;
-        case LetterBoxState.pick:
+        case LetterBoxState.fieldPick:
           return Theme.of(context).colorScheme.primaryContainer;
-        case LetterBoxState.chosen:
+        case LetterBoxState.fieldSlot:
           return Theme.of(context).colorScheme.background;
-        case LetterBoxState.gone:
-          return Colors.transparent;
       }
     }
 
     Color getTextColor() {
-      switch (data.state) {
-        case LetterBoxState.slot:
+      switch (widget.data.state) {
+        case LetterBoxState.solutionSlot:
           return Colors.transparent;
-        case LetterBoxState.placed:
+        case LetterBoxState.solutionPick:
           return Theme.of(context).colorScheme.onTertiaryContainer;
-        case LetterBoxState.pick:
+        case LetterBoxState.fieldPick:
           return Theme.of(context).colorScheme.onPrimaryContainer;
-        case LetterBoxState.chosen:
-          return Colors.transparent;
-        case LetterBoxState.gone:
-          return Colors.transparent;
+        case LetterBoxState.fieldSlot:
+          return Theme.of(context).colorScheme.onSurfaceVariant;
       }
     }
 
     int getDuration() {
+      return 300;
+      /*
       switch (data.state) {
         case LetterBoxState.slot:
-          return 300;
+          return 100;
         case LetterBoxState.placed:
-          return 300;
+          return 50;
         case LetterBoxState.pick:
           return 100;
         case LetterBoxState.chosen:
-          return 200;
+          return 100;
         case LetterBoxState.gone:
-          return 300;
+          return 50;
       }
+      */
     }
 
     Curve getCurve() {
+      return Curves.bounceInOut;
+      /*
       switch (data.state) {
         case LetterBoxState.slot:
-          return Curves.easeIn;
+          return Curves.bounceIn;
         case LetterBoxState.placed:
-          return Curves.easeOutSine;
+          return Curves.bounceInOut;
         case LetterBoxState.pick:
-          return Curves.easeOut;
+          return Curves.bounceInOut;
         case LetterBoxState.chosen:
-          return Curves.easeIn;
+          return Curves.bounceIn;
         case LetterBoxState.gone:
-          return Curves.easeIn;
+          return Curves.bounceIn;
       }
+      */
     }
 
     Color getContainerBorderColor() {
-      switch (data.state) {
-        case LetterBoxState.pick:
+      switch (widget.data.state) {
+        case LetterBoxState.fieldPick:
           return Theme.of(context).colorScheme.primary;
-        case LetterBoxState.slot:
+        case LetterBoxState.solutionSlot:
           return Theme.of(context).colorScheme.outline;
-        case LetterBoxState.placed:
+        case LetterBoxState.solutionPick:
           return Theme.of(context).colorScheme.secondary;
-        case LetterBoxState.chosen || LetterBoxState.gone:
-          return Colors.transparent;
+        case LetterBoxState.fieldSlot:
+          return Theme.of(context).colorScheme.outlineVariant;
       }
     }
 
     Matrix4 getContainerTransformMatrix() {
-      switch (data.state) {
-        case LetterBoxState.slot:
+      return Matrix4.identity();
+      switch (widget.data.state) {
+        case LetterBoxState.solutionSlot:
           return Matrix4.identity();
-        case LetterBoxState.placed:
+        case LetterBoxState.solutionPick:
           return Matrix4.identity();
-        case LetterBoxState.pick:
+        case LetterBoxState.fieldPick:
           return Matrix4.identity();
-        case LetterBoxState.chosen:
-          return Matrix4.identity()..scale(0.25, 0.25);
-        case LetterBoxState.gone:
+        case LetterBoxState.fieldSlot:
           return Matrix4.identity()..scale(0.25, 0.25);
       }
     }
 
-    void playSoundEffect(bool actionSuccessful) {
-      switch (data.state) {
-        case LetterBoxState.pick:
-        if (actionSuccessful) {
-          audioController.playSfx(SfxType.pickLetter);
-          }
-        case LetterBoxState.placed:
-          audioController.playSfx(SfxType.freeLetter);
-        case LetterBoxState.slot:
-          if (actionSuccessful) {
-            audioController.playSfx(SfxType.freeLetter);
-          }
-        default:
+    double getFontSize(double fontSize) {
+      switch (widget.data.state) {
+        case LetterBoxState.solutionSlot:
+          return 0.0;
+        case LetterBoxState.solutionPick:
+          return fontSize;
+        case LetterBoxState.fieldPick:
+          return fontSize;
+        case LetterBoxState.fieldSlot:
+          return 0.0;
       }
     }
 
-    return GestureDetector(
-      onTap: () {
-        var result = callback?.call(data);
-        playSoundEffect(result == true);
-        if (result == true) {
-          HapticFeedback.selectionClick();
-        }
-      },
-      child: LimitedBox(
+    return LimitedBox(
         maxHeight: 55,
         child: AspectRatio(
           aspectRatio: 1 / 1,
@@ -153,27 +147,23 @@ class LetterBox extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 double fontSize = constraints.maxHeight *
-                    0.5; // half of the container's height
+                    0.6; // half of the container's height
                 return Center(
                   child: AnimatedDefaultTextStyle(
                     style: TextStyle(
                       fontFamily: DefaultTextStyle.of(context).style.fontFamily,
                       color: getTextColor(),
-                      fontSize: (data.state == LetterBoxState.placed ||
-                              data.state == LetterBoxState.pick)
-                          ? fontSize
-                          : fontSize / 3,
+                      fontSize: getFontSize(fontSize)
                     ),
                     duration: Duration(milliseconds: getDuration()),
                     curve: getCurve(),
-                    child: Text(data.letter),
+                    child: Text(widget.data.letter),
                   ),
                 );
               },
             ),
           ),
         ),
-      ),
     );
   }
 }

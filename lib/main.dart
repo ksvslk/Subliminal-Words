@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
-import 'package:operation_hermes/game/play_session.dart';
+import 'package:operation_hermes/game/game_field_wrapper.dart';
 import 'dart:developer' as dev;
 import 'settings/persistence/settings_persistence.dart';
 import 'settings/persistence/local_storage_settings_persistence.dart';
@@ -76,7 +76,7 @@ class MyApp extends StatelessWidget {
               useMaterial3: true,
               // Define the default brightness and colors.
               colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color.fromARGB(255, 0, 179, 255),
+                seedColor: const Color.fromARGB(255, 255, 217, 0),
                 brightness: Brightness.light,
               ),
               fontFamily: 'Gabarito'),
@@ -84,11 +84,11 @@ class MyApp extends StatelessWidget {
               useMaterial3: true,
               // Define the default brightness and colors.
               colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color.fromARGB(255, 0, 179, 255),
+                seedColor: Color.fromARGB(255, 255, 217, 0),
                 brightness: Brightness.dark,
               ),
               fontFamily: 'Gabarito'),
-          home: const PlaySession(),
+          home: const GameFieldWrapper(),
         ),
       ),
     );
