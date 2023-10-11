@@ -18,7 +18,6 @@ class GameField extends StatelessWidget {
     final settings = context.watch<SettingsController>();
     final levelModel = context.read<LevelModel>();
     final audioController = context.read<AudioController>();
-    
 
     return Scaffold(
       body: SafeArea(
@@ -79,6 +78,11 @@ class GameField extends StatelessWidget {
                                           LetterBoxState.fieldPick) {
                                         audioController.playSfx(SfxType.pickLetter);
                                         levelModel.putLetter(index, data);
+                                        var result = levelModel.checkForWin();
+                                        if (result)
+                                        {
+                                          audioController.playSfx(SfxType.win);
+                                        }
                                       }
                                     },
                                     child: LetterBox(
