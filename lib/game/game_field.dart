@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
 import 'package:operation_hermes/audio/sounds.dart';
 import 'package:operation_hermes/game/letter_box.dart';
@@ -12,7 +13,7 @@ import 'package:provider/provider.dart';
 
 class GameField extends StatelessWidget {
   const GameField({super.key});
-    
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsController>();
@@ -74,13 +75,16 @@ class GameField extends StatelessWidget {
                                 builder: (context, data, child) {
                                   return GestureDetector(
                                     onTap: () {
-                                      if (data.state ==
-                                          LetterBoxState.fieldPick) {
-                                        audioController.playSfx(SfxType.pickLetter);
+                                      if (!levelModel.levelComplete && data.state ==
+                                              LetterBoxState.fieldPick &&
+                                          !levelModel.isLastLetter()) {
+                                        HapticFeedback.selectionClick();
+                                        audioController
+                                            .playSfx(SfxType.pickLetter);
                                         levelModel.putLetter(index, data);
                                         var result = levelModel.checkForWin();
-                                        if (result)
-                                        {
+                                        if (result) {
+                                          HapticFeedback.mediumImpact();
                                           audioController.playSfx(SfxType.win);
                                         }
                                       }

@@ -21,15 +21,38 @@ class _LetterBoxState extends State<LetterBox> {
     Color getContainerColor() {
       switch (widget.data.state) {
         case LetterBoxState.solutionSlot:
-          return Theme.of(context).colorScheme.secondaryContainer;
+          return Theme.of(context).colorScheme.surface;
         case LetterBoxState.solutionPick:
-          return Theme.of(context).colorScheme.tertiaryContainer;
+          return Theme.of(context).colorScheme.surfaceVariant;
         case LetterBoxState.fieldPick:
           return Theme.of(context).colorScheme.primaryContainer;
         case LetterBoxState.fieldSlot:
-          return Theme.of(context).colorScheme.background;
+          return Theme.of(context).colorScheme.surface;
         case LetterBoxState.locked:
-          return Theme.of(context).colorScheme.primary;
+          return Theme.of(context).colorScheme.tertiaryContainer;
+      }
+    }
+
+    Color getContainerBorderColor() {
+      switch (widget.data.state) {
+        case LetterBoxState.solutionSlot:
+          return Theme.of(context).colorScheme.onSurface.withOpacity(0.5);
+        case LetterBoxState.solutionPick:
+          return Theme.of(context)
+              .colorScheme
+              .onSurfaceVariant;
+        case LetterBoxState.fieldPick:
+          return Theme.of(context)
+              .colorScheme
+              .onPrimaryContainer
+              .withOpacity(0.5);
+        case LetterBoxState.fieldSlot:
+          return Theme.of(context).colorScheme.onSurface.withOpacity(0.5);
+        case LetterBoxState.locked:
+          return Theme.of(context)
+              .colorScheme
+              .onTertiaryContainer
+              .withOpacity(0.5);
       }
     }
 
@@ -38,13 +61,13 @@ class _LetterBoxState extends State<LetterBox> {
         case LetterBoxState.solutionSlot:
           return Colors.transparent;
         case LetterBoxState.solutionPick:
-          return Theme.of(context).colorScheme.onTertiaryContainer;
+          return Theme.of(context).colorScheme.onSurfaceVariant;
         case LetterBoxState.fieldPick:
           return Theme.of(context).colorScheme.onPrimaryContainer;
         case LetterBoxState.fieldSlot:
           return Theme.of(context).colorScheme.onSurfaceVariant;
         case LetterBoxState.locked:
-          return Theme.of(context).colorScheme.onPrimary;
+          return Theme.of(context).colorScheme.onTertiaryContainer;
       }
     }
 
@@ -60,21 +83,6 @@ class _LetterBoxState extends State<LetterBox> {
           return Curves.easeIn;
         case LetterBoxState.locked:
           return Curves.easeInOut;
-      }
-    }
-
-    Color getContainerBorderColor() {
-      switch (widget.data.state) {
-        case LetterBoxState.fieldPick:
-          return Theme.of(context).colorScheme.primary;
-        case LetterBoxState.solutionSlot:
-          return Theme.of(context).colorScheme.outline;
-        case LetterBoxState.solutionPick:
-          return Theme.of(context).colorScheme.secondary;
-        case LetterBoxState.fieldSlot:
-          return Theme.of(context).colorScheme.outlineVariant;
-        case LetterBoxState.locked:
-          return Theme.of(context).colorScheme.tertiary;
       }
     }
 

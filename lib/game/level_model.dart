@@ -1,25 +1,26 @@
 import 'dart:math';
 
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/game/letter_box_data.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
 
 class LevelModel with ChangeNotifier {
-  final bool levelComplete;
+  bool levelComplete;
   final String word;
   final String picturePath;
   List<LetterBoxData> solution;
   List<LetterBoxData> field;
+  static const testSolution = "INDREK";
 
   LevelModel({List<LetterBoxData>? solution, List<LetterBoxData>? field})
-      : word = 'BIG',
-        solution = List.generate(3, (index) => LetterBoxData.solutionSlot(),
+      : word = testSolution,
+        solution = List.generate(
+            testSolution.length, (index) => LetterBoxData.solutionSlot(),
             growable: false),
-        field = List.generate(
-            14, (index) => LetterBoxData.fieldPick(randomLetter("")),
-            growable: false),
+        field = getFieldLetters(testSolution)
+            .map((e) => LetterBoxData.fieldPick(e))
+            .toList(),
         picturePath = 'assets/levels/1.jpg',
         levelComplete = false;
 
@@ -42,7 +43,6 @@ class LevelModel with ChangeNotifier {
     _invariantCheck();
   }
 
-
   void removeLetter(int index, LetterBoxData data) {
     _removeLetterPrecheck(data);
     final preAllLetters = field.map((e) => e.letter).toList() +
@@ -60,19 +60,52 @@ class LevelModel with ChangeNotifier {
     _invariantCheck();
   }
 
+  void removeArbitaryLetters(int count) {
+    var potentialFieldRemovables = field.where((element) =>
+        element.state == LetterBoxState.fieldPick &&
+        !word.contains(element.letter)).toList();
+    var potentialSolutionRemovables = List<LetterBoxData>.empty();
+    var finalRemovables = List<LetterBoxData>.empty();
+
+    // if [lettersCountMissingFromRemoval] is bigger than or equal 0 it means field has the needed letters and nothing has to be done, we take letters from [potentialFieldRemovables]
+    // if it is smaller than 0 we need to get X amount which is abs(lettersCountMissingFromRemoval) more letters from solution
+    var lettersCountMissingFromRemoval = count - potentialFieldRemovables.length;
+
+    if (lettersCountMissingFromRemoval < 0) {
+      potentialFieldRemovables = solution.where((element) =>
+          element.state == LetterBoxState.solutionPick &&
+          !word.contains(element.letter)).toList();
+      potentialSolutionRemovables = potentialFieldRemovables.take(lettersCountMissingFromRemoval.abs()).toList();
+      finalRemovables = finalRemovables + potentialSolutionRemovables;
+    } else {
+      finalRemovables = potentialFieldRemovables.take(count).toList();
+    }
+
+  }
+
+  bool isLastLetter() {
+    var solutionLength = solution.fold(
+        0,
+        (previousValue, element) =>
+            element.state == LetterBoxState.solutionPick ||
+                    element.state == LetterBoxState.locked
+                ? previousValue + 1
+                : previousValue);
+    return solutionLength >= word.length;
+  }
 
   bool checkForWin() {
-    if (solution.map((e) => e.letter).toString() == word) {
+    var solutionString = solution.map((e) => e.letter).join("");
+    if (solutionString == word) {
       for (var element in solution) {
         element.state = LetterBoxState.locked;
       }
+      levelComplete = true;
       return true;
-    }
-    else {
+    } else {
       return false;
     }
   }
-
 
   void _invariantCheck() {
     assert(
@@ -109,9 +142,26 @@ class LevelModel with ChangeNotifier {
   }
 }
 
-String randomLetter(String solutionPick) {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  var finalLettersSet = letters.split('').toSet().difference(solutionPick.split('').toSet()).join('');
+List<String> getFieldLetters(String solutionPick) {
   final random = Random();
-  return finalLettersSet[random.nextInt(finalLettersSet.length)];
+  var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.characters;
+
+  // find all letters that are not in solution
+  var lettersWithoutSolution =
+      alphabet.toSet().difference(solutionPick.characters.toSet());
+
+  // create a list that is shorter than the solution (exactly solution length shorter)
+  var shuffledUnique14WithoutSolutionLetters =
+      lettersWithoutSolution.take(14 - solutionPick.length).toList();
+
+  // add the solution to the end of unique strings list and shuffle
+  shuffledUnique14WithoutSolutionLetters.addAll(solutionPick.characters);
+  shuffledUnique14WithoutSolutionLetters.shuffle(random);
+
+  assert(
+      solutionPick.characters.every((element) =>
+          shuffledUnique14WithoutSolutionLetters.contains(element)),
+      "Field does not contain all required solution letters.");
+
+  return shuffledUnique14WithoutSolutionLetters;
 }
