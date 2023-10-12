@@ -3,5 +3,6 @@ enum LetterBoxState {
   solutionPick,
   fieldSlot,
   fieldPick,
-  locked
+  locked,
+  removed
 }

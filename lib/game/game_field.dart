@@ -33,7 +33,9 @@ class GameField extends StatelessWidget {
                       settings.toggleMusicOn();
                     },
                     icon: const Icon(Icons.music_note)),
-                Puzzle(picturePath: levelModel.picturePath),
+                Consumer<LevelModel>(builder: (context, model, child) {
+                  return Puzzle(picturePath: model.picturePath, pinchEnabled: model.pinchAvailable);
+                }),
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   for (final (i, _) in levelModel.solution.indexed)
                     Flexible(
@@ -75,7 +77,8 @@ class GameField extends StatelessWidget {
                                 builder: (context, data, child) {
                                   return GestureDetector(
                                     onTap: () {
-                                      if (!levelModel.levelComplete && data.state ==
+                                      if (!levelModel.levelComplete &&
+                                          data.state ==
                                               LetterBoxState.fieldPick &&
                                           !levelModel.isLastLetter()) {
                                         HapticFeedback.selectionClick();
@@ -103,13 +106,37 @@ class GameField extends StatelessWidget {
                     ),
                   ),
                 ),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Flexible(child: NiceButton(buttonText: "Pinch")),
-                    Flexible(child: NiceButton(buttonText: "Pinch")),
-                    Flexible(child: NiceButton(buttonText: "Pinch")),
-                  ],
+                Consumer<LevelModel>(
+                  builder: (context, model, child) {
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: NiceButton(
+                              buttonText: model.removeLettersAvailable
+                                  ? "Remove 3"
+                                  : "-",
+                              callback: () {
+                                if (model.removeLettersAvailable) {
+                                  audioController.playSfx(SfxType.wrong);
+                                  levelModel.remove3ArbitaryLetters();
+                                }
+                              }),
+                        ),
+                        Flexible(
+                          child: NiceButton(
+                              buttonText: model.pinchAvailable ? "-" : "Pinch",
+                              callback: () {
+                                if (!model.pinchAvailable) {
+                                  levelModel.activatePinch();
+                                }
+                              }),
+                        ),
+                        const Flexible(
+                            child: NiceButton(buttonText: "Highlight")),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),

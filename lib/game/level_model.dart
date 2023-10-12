@@ -11,7 +11,11 @@ class LevelModel with ChangeNotifier {
   final String picturePath;
   List<LetterBoxData> solution;
   List<LetterBoxData> field;
-  static const testSolution = "INDREK";
+
+  bool removeLettersAvailable = true;
+  bool pinchAvailable = false;
+
+  static const testSolution = "ZEN";
 
   LevelModel({List<LetterBoxData>? solution, List<LetterBoxData>? field})
       : word = testSolution,
@@ -21,7 +25,7 @@ class LevelModel with ChangeNotifier {
         field = getFieldLetters(testSolution)
             .map((e) => LetterBoxData.fieldPick(e))
             .toList(),
-        picturePath = 'assets/levels/1.jpg',
+        picturePath = 'assets/levels/1.png',
         levelComplete = false;
 
   void putLetter(int index, LetterBoxData data) {
@@ -60,27 +64,80 @@ class LevelModel with ChangeNotifier {
     _invariantCheck();
   }
 
-  void removeArbitaryLetters(int count) {
-    var potentialFieldRemovables = field.where((element) =>
-        element.state == LetterBoxState.fieldPick &&
-        !word.contains(element.letter)).toList();
-    var potentialSolutionRemovables = List<LetterBoxData>.empty();
-    var finalRemovables = List<LetterBoxData>.empty();
+  // PRECONDITIONS: Total letters count > solution word length
+  // POSTCONDITIONS:
+  // 1) Total letters count >= solution word length
+  // 2) Total letters can create solution word
 
-    // if [lettersCountMissingFromRemoval] is bigger than or equal 0 it means field has the needed letters and nothing has to be done, we take letters from [potentialFieldRemovables]
-    // if it is smaller than 0 we need to get X amount which is abs(lettersCountMissingFromRemoval) more letters from solution
-    var lettersCountMissingFromRemoval = count - potentialFieldRemovables.length;
+  void activatePinch()
+  {
+    pinchAvailable = true;
+    notifyListeners();
+  }
 
-    if (lettersCountMissingFromRemoval < 0) {
-      potentialFieldRemovables = solution.where((element) =>
-          element.state == LetterBoxState.solutionPick &&
-          !word.contains(element.letter)).toList();
-      potentialSolutionRemovables = potentialFieldRemovables.take(lettersCountMissingFromRemoval.abs()).toList();
-      finalRemovables = finalRemovables + potentialSolutionRemovables;
-    } else {
-      finalRemovables = potentialFieldRemovables.take(count).toList();
+  bool isRemoveLettersAvailable() {
+    var allUsableLetters = (solution + field).where((element) =>
+        element.state == LetterBoxState.solutionPick ||
+        element.state == LetterBoxState.fieldPick);
+   return allUsableLetters.length > word.length;
+  }
+
+  void postTotalLettersMoreOrEqualToSolutionLength() {
+    var allUsableLetters = (solution + field).where((element) =>
+        element.state == LetterBoxState.solutionPick ||
+        element.state == LetterBoxState.fieldPick);
+    assert(allUsableLetters.length >= word.length);
+  }
+
+  void postLettersAvailableCanCreateSolution() {
+    var allUsableLetters = ((solution + field).where((element) =>
+        element.state == LetterBoxState.solutionPick ||
+        element.state == LetterBoxState.fieldPick));
+    var chars = allUsableLetters.mapIndexed((index, element) => element.letter);
+    word.split('').forEach((element) {
+      assert(chars.contains(element));
+    });
+  }
+
+  void remove3ArbitaryLetters() {
+
+    var count = 3;
+    var solutionWord = word.split('');
+
+    var allPickableLetters = (solution + field).where((element) =>
+        element.state == LetterBoxState.fieldPick ||
+        element.state == LetterBoxState.solutionPick);
+
+    var candidateLetters = allPickableLetters.where((value) {
+      var isNotInSolution = !solutionWord.contains(value.letter);
+      if (isNotInSolution) solutionWord.remove(value.letter);
+      return isNotInSolution;
+    });
+
+    if (candidateLetters.length < 3) {
+      count = candidateLetters.length;
+    }
+    var lettersToRemove = candidateLetters.toList().sample(count, Random(1337));
+
+    for (var element in lettersToRemove) {
+      if (element.state == LetterBoxState.fieldPick) {
+        element.state = LetterBoxState.removed;
+      } else if (element.state == LetterBoxState.solutionPick) {
+        var indexOfFreeFieldSlot = field
+            .indexWhere((element) => element.state == LetterBoxState.fieldSlot);
+        if (indexOfFreeFieldSlot != -1) {
+          field[indexOfFreeFieldSlot].letter = element.letter;
+          field[indexOfFreeFieldSlot].state = LetterBoxState.removed;
+          element.letter = '';
+          element.state = LetterBoxState.solutionSlot;
+        }
+      }
     }
 
+    removeLettersAvailable = isRemoveLettersAvailable();
+    notifyListeners();
+    postLettersAvailableCanCreateSolution();
+    postTotalLettersMoreOrEqualToSolutionLength();
   }
 
   bool isLastLetter() {

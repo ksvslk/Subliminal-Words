@@ -21,22 +21,24 @@ class _LetterBoxState extends State<LetterBox> {
     Color getContainerColor() {
       switch (widget.data.state) {
         case LetterBoxState.solutionSlot:
-          return Theme.of(context).colorScheme.surface;
+          return Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.25);
         case LetterBoxState.solutionPick:
           return Theme.of(context).colorScheme.surfaceVariant;
         case LetterBoxState.fieldPick:
           return Theme.of(context).colorScheme.primaryContainer;
         case LetterBoxState.fieldSlot:
-          return Theme.of(context).colorScheme.surface;
+          return Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.25);
         case LetterBoxState.locked:
           return Theme.of(context).colorScheme.tertiaryContainer;
+        case LetterBoxState.removed:
+          return Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.1);
       }
     }
 
     Color getContainerBorderColor() {
       switch (widget.data.state) {
         case LetterBoxState.solutionSlot:
-          return Theme.of(context).colorScheme.onSurface.withOpacity(0.5);
+          return Theme.of(context).colorScheme.onSecondaryContainer.withOpacity(0.5);
         case LetterBoxState.solutionPick:
           return Theme.of(context)
               .colorScheme
@@ -47,7 +49,9 @@ class _LetterBoxState extends State<LetterBox> {
               .onPrimaryContainer
               .withOpacity(0.5);
         case LetterBoxState.fieldSlot:
-          return Theme.of(context).colorScheme.onSurface.withOpacity(0.5);
+          return Theme.of(context).colorScheme.onSecondaryContainer.withOpacity(0.5);
+        case LetterBoxState.removed:
+          return Theme.of(context).colorScheme.onSurface.withOpacity(0.1);
         case LetterBoxState.locked:
           return Theme.of(context)
               .colorScheme
@@ -68,6 +72,8 @@ class _LetterBoxState extends State<LetterBox> {
           return Theme.of(context).colorScheme.onSurfaceVariant;
         case LetterBoxState.locked:
           return Theme.of(context).colorScheme.onTertiaryContainer;
+        case LetterBoxState.removed:
+          return Theme.of(context).colorScheme.secondary.withOpacity(0.1);
       }
     }
 
@@ -83,6 +89,8 @@ class _LetterBoxState extends State<LetterBox> {
           return Curves.easeIn;
         case LetterBoxState.locked:
           return Curves.easeInOut;
+        case LetterBoxState.removed:
+          return Curves.easeInOut;
       }
     }
 
@@ -97,6 +105,8 @@ class _LetterBoxState extends State<LetterBox> {
         case LetterBoxState.fieldSlot:
           return 0.0;
         case LetterBoxState.locked:
+          return fontSize;
+        case LetterBoxState.removed:
           return fontSize;
       }
     }

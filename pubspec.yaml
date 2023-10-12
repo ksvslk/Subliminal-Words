@@ -44,6 +44,8 @@ dependencies:
   collection: any
   equatable: ^2.0.5
   widget_mask: ^0.1.1
+  xml: ^6.3.0
+  path_drawing: ^1.0.1
 
 
 dev_dependencies:
