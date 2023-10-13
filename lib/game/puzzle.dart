@@ -1,3 +1,4 @@
+import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
@@ -25,11 +26,10 @@ class _PuzzleState extends State<Puzzle> with TickerProviderStateMixin {
   late Future<List<SvgLetter>> _svgLetters;
 
   final maxZoom = 1.0;
-  final minZoom = 0.2;
+  final minZoom = 0.1;
   final zoomStep = 0.1;
   double _scale = 1.0;
   int _currentQuarterTurn = 0;
-
 
   @override
   void initState() {
@@ -39,8 +39,8 @@ class _PuzzleState extends State<Puzzle> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    print("Build puzzle picture all");
     final audioController = context.read<AudioController>();
-
     return FutureBuilder(
         future: _svgLetters,
         builder: (context, snapshot) {
@@ -62,6 +62,13 @@ class _PuzzleState extends State<Puzzle> with TickerProviderStateMixin {
                   child: RotatedBox(
                     quarterTurns: _currentQuarterTurn,
                     child: AnimatedContainer(
+                      foregroundDecoration: BoxDecoration(
+                          border: Border.all(
+                              width: _scale < 1.0
+                                  ? double.parse(
+                                      (1.5 / _scale).toStringAsFixed(1))
+                                  : 0.0,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       duration: const Duration(milliseconds: 150),
                       curve: Curves.easeOutBack,
                       transformAlignment: Alignment.center,
@@ -75,50 +82,60 @@ class _PuzzleState extends State<Puzzle> with TickerProviderStateMixin {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.all(8.0),
-                  child: widget.zoomAndRotateEnabled ? Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      IconButton.filledTonal(
-                        icon: const Icon(Icons.zoom_out),
-                        onPressed: _scale <= minZoom
-                            ? null
-                            : () {
-                                setState(() {
-                                  var newScale = _scale - zoomStep;
-                                  _scale =
-                                      newScale < minZoom ? minZoom : newScale;
-                                });
-                                audioController.playSfx(SfxType.zoomOut);
-                              },
-                      ),
-                      IconButton.filledTonal(
-                        icon: const Icon(Icons.zoom_in),
-                        onPressed: _scale >= maxZoom
-                            ? null
-                            : () {
-                                setState(() {
-                                  var newScale = _scale + zoomStep;
-                                  _scale =
-                                      newScale > maxZoom ? maxZoom : newScale;
-                                });
-                                audioController.playSfx(SfxType.zoomIn);
-                              },
-                      ),
-                      IconButton.filledTonal(
-                        icon: const Icon(Icons.rotate_90_degrees_cw),
-                        onPressed: () {
-                          audioController.playSfx(SfxType.rotate);
-                          setState(() {
-                            _currentQuarterTurn = _currentQuarterTurn == 3
-                                ? _currentQuarterTurn = 0
-                                : _currentQuarterTurn = _currentQuarterTurn + 1;
-                          });
-                        },
-                      ),
-                    ],
-                  ) : null
-                ),
+                    padding: const EdgeInsets.all(8.0),
+                    child: widget.zoomAndRotateEnabled
+                        ? Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              IconButton.filledTonal(
+                                icon: const Icon(Icons.zoom_out),
+                                onPressed: _scale <= minZoom
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          var newScale = (_scale - zoomStep);
+                                          newScale = double.parse(
+                                              (newScale).toStringAsFixed(1));
+                                          _scale = newScale <= minZoom
+                                              ? minZoom
+                                              : newScale;
+                                        });
+                                        audioController
+                                            .playSfx(SfxType.zoomOut);
+                                      },
+                              ),
+                              IconButton.filledTonal(
+                                icon: const Icon(Icons.zoom_in),
+                                onPressed: _scale >= maxZoom
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          var newScale = (_scale + zoomStep);
+                                          newScale = double.parse(
+                                              (newScale).toStringAsFixed(1));
+                                          _scale = newScale >= maxZoom
+                                              ? maxZoom
+                                              : newScale;
+                                        });
+                                        audioController.playSfx(SfxType.zoomIn);
+                                      },
+                              ),
+                              IconButton.filledTonal(
+                                icon: const Icon(Icons.rotate_90_degrees_cw),
+                                onPressed: () {
+                                  audioController.playSfx(SfxType.rotate);
+                                  setState(() {
+                                    _currentQuarterTurn =
+                                        _currentQuarterTurn == 3
+                                            ? _currentQuarterTurn = 0
+                                            : _currentQuarterTurn =
+                                                _currentQuarterTurn + 1;
+                                  });
+                                },
+                              ),
+                            ],
+                          )
+                        : null)
               ],
             );
           } else {
