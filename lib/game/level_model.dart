@@ -13,7 +13,7 @@ class LevelModel with ChangeNotifier {
   List<LetterBoxData> field;
 
   bool removeLettersAvailable = true;
-  bool pinchAvailable = false;
+  bool zoomAndRotateEnabled = false;
 
   static const testSolution = "ZEN";
 
@@ -71,7 +71,7 @@ class LevelModel with ChangeNotifier {
 
   void activatePinch()
   {
-    pinchAvailable = true;
+    zoomAndRotateEnabled = true;
     notifyListeners();
   }
 

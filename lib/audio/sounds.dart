@@ -10,7 +10,14 @@ List<String> soundTypeToFilename(SfxType type) {
       return const ['wrong.wav'];
     case SfxType.win:
       return const ['win.wav'];
-  
+    case SfxType.rotate:
+      return const ['rotate.wav'];
+    case SfxType.zoomIn:
+      return const ['zoomIn.wav'];
+    case SfxType.zoomOut:
+      return const ['zoomOut.wav'];
+      case SfxType.rewardGiven:
+      return const ['rewardGiven.ogg'];
   }
 }
 
@@ -27,7 +34,25 @@ double soundTypeToVolume(SfxType type) {
       return 0.2;
     case SfxType.win:
       return 0.4;
+    case SfxType.rotate:
+      return 0.2;
+    case SfxType.zoomIn:
+      return 0.1;
+    case SfxType.zoomOut:
+      return 0.1;
+    case SfxType.rewardGiven:
+      return 0.4;
   }
 }
 
-enum SfxType { pickLetter, freeLetter, wrong, win, notAllowed }
+enum SfxType {
+  pickLetter,
+  freeLetter,
+  wrong,
+  win,
+  notAllowed,
+  rotate,
+  zoomIn,
+  zoomOut,
+  rewardGiven
+}

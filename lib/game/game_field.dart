@@ -34,7 +34,7 @@ class GameField extends StatelessWidget {
                     },
                     icon: const Icon(Icons.music_note)),
                 Consumer<LevelModel>(builder: (context, model, child) {
-                  return Puzzle(picturePath: model.picturePath, pinchEnabled: model.pinchAvailable);
+                  return Puzzle(picturePath: model.picturePath, zoomAndRotateEnabled: model.zoomAndRotateEnabled);
                 }),
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   for (final (i, _) in levelModel.solution.indexed)
@@ -125,9 +125,10 @@ class GameField extends StatelessWidget {
                         ),
                         Flexible(
                           child: NiceButton(
-                              buttonText: model.pinchAvailable ? "-" : "Pinch",
+                              buttonText: model.zoomAndRotateEnabled ? "-" : "Zoom + Rotate",
                               callback: () {
-                                if (!model.pinchAvailable) {
+                                if (!model.zoomAndRotateEnabled) {
+                                  audioController.playSfx(SfxType.rewardGiven);
                                   levelModel.activatePinch();
                                 }
                               }),
@@ -142,6 +143,47 @@ class GameField extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+
+class ZoomImageDemo extends StatefulWidget {
+  @override
+  _ZoomImageDemoState createState() => _ZoomImageDemoState();
+}
+
+class _ZoomImageDemoState extends State<ZoomImageDemo> {
+  final TransformationController _controller = TransformationController();
+
+  void _centerAndScaleOutImage() {
+    // This scales the image out by a factor of 0.5 (half of its size)
+    // and keeps it centered.
+    _controller.value = Matrix4.identity()..scale(0.5);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('InteractiveViewer Demo'),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          transformationController: _controller,
+          boundaryMargin: EdgeInsets.all(20.0),
+          minScale: 0.1,
+          maxScale: 2.0,
+          child:   Image.asset(
+                        'assets/levels/1.png',
+                        fit: BoxFit.fill,
+                      )),
+        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _centerAndScaleOutImage,
+        child: Icon(Icons.zoom_out),
       ),
     );
   }
