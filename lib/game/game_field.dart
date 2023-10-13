@@ -34,7 +34,7 @@ class GameField extends StatelessWidget {
                     },
                     icon: const Icon(Icons.music_note)),
                 Consumer<LevelModel>(builder: (context, model, child) {
-                  return Puzzle(picturePath: model.picturePath, zoomAndRotateEnabled: model.zoomAndRotateEnabled);
+                  return Puzzle(picturePath: model.picturePath);
                 }),
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   for (final (i, _) in levelModel.solution.indexed)
@@ -133,8 +133,13 @@ class GameField extends StatelessWidget {
                                 }
                               }),
                         ),
-                        const Flexible(
-                            child: NiceButton(buttonText: "Highlight")),
+                        Flexible(
+                            child: NiceButton(
+                              buttonText: "Highlight", callback: () {
+                              audioController.playSfx(SfxType.rewardGiven);
+                              levelModel.highlightRandomLetter();
+                            }
+                            )),
                       ],
                     );
                   },

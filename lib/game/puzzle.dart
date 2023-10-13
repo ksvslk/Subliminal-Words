@@ -1,29 +1,31 @@
+import 'dart:math';
+
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
 import 'package:operation_hermes/audio/sounds.dart';
+import 'package:operation_hermes/game/level_model.dart';
 import 'package:operation_hermes/game/svg_letter.dart';
 import 'package:path_drawing/path_drawing.dart';
 import 'package:provider/provider.dart';
 import 'package:xml/xml.dart';
-import 'package:vector_math/vector_math_64.dart';
+import 'package:vector_math/vector_math_64.dart' as vec3;
 
 class Puzzle extends StatefulWidget {
   const Puzzle(
       {super.key,
-      required this.picturePath,
-      required this.zoomAndRotateEnabled});
+      required this.picturePath});
 
   final String picturePath;
-  final bool zoomAndRotateEnabled;
 
   @override
   State<Puzzle> createState() => _PuzzleState();
 }
 
-class _PuzzleState extends State<Puzzle> with TickerProviderStateMixin {
+class _PuzzleState extends State<Puzzle> {
   late Future<List<SvgLetter>> _svgLetters;
+  List<SvgLetter> _letters = [];
 
   final maxZoom = 1.0;
   final minZoom = 0.1;
@@ -40,10 +42,13 @@ class _PuzzleState extends State<Puzzle> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     print("Build puzzle picture all");
+    final levelModel = context.watch<LevelModel>();
     final audioController = context.read<AudioController>();
+    
     return FutureBuilder(
         future: _svgLetters,
         builder: (context, snapshot) {
+         _letters = snapshot.data!;
           if (snapshot.connectionState == ConnectionState.done) {
             return Stack(
               alignment: Alignment.bottomRight,
@@ -68,22 +73,42 @@ class _PuzzleState extends State<Puzzle> with TickerProviderStateMixin {
                                   ? double.parse(
                                       (1.5 / _scale).toStringAsFixed(1))
                                   : 0.0,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant)),
                       duration: const Duration(milliseconds: 150),
                       curve: Curves.easeOutBack,
                       transformAlignment: Alignment.center,
-                      transform:
-                          Matrix4.diagonal3(Vector3(_scale, _scale, _scale)),
-                      child: Image.asset(
-                        widget.picturePath,
-                        fit: BoxFit.fill,
+                      transform: Matrix4.diagonal3(
+                          vec3.Vector3(_scale, _scale, _scale)),
+                      child: Stack(
+                        children: [
+                          Image.asset(
+                            widget.picturePath,
+                            fit: BoxFit.fill,
+                          ),
+                          ..._letters
+                              .map((letter) => AnimatedOpacity(
+                                  duration: const Duration(milliseconds: 200),
+                                  opacity: levelModel.letterToShow == letter.name ? 1.0 : 0.0,
+                                  onEnd: () {
+                                    levelModel.letterToShow = '';
+                                  },
+                                  child: CustomPaint(
+                                    painter: FilledPathPainter(
+                                      path: parseSvgPathData(letter.partPath),
+                                      color: Colors.red.withOpacity(0.5),
+                                    ),
+                                  )))
+                              .toList(),
+                        ],
                       ),
                     ),
                   ),
                 ),
                 Container(
                     padding: const EdgeInsets.all(8.0),
-                    child: widget.zoomAndRotateEnabled
+                    child: levelModel.zoomAndRotateEnabled
                         ? Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
@@ -160,12 +185,19 @@ class FilledPathPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Obtain the bounding box of the path
+    final Rect pathBounds = path.getBounds();
+
+    // canvas.scale(0.5, 0.5);
+    print(canvas);
     print(size);
+
     canvas.drawPath(
       path,
       Paint()
         ..color = color
-        ..style = PaintingStyle.fill,
+        ..strokeWidth = 4.0
+        ..style = PaintingStyle.stroke,
     );
   }
 

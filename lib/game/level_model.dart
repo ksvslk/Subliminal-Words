@@ -15,6 +15,8 @@ class LevelModel with ChangeNotifier {
   bool removeLettersAvailable = true;
   bool zoomAndRotateEnabled = false;
 
+  String letterToShow = '';
+
   static const testSolution = "ZEN";
 
   LevelModel({List<LetterBoxData>? solution, List<LetterBoxData>? field})
@@ -162,6 +164,13 @@ class LevelModel with ChangeNotifier {
     } else {
       return false;
     }
+  }
+
+  void highlightRandomLetter()
+  {
+    //TODO: Notify all listeners? Fine tuning needed.
+    letterToShow = word.split('').sample(1, Random()).first;
+    notifyListeners();
   }
 
   void _invariantCheck() {
