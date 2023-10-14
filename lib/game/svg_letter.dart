@@ -5,8 +5,6 @@ class SvgLetter {
   bool show = false;
 
   SvgLetter({required String letterPath,required String letterName}) 
-    :
-      path = letterPath,
+    : path = letterPath,
       letter = letterName;
-
 }

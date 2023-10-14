@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:logging/logging.dart';
 import 'package:xml/xml.dart';
 
 import 'package:collection/collection.dart';
@@ -16,14 +17,12 @@ class LevelModel with ChangeNotifier {
   List<LetterBoxData> field;
 
   List<SvgLetter> svgLetters = [];
-  bool svgLettersLoaded = false;
 
   bool removeLettersAvailable = true;
   bool zoomAndRotateEnabled = false;
 
-  String letterToShow = ''; // TODO: duplicate
-
   static const testSolution = "ZEN";
+  static final _log = Logger('LevelModel');
 
   LevelModel({List<LetterBoxData>? solution, List<LetterBoxData>? field})
       : word = testSolution,
@@ -37,7 +36,7 @@ class LevelModel with ChangeNotifier {
         levelComplete = false {
     loadSvgLetters(svgImage: 'assets/levels/1.svg').then((loadedLetters) {
       svgLetters = loadedLetters;
-      svgLettersLoaded = true;
+      notifyListeners();
     });
   }
 
@@ -162,6 +161,7 @@ class LevelModel with ChangeNotifier {
     return solutionLength >= word.length;
   }
 
+
   bool checkForWin() {
     var solutionString = solution.map((e) => e.letter).join("");
     if (solutionString == word) {
@@ -175,18 +175,34 @@ class LevelModel with ChangeNotifier {
     }
   }
 
-  void highlightRandomLetter() {
-    var highlightedLettersSelection = svgLetters.where(
-        (element) => element.hintGiven == false && element.show == false);
-    var letterToHighlight = highlightedLettersSelection.sample(1, Random());
-    if (letterToHighlight.isNotEmpty)
-    {
-      letterToHighlight.first.show = true;
-      letterToHighlight.first.hintGiven = true;
-      highlightedLettersSelection.forEach((element) { /*TODO: reset*/ });
+
+  void showRandomPictureLetter() {
+    var allHintsGiven = svgLetters.every((element) => element.hintGiven == true);
+    List<int> candidateIndices = svgLetters
+      .asMap()
+      .entries
+      .where((entry) => allHintsGiven ? entry.value.show == false : (entry.value.hintGiven == false && entry.value.show == false))
+      .map((entry) => entry.key)
+      .toList();
+    var letterIndexToHighlight = candidateIndices.sample(1, Random());
+    if (letterIndexToHighlight.isNotEmpty) {
+      svgLetters[letterIndexToHighlight.first].show = true;
+      svgLetters[letterIndexToHighlight.first].hintGiven = true;
+      _log.info(() => 'Showing letter: ${svgLetters[letterIndexToHighlight.first].letter} with show: ${svgLetters[letterIndexToHighlight.first].show}');
     }
     notifyListeners();
   }
+
+
+  void hidePictureLetter(String letter) {
+    int index = svgLetters.indexWhere((item) => item.letter == letter);
+    if (index != -1) {
+      svgLetters[index].show = false;
+      _log.info(() => 'Turned ${svgLetters[index].letter} with show: ${svgLetters[index].show}');
+      notifyListeners();
+    }
+  }
+
 
   void _invariantCheck() {
     assert(

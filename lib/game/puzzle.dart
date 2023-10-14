@@ -1,4 +1,6 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:logging/logging.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
 import 'package:operation_hermes/audio/sounds.dart';
 import 'package:operation_hermes/game/filled_letter_painter.dart';
@@ -7,9 +9,9 @@ import 'package:path_drawing/path_drawing.dart';
 import 'package:provider/provider.dart';
 import 'package:vector_math/vector_math_64.dart' as vec3;
 
+
 class Puzzle extends StatefulWidget {
   const Puzzle({super.key, required this.picturePath});
-
   final String picturePath;
 
   @override
@@ -17,6 +19,9 @@ class Puzzle extends StatefulWidget {
 }
 
 class _PuzzleState extends State<Puzzle> {
+
+  static final _log = Logger('_PuzzleState');
+
   final maxZoom = 1.0;
   final minZoom = 0.1;
   final zoomStep = 0.1;
@@ -30,9 +35,10 @@ class _PuzzleState extends State<Puzzle> {
 
   @override
   Widget build(BuildContext context) {
-    print("Build puzzle picture all");
     final levelModel = context.watch<LevelModel>();
     final audioController = context.read<AudioController>();
+
+     _log.info(() => 'Build puzzle picture all with ${levelModel.svgLetters.map((e) => e.show)}');
 
     return Stack(
       alignment: Alignment.bottomRight,
@@ -70,14 +76,23 @@ class _PuzzleState extends State<Puzzle> {
                   ...levelModel.svgLetters
                       .map(
                         (svgLetter) => AnimatedOpacity(
-                          duration: const Duration(milliseconds: 500),
-                          opacity: svgLetter.show
-                              ? 1.0
-                              : 0.0,
+                          duration: Duration(
+                              milliseconds: svgLetter.show ? 750 : 750),
+                          opacity: svgLetter.show ? 1.0 : 0.0,
+                          curve: Curves.fastOutSlowIn,
+                          onEnd: () {
+                             _log.info(() => 'Ending svg letter animation for: ${svgLetter.letter} with show: ${svgLetter.show}');
+                            if (svgLetter.show) {
+                              levelModel.hidePictureLetter(svgLetter.letter);
+                            }
+                          },
                           child: CustomPaint(
                             painter: FilledLetterPainter(
                               path: parseSvgPathData(svgLetter.path),
-                              color: Theme.of(context).colorScheme.primary.withOpacity(0.75),
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withOpacity(0.75),
                             ),
                             child: AspectRatio(
                               aspectRatio: 1 / 1,
@@ -88,8 +103,7 @@ class _PuzzleState extends State<Puzzle> {
                             ),
                           ),
                         ),
-                      )
-                      .toList(),
+                      ).toList(),
                 ],
               ),
             ),
