@@ -76,7 +76,7 @@ class MyApp extends StatelessWidget {
               useMaterial3: true,
               // Define the default brightness and colors.
               colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color.fromARGB(255, 255, 217, 0),
+                seedColor: Color.fromARGB(255, 225, 255, 0),
                 brightness: Brightness.light,
               ),
               fontFamily: 'Gabarito'),
@@ -84,7 +84,7 @@ class MyApp extends StatelessWidget {
               useMaterial3: true,
               // Define the default brightness and colors.
               colorScheme: ColorScheme.fromSeed(
-                seedColor: Color.fromARGB(255, 255, 217, 0),
+                seedColor:  Color.fromARGB(255, 225, 255, 0),
                 brightness: Brightness.dark,
               ),
               fontFamily: 'Gabarito'),

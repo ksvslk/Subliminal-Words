@@ -169,6 +169,7 @@ class LevelModel with ChangeNotifier {
         element.state = LetterBoxState.locked;
       }
       levelComplete = true;
+      notifyListeners();
       return true;
     } else {
       return false;
@@ -177,6 +178,7 @@ class LevelModel with ChangeNotifier {
 
 
   void showRandomPictureLetter() {
+    if (!svgLetters.every((p0) => p0.show == false)) return;
     var allHintsGiven = svgLetters.every((element) => element.hintGiven == true);
     List<int> candidateIndices = svgLetters
       .asMap()

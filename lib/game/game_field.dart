@@ -117,7 +117,8 @@ class GameField extends StatelessWidget {
                                   ? "Remove 3"
                                   : "-",
                               callback: () {
-                                if (model.removeLettersAvailable) {
+                                if (model.removeLettersAvailable &&
+                                    !model.levelComplete) {
                                   audioController.playSfx(SfxType.wrong);
                                   levelModel.remove3ArbitaryLetters();
                                 }
@@ -125,21 +126,27 @@ class GameField extends StatelessWidget {
                         ),
                         Flexible(
                           child: NiceButton(
-                              buttonText: model.zoomAndRotateEnabled ? "-" : "Zoom + Rotate",
+                              buttonText: model.zoomAndRotateEnabled
+                                  ? "-"
+                                  : "Zoom + Rotate",
                               callback: () {
-                                if (!model.zoomAndRotateEnabled) {
+                                if (!model.zoomAndRotateEnabled &&
+                                    !model.levelComplete) {
                                   audioController.playSfx(SfxType.rewardGiven);
                                   levelModel.activatePinch();
                                 }
                               }),
                         ),
                         Flexible(
-                            child: NiceButton(
-                              buttonText: "Highlight", callback: () {
-                              audioController.playSfx(SfxType.rewardGiven);
-                              levelModel.showRandomPictureLetter();
-                            }
-                            )),
+                          child: NiceButton(
+                              buttonText: "Highlight",
+                              callback: () {
+                                if (!model.levelComplete) {
+                                  audioController.playSfx(SfxType.rewardGiven);
+                                  levelModel.showRandomPictureLetter();
+                                }
+                              }),
+                        ),
                       ],
                     );
                   },
