@@ -16,8 +16,7 @@ class _LetterBoxState extends State<LetterBox> {
 
   @override
   Widget build(BuildContext context) {
-    print("Building ${widget.data.letter}");
-
+    //print("Building ${widget.data.letter}");
     Color getContainerColor() {
       switch (widget.data.state) {
         case LetterBoxState.solutionSlot:

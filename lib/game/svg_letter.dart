@@ -1,11 +1,12 @@
 class SvgLetter {
-  String partId;
-  String partPath;
-  String name;
+  String path;
+  String letter;
+  bool hintGiven = false;
+  bool show = false;
 
-  SvgLetter({required String partIdSvg,required String partPathSvg,required String nameSvg}) 
-    : partId = partIdSvg,
-      partPath = partPathSvg,
-      name = nameSvg;
+  SvgLetter({required String letterPath,required String letterName}) 
+    :
+      path = letterPath,
+      letter = letterName;
 
 }

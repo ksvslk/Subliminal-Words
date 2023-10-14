@@ -1,9 +1,12 @@
 import 'dart:math';
+import 'package:xml/xml.dart';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:operation_hermes/game/letter_box_data.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
+import 'package:operation_hermes/game/svg_letter.dart';
 
 class LevelModel with ChangeNotifier {
   bool levelComplete;
@@ -12,10 +15,13 @@ class LevelModel with ChangeNotifier {
   List<LetterBoxData> solution;
   List<LetterBoxData> field;
 
+  List<SvgLetter> svgLetters = [];
+  bool svgLettersLoaded = false;
+
   bool removeLettersAvailable = true;
   bool zoomAndRotateEnabled = false;
 
-  String letterToShow = '';
+  String letterToShow = ''; // TODO: duplicate
 
   static const testSolution = "ZEN";
 
@@ -28,7 +34,12 @@ class LevelModel with ChangeNotifier {
             .map((e) => LetterBoxData.fieldPick(e))
             .toList(),
         picturePath = 'assets/levels/1.png',
-        levelComplete = false;
+        levelComplete = false {
+    loadSvgLetters(svgImage: 'assets/levels/1.svg').then((loadedLetters) {
+      svgLetters = loadedLetters;
+      svgLettersLoaded = true;
+    });
+  }
 
   void putLetter(int index, LetterBoxData data) {
     _putLetterPrecheck(data);
@@ -71,8 +82,7 @@ class LevelModel with ChangeNotifier {
   // 1) Total letters count >= solution word length
   // 2) Total letters can create solution word
 
-  void activatePinch()
-  {
+  void activatePinch() {
     zoomAndRotateEnabled = true;
     notifyListeners();
   }
@@ -81,7 +91,7 @@ class LevelModel with ChangeNotifier {
     var allUsableLetters = (solution + field).where((element) =>
         element.state == LetterBoxState.solutionPick ||
         element.state == LetterBoxState.fieldPick);
-   return allUsableLetters.length > word.length;
+    return allUsableLetters.length > word.length;
   }
 
   void postTotalLettersMoreOrEqualToSolutionLength() {
@@ -102,7 +112,6 @@ class LevelModel with ChangeNotifier {
   }
 
   void remove3ArbitaryLetters() {
-
     var count = 3;
     var solutionWord = word.split('');
 
@@ -166,10 +175,16 @@ class LevelModel with ChangeNotifier {
     }
   }
 
-  void highlightRandomLetter()
-  {
-    //TODO: Notify all listeners? Fine tuning needed.
-    letterToShow = word.split('').sample(1, Random()).first;
+  void highlightRandomLetter() {
+    var highlightedLettersSelection = svgLetters.where(
+        (element) => element.hintGiven == false && element.show == false);
+    var letterToHighlight = highlightedLettersSelection.sample(1, Random());
+    if (letterToHighlight.isNotEmpty)
+    {
+      letterToHighlight.first.show = true;
+      letterToHighlight.first.hintGiven = true;
+      highlightedLettersSelection.forEach((element) { /*TODO: reset*/ });
+    }
     notifyListeners();
   }
 
@@ -206,6 +221,20 @@ class LevelModel with ChangeNotifier {
     assert(deepEq(preAllLetters, postAllLetters),
         "Letters should remain same after all operations.");
   }
+}
+
+Future<List<SvgLetter>> loadSvgLetters({required String svgImage}) async {
+  List<SvgLetter> maps = [];
+  String generalString = await rootBundle.loadString(svgImage);
+  XmlDocument document = XmlDocument.parse(generalString);
+  final allPaths = document.findAllElements('path');
+  for (var element in allPaths) {
+    String name = element.getAttribute('id').toString();
+    String path = element.getAttribute('d').toString();
+    var svgLetter = SvgLetter(letterPath: path, letterName: name);
+    maps.add(svgLetter);
+  }
+  return maps;
 }
 
 List<String> getFieldLetters(String solutionPick) {
