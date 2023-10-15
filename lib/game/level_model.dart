@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/game/level_data.dart';
 import 'package:xml/xml.dart';
 
 import 'package:collection/collection.dart';
@@ -10,34 +11,39 @@ import 'package:operation_hermes/game/letter_box_state.dart';
 import 'package:operation_hermes/game/svg_letter.dart';
 
 class LevelModel with ChangeNotifier {
-  bool levelComplete;
-  final String word;
-  final String picturePath;
+  LevelData levelData;
   List<LetterBoxData> solution;
   List<LetterBoxData> field;
-
   List<SvgLetter> svgLetters = [];
 
   bool removeLettersAvailable = true;
-  bool zoomAndRotateEnabled = false;
 
-  static const testSolution = "ZEN";
   static final _log = Logger('LevelModel');
 
-  LevelModel({List<LetterBoxData>? solution, List<LetterBoxData>? field})
-      : word = testSolution,
+  LevelModel({required LevelData level})
+      : levelData = level,
         solution = List.generate(
-            testSolution.length, (index) => LetterBoxData.solutionSlot(),
+            level.word.length, (index) => LetterBoxData.solutionSlot(),
             growable: false),
-        field = getFieldLetters(testSolution)
-            .map((e) => LetterBoxData.fieldPick(e))
-            .toList(),
-        picturePath = 'assets/levels/1.png',
-        levelComplete = false {
-    loadSvgLetters(svgImage: 'assets/levels/1.svg').then((loadedLetters) {
+        field = getFieldLetters(
+            solutionPick: level.word,
+            disabledLettersCount: level.disabledLettersCount) {
+    loadSvgLetters(svgImage: level.svgPath).then((loadedLetters) {
       svgLetters = loadedLetters;
       notifyListeners();
     });
+  }
+
+  void reset() {
+    levelData.disabledLettersCount = 0;
+    levelData.levelCompleted = false;
+    solution = List.generate(
+        levelData.word.length, (index) => LetterBoxData.solutionSlot(),
+        growable: false);
+    field = getFieldLetters(
+        solutionPick: levelData.word,
+        disabledLettersCount: levelData.disabledLettersCount);
+    notifyListeners();
   }
 
   void putLetter(int index, LetterBoxData data) {
@@ -82,7 +88,7 @@ class LevelModel with ChangeNotifier {
   // 2) Total letters can create solution word
 
   void activatePinch() {
-    zoomAndRotateEnabled = true;
+    levelData.zoomRewarded = true;
     notifyListeners();
   }
 
@@ -90,14 +96,14 @@ class LevelModel with ChangeNotifier {
     var allUsableLetters = (solution + field).where((element) =>
         element.state == LetterBoxState.solutionPick ||
         element.state == LetterBoxState.fieldPick);
-    return allUsableLetters.length > word.length;
+    return allUsableLetters.length > levelData.word.length;
   }
 
   void postTotalLettersMoreOrEqualToSolutionLength() {
     var allUsableLetters = (solution + field).where((element) =>
         element.state == LetterBoxState.solutionPick ||
         element.state == LetterBoxState.fieldPick);
-    assert(allUsableLetters.length >= word.length);
+    assert(allUsableLetters.length >= levelData.word.length);
   }
 
   void postLettersAvailableCanCreateSolution() {
@@ -105,14 +111,14 @@ class LevelModel with ChangeNotifier {
         element.state == LetterBoxState.solutionPick ||
         element.state == LetterBoxState.fieldPick));
     var chars = allUsableLetters.mapIndexed((index, element) => element.letter);
-    word.split('').forEach((element) {
+    levelData.word.split('').forEach((element) {
       assert(chars.contains(element));
     });
   }
 
   void remove3ArbitaryLetters() {
     var count = 3;
-    var solutionWord = word.split('');
+    var solutionWord = levelData.word.split('');
 
     var allPickableLetters = (solution + field).where((element) =>
         element.state == LetterBoxState.fieldPick ||
@@ -128,6 +134,9 @@ class LevelModel with ChangeNotifier {
       count = candidateLetters.length;
     }
     var lettersToRemove = candidateLetters.toList().sample(count, Random(1337));
+
+    levelData.disabledLettersCount =
+        levelData.disabledLettersCount + lettersToRemove.length;
 
     for (var element in lettersToRemove) {
       if (element.state == LetterBoxState.fieldPick) {
@@ -158,17 +167,16 @@ class LevelModel with ChangeNotifier {
                     element.state == LetterBoxState.locked
                 ? previousValue + 1
                 : previousValue);
-    return solutionLength >= word.length;
+    return solutionLength >= levelData.word.length;
   }
-
 
   bool checkForWin() {
     var solutionString = solution.map((e) => e.letter).join("");
-    if (solutionString == word) {
+    if (solutionString == levelData.word) {
       for (var element in solution) {
         element.state = LetterBoxState.locked;
       }
-      levelComplete = true;
+      levelData.levelCompleted = true;
       notifyListeners();
       return true;
     } else {
@@ -176,35 +184,37 @@ class LevelModel with ChangeNotifier {
     }
   }
 
-
   void showRandomPictureLetter() {
     if (!svgLetters.every((p0) => p0.show == false)) return;
-    var allHintsGiven = svgLetters.every((element) => element.hintGiven == true);
+    var allHintsGiven =
+        svgLetters.every((element) => element.hintGiven == true);
     List<int> candidateIndices = svgLetters
-      .asMap()
-      .entries
-      .where((entry) => allHintsGiven ? entry.value.show == false : (entry.value.hintGiven == false && entry.value.show == false))
-      .map((entry) => entry.key)
-      .toList();
+        .asMap()
+        .entries
+        .where((entry) => allHintsGiven
+            ? entry.value.show == false
+            : (entry.value.hintGiven == false && entry.value.show == false))
+        .map((entry) => entry.key)
+        .toList();
     var letterIndexToHighlight = candidateIndices.sample(1, Random());
     if (letterIndexToHighlight.isNotEmpty) {
       svgLetters[letterIndexToHighlight.first].show = true;
       svgLetters[letterIndexToHighlight.first].hintGiven = true;
-      _log.info(() => 'Showing letter: ${svgLetters[letterIndexToHighlight.first].letter} with show: ${svgLetters[letterIndexToHighlight.first].show}');
+      _log.info(() =>
+          'Showing letter: ${svgLetters[letterIndexToHighlight.first].letter} with show: ${svgLetters[letterIndexToHighlight.first].show}');
     }
     notifyListeners();
   }
-
 
   void hidePictureLetter(String letter) {
     int index = svgLetters.indexWhere((item) => item.letter == letter);
     if (index != -1) {
       svgLetters[index].show = false;
-      _log.info(() => 'Turned ${svgLetters[index].letter} with show: ${svgLetters[index].show}');
+      _log.info(() =>
+          'Turned ${svgLetters[index].letter} with show: ${svgLetters[index].show}');
       notifyListeners();
     }
   }
-
 
   void _invariantCheck() {
     assert(
@@ -216,7 +226,7 @@ class LevelModel with ChangeNotifier {
             element.state == LetterBoxState.solutionSlot)),
         "Field should never contain items with 'solution' state");
     assert(field.length == 14, "Field should always have 14 data items.");
-    assert(solution.length == word.length,
+    assert(solution.length == levelData.word.length,
         "Solution data list length should always be same as the solution word length.");
     // at any time solution must be able to be formed by solution+field letters.
   }
@@ -255,7 +265,8 @@ Future<List<SvgLetter>> loadSvgLetters({required String svgImage}) async {
   return maps;
 }
 
-List<String> getFieldLetters(String solutionPick) {
+List<LetterBoxData> getFieldLetters(
+    {required String solutionPick, required int disabledLettersCount}) {
   final random = Random();
   var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.characters;
 
@@ -264,16 +275,23 @@ List<String> getFieldLetters(String solutionPick) {
       alphabet.toSet().difference(solutionPick.characters.toSet());
 
   // create a list that is shorter than the solution (exactly solution length shorter)
-  var shuffledUnique14WithoutSolutionLetters =
-      lettersWithoutSolution.take(14 - solutionPick.length).toList();
+  var shuffledUnique14WithoutSolutionLetters = lettersWithoutSolution
+      .take(14 - solutionPick.length)
+      .mapIndexed((index, element) => (index < disabledLettersCount)
+          ? LetterBoxData.removed(element)
+          : LetterBoxData.fieldPick(element))
+      .toList();
 
   // add the solution to the end of unique strings list and shuffle
-  shuffledUnique14WithoutSolutionLetters.addAll(solutionPick.characters);
+  shuffledUnique14WithoutSolutionLetters
+      .addAll(solutionPick.characters.map((e) => LetterBoxData.fieldPick(e)));
   shuffledUnique14WithoutSolutionLetters.shuffle(random);
 
   assert(
       solutionPick.characters.every((element) =>
-          shuffledUnique14WithoutSolutionLetters.contains(element)),
+          shuffledUnique14WithoutSolutionLetters
+              .map((e) => e.letter)
+              .contains(element)),
       "Field does not contain all required solution letters.");
 
   return shuffledUnique14WithoutSolutionLetters;

@@ -21,6 +21,10 @@ class LetterBoxData with ChangeNotifier {
     : _state = LetterBoxState.fieldPick,
       _letter = letter;
 
+  LetterBoxData.removed(String letter) 
+    : _state = LetterBoxState.removed,
+      _letter = letter;
+
   LetterBoxData({LetterBoxState? state, String? letter}) 
     : _state = state ?? LetterBoxState.fieldSlot,
       _letter = letter ?? '';

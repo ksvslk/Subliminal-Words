@@ -8,8 +8,8 @@ import 'dart:math';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/settings/settings_controller.dart';
 
-import '../settings/settings.dart';
 import 'songs.dart';
 import 'sounds.dart';
 

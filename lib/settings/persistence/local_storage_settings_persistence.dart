@@ -10,7 +10,9 @@ import 'settings_persistence.dart';
 class LocalStorageSettingsPersistence extends SettingsPersistence {
   final Future<SharedPreferences> instanceFuture =
       SharedPreferences.getInstance();
+      
 
+  // GET
   @override
   Future<bool> getMusicOn() async {
     final prefs = await instanceFuture;
@@ -30,6 +32,7 @@ class LocalStorageSettingsPersistence extends SettingsPersistence {
     return prefs.getBool('soundsOn') ?? true;
   }
 
+  // SET
   @override
   Future<void> saveMusicOn(bool value) async {
     final prefs = await instanceFuture;
@@ -47,4 +50,6 @@ class LocalStorageSettingsPersistence extends SettingsPersistence {
     final prefs = await instanceFuture;
     await prefs.setBool('soundsOn', value);
   }
+
+
 }

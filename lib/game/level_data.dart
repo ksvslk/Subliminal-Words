@@ -1,0 +1,45 @@
+class LevelData {
+  int nr;
+  String word;
+  String story;
+  String picturePath;
+  String svgPath;
+  bool zoomRewarded;
+  bool levelCompleted;
+  int disabledLettersCount;
+
+  LevelData(
+    this.nr,
+    this.word,
+    this.story,
+    this.picturePath,
+    this.svgPath,
+    this.zoomRewarded,
+    this.levelCompleted,
+    this.disabledLettersCount,
+  );
+
+  LevelData.from((String, List<String>) level):
+    nr = int.parse(level.$1),
+    word = level.$2[0],
+    story = level.$2[1],
+    picturePath = level.$2[2],
+    svgPath = level.$2[3],
+    zoomRewarded = bool.parse(level.$2[4]),
+    levelCompleted = bool.parse(level.$2[5]),
+    disabledLettersCount = int.parse(level.$2[6]);
+
+
+  (String, List<String>) getLevelData() {
+    return (nr.toString(), <String>[
+      word,
+      story,
+      picturePath,
+      svgPath,
+      zoomRewarded.toString(),
+      levelCompleted.toString(),
+      disabledLettersCount.toString()
+    ]);
+  }
+
+}

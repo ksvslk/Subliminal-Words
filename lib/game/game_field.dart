@@ -8,7 +8,7 @@ import 'package:operation_hermes/game/letter_box_state.dart';
 import 'package:operation_hermes/game/level_model.dart';
 import 'package:operation_hermes/game/nice_button.dart';
 import 'package:operation_hermes/game/puzzle.dart';
-import 'package:operation_hermes/settings/settings.dart';
+import 'package:operation_hermes/settings/settings_controller.dart';
 import 'package:provider/provider.dart';
 
 class GameField extends StatelessWidget {
@@ -28,13 +28,22 @@ class GameField extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                IconButton(
-                    onPressed: () {
-                      settings.toggleMusicOn();
-                    },
-                    icon: const Icon(Icons.music_note)),
+                Row(
+                  children: [
+                    IconButton(
+                        onPressed: () {
+                          settings.toggleMusicOn();
+                        },
+                        icon: const Icon(Icons.music_note)),
+                    IconButton(
+                        onPressed: () {
+                          levelModel.reset();
+                        },
+                        icon: const Icon(Icons.restore)),
+                  ],
+                ),
                 Consumer<LevelModel>(builder: (context, model, child) {
-                  return Puzzle(picturePath: model.picturePath);
+                  return Puzzle(picturePath: model.levelData.picturePath);
                 }),
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   for (final (i, _) in levelModel.solution.indexed)
@@ -77,7 +86,8 @@ class GameField extends StatelessWidget {
                                 builder: (context, data, child) {
                                   return GestureDetector(
                                     onTap: () {
-                                      if (!levelModel.levelComplete &&
+                                      if (!levelModel
+                                              .levelData.levelCompleted &&
                                           data.state ==
                                               LetterBoxState.fieldPick &&
                                           !levelModel.isLastLetter()) {
@@ -118,7 +128,7 @@ class GameField extends StatelessWidget {
                                   : "-",
                               callback: () {
                                 if (model.removeLettersAvailable &&
-                                    !model.levelComplete) {
+                                    !model.levelData.levelCompleted) {
                                   audioController.playSfx(SfxType.wrong);
                                   levelModel.remove3ArbitaryLetters();
                                 }
@@ -126,12 +136,12 @@ class GameField extends StatelessWidget {
                         ),
                         Flexible(
                           child: NiceButton(
-                              buttonText: model.zoomAndRotateEnabled
+                              buttonText: model.levelData.zoomRewarded
                                   ? "-"
                                   : "Zoom + Rotate",
                               callback: () {
-                                if (!model.zoomAndRotateEnabled &&
-                                    !model.levelComplete) {
+                                if (!model.levelData.zoomRewarded &&
+                                    !model.levelData.levelCompleted) {
                                   audioController.playSfx(SfxType.rewardGiven);
                                   levelModel.activatePinch();
                                 }
@@ -141,7 +151,7 @@ class GameField extends StatelessWidget {
                           child: NiceButton(
                               buttonText: "Highlight",
                               callback: () {
-                                if (!model.levelComplete) {
+                                if (!model.levelData.levelCompleted) {
                                   audioController.playSfx(SfxType.rewardGiven);
                                   levelModel.showRandomPictureLetter();
                                 }

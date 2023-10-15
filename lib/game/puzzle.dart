@@ -78,7 +78,7 @@ class _PuzzleState extends State<Puzzle> {
                         (svgLetter) => AnimatedOpacity(
                           duration: Duration(
                               milliseconds: svgLetter.show ? 750 : 750),
-                          opacity: svgLetter.show || levelModel.levelComplete ? 1.0 : 0.0,
+                          opacity: svgLetter.show || levelModel.levelData.levelCompleted ? 1.0 : 0.0,
                           curve: Curves.fastOutSlowIn,
                           onEnd: () {
                              _log.info(() => 'Ending svg letter animation for: ${svgLetter.letter} with show: ${svgLetter.show}');
@@ -111,7 +111,7 @@ class _PuzzleState extends State<Puzzle> {
         ),
         Container(
             padding: const EdgeInsets.all(8.0),
-            child: levelModel.zoomAndRotateEnabled
+            child: levelModel.levelData.zoomRewarded
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
