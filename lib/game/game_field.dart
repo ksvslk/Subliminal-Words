@@ -54,7 +54,7 @@ class GameField extends StatelessWidget {
                           builder: (context, data, child) {
                             return GestureDetector(
                               onTap: () {
-                                if (data.state == LetterBoxState.solutionPick) {
+                                if (data.state == LetterBoxState.solutionPick && !levelModel.levelData.levelCompleted) {
                                   audioController.playSfx(SfxType.freeLetter);
                                   levelModel.removeLetter(i, data);
                                 }

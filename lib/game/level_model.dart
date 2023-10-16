@@ -32,6 +32,16 @@ class LevelModel with ChangeNotifier {
       svgLetters = loadedLetters;
       notifyListeners();
     });
+
+    if (level.levelCompleted) _setLevelCompleted();
+  }
+
+  void _setLevelCompleted() {
+    levelData.word.characters.forEachIndexed((index, letter) {
+      final solutionLetter =
+          field.firstWhere((element) => element.letter == letter);
+      putLetter(index, solutionLetter, LetterBoxState.locked);
+    });
   }
 
   void reset() {
@@ -46,7 +56,8 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void putLetter(int index, LetterBoxData data) {
+  void putLetter(int index, LetterBoxData data,
+      [LetterBoxState defaultEndState = LetterBoxState.solutionPick]) {
     _putLetterPrecheck(data);
     final preAllLetters = field.map((e) => e.letter).toList() +
         solution.map((e) => e.letter).toList();
@@ -57,7 +68,7 @@ class LevelModel with ChangeNotifier {
         .indexWhere((element) => element.state == LetterBoxState.solutionSlot);
     if (indexOfFreeSlot != -1) {
       solution[indexOfFreeSlot].letter = data.letter;
-      solution[indexOfFreeSlot].state = LetterBoxState.solutionPick;
+      solution[indexOfFreeSlot].state = defaultEndState;
       data.letter = '';
       data.state = LetterBoxState.fieldSlot;
     }
