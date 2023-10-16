@@ -56,10 +56,7 @@ class MyApp extends StatelessWidget {
   final SettingsPersistence settingsPersistence;
   final LevelPersistence levelPersistence;
 
-  const MyApp(
-      {super.key,
-      required this.settingsPersistence,
-      required this.levelPersistence});
+  const MyApp({super.key, required this.settingsPersistence, required this.levelPersistence});
 
   @override
   Widget build(BuildContext context) {
@@ -72,23 +69,20 @@ class MyApp extends StatelessWidget {
               persistence: settingsPersistence,
             )..loadStateFromPersistence(),
           ),
-          Provider<LevelPersistence>(create: (context) {
-            return LocalStorageLevelPersistence();
-          },),
-          ProxyProvider2<LevelPersistence,ValueNotifier<AppLifecycleState>, 
-              LevelController>(
+          ProxyProvider<ValueNotifier<AppLifecycleState>, LevelController>(
             lazy: false, // Ensure that LevelController is created on startup
             create: (context) => LevelController(
               persistence: levelPersistence,
             )..initialize(),
-            update: (context, levelPersistence,lifecycleNotifier, 
-                levelController) {
+            dispose: (context, levelController) {
+              levelController.dispose();
+            },
+            update: (BuildContext context,
+                ValueNotifier<AppLifecycleState> lifecycleNotifier,
+                LevelController? levelController) {
               if (levelController == null) throw ArgumentError.notNull();
               levelController.attachLifecycleNotifier(lifecycleNotifier);
               return levelController;
-            },
-            dispose: (context, levelController) {
-              levelController.dispose();
             },
           ),
           ProxyProvider2<SettingsController, ValueNotifier<AppLifecycleState>,
