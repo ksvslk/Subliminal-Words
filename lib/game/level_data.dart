@@ -5,8 +5,8 @@ class LevelData {
   String picturePath;
   String svgPath;
   bool zoomRewarded;
-  bool levelCompleted;
   int disabledLettersCount;
+  bool levelCompleted;
 
   LevelData(
     this.nr,
@@ -30,7 +30,7 @@ class LevelData {
     disabledLettersCount = int.parse(level.$2[6]);
 
 
-  (String, List<String>) getLevelData() {
+  (String, List<String>) getLevelDataBasic() {
     return (nr.toString(), <String>[
       word,
       story,
@@ -41,5 +41,16 @@ class LevelData {
       disabledLettersCount.toString()
     ]);
   }
+
+  @override
+  bool operator == (Object other) {
+    if (other is LevelData) {
+      return nr == other.nr;
+    }
+    return false;
+  }
+  
+  @override
+  int get hashCode => super.hashCode;
 
 }

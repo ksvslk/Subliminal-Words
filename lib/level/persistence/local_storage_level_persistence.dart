@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:operation_hermes/game/level_data.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,7 +24,17 @@ class LocalStorageLevelPersistence extends LevelPersistence {
               false,
               false,
       0);
-      setLevelData(level1.getLevelData());
+      var level2 = LevelData(
+              2,
+              "TESTING",
+              "Mingi jutt mis sisaldab ZEN sõna kusagil.",
+              "assets/levels/1.png",
+              "assets/levels/1.svg",
+              false,
+              false,
+      0);
+      setLevelData(level1.getLevelDataBasic());
+      setLevelData(level2.getLevelDataBasic());
 
       // Mark the prefs as initialized
       await prefs.setBool('initialized', true);
@@ -44,4 +55,13 @@ class LocalStorageLevelPersistence extends LevelPersistence {
     final prefs = await instanceFuture;
     await prefs.setStringList(level.$1, level.$2);
   }
+  
+  @override
+  Future<(String, List<String>)> getLevelNr(int nr) async {
+    final prefs = await instanceFuture;
+    List<String> lastLevelData =
+        prefs.getStringList(nr.toString())!;
+    return (nr.toString(), lastLevelData);
+  }
+  
 }

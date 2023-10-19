@@ -47,7 +47,6 @@ class LetterBoxData with ChangeNotifier {
   set letter(String value) {
     if(_letter != value) {
       _letter = value;
-      //notifyListeners();
     }
   }
 }

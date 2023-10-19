@@ -20,35 +20,48 @@ class _LetterBoxState extends State<LetterBox> {
     Color getContainerColor() {
       switch (widget.data.state) {
         case LetterBoxState.solutionSlot:
-          return Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.25);
+          return Theme.of(context)
+              .colorScheme
+              .secondaryContainer
+              .withOpacity(0.25);
         case LetterBoxState.solutionPick:
           return Theme.of(context).colorScheme.surfaceVariant;
         case LetterBoxState.fieldPick:
           return Theme.of(context).colorScheme.primaryContainer;
         case LetterBoxState.fieldSlot:
-          return Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.25);
+          return Theme.of(context)
+              .colorScheme
+              .secondaryContainer
+              .withOpacity(0.25);
         case LetterBoxState.locked:
           return Theme.of(context).colorScheme.tertiaryContainer;
         case LetterBoxState.removed:
-          return Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.1);
+          return Theme.of(context)
+              .colorScheme
+              .secondaryContainer
+              .withOpacity(0.1);
       }
     }
 
     Color getContainerBorderColor() {
       switch (widget.data.state) {
         case LetterBoxState.solutionSlot:
-          return Theme.of(context).colorScheme.onSecondaryContainer.withOpacity(0.5);
-        case LetterBoxState.solutionPick:
           return Theme.of(context)
               .colorScheme
-              .onSurfaceVariant;
+              .onSecondaryContainer
+              .withOpacity(0.5);
+        case LetterBoxState.solutionPick:
+          return Theme.of(context).colorScheme.onSurfaceVariant;
         case LetterBoxState.fieldPick:
           return Theme.of(context)
               .colorScheme
               .onPrimaryContainer
               .withOpacity(0.5);
         case LetterBoxState.fieldSlot:
-          return Theme.of(context).colorScheme.onSecondaryContainer.withOpacity(0.5);
+          return Theme.of(context)
+              .colorScheme
+              .onSecondaryContainer
+              .withOpacity(0.5);
         case LetterBoxState.removed:
           return Theme.of(context).colorScheme.onSurface.withOpacity(0.1);
         case LetterBoxState.locked:

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/game_field_wrapper.dart';
-import 'package:operation_hermes/level/level_controller.dart';
+import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
 import 'package:operation_hermes/level/persistence/local_storage_level_persistence.dart';
 import 'dart:developer' as dev;
@@ -16,7 +16,8 @@ import 'audio/audio_controller.dart';
 Future<void> main() async {
   // Subscribe to log messages.
   Logger.root.onRecord.listen((record) {
-    dev.log(
+    if (record.level >= Level.INFO) {
+   dev.log(
       record.message,
       time: record.time,
       level: record.level.value,
@@ -25,6 +26,8 @@ Future<void> main() async {
       error: record.error,
       stackTrace: record.stackTrace,
     );
+    }
+ 
   });
 
   WidgetsFlutterBinding.ensureInitialized();
@@ -69,20 +72,17 @@ class MyApp extends StatelessWidget {
               persistence: settingsPersistence,
             )..loadStateFromPersistence(),
           ),
-          ProxyProvider<ValueNotifier<AppLifecycleState>, LevelController>(
-            lazy: false, // Ensure that LevelController is created on startup
-            create: (context) => LevelController(
+          ChangeNotifierProxyProvider<ValueNotifier<AppLifecycleState>, LevelModel>(
+            lazy: false,
+            create: (context) => LevelModel(
               persistence: levelPersistence,
-            )..initialize(),
-            dispose: (context, levelController) {
-              levelController.dispose();
-            },
+            ),
             update: (BuildContext context,
                 ValueNotifier<AppLifecycleState> lifecycleNotifier,
-                LevelController? levelController) {
-              if (levelController == null) throw ArgumentError.notNull();
-              levelController.attachLifecycleNotifier(lifecycleNotifier);
-              return levelController;
+                LevelModel? levelModel) {
+              if (levelModel == null) throw ArgumentError.notNull();
+              levelModel.attachLifecycleNotifier(lifecycleNotifier);
+              return levelModel;
             },
           ),
           ProxyProvider2<SettingsController, ValueNotifier<AppLifecycleState>,
@@ -104,6 +104,7 @@ class MyApp extends StatelessWidget {
         child: MaterialApp(
           title: 'Subliminal Words',
           theme: ThemeData(
+            scaffoldBackgroundColor: Colors.white,
               useMaterial3: true,
               // Define the default brightness and colors.
               colorScheme: ColorScheme.fromSeed(
@@ -112,6 +113,7 @@ class MyApp extends StatelessWidget {
               ),
               fontFamily: 'Gabarito'),
           darkTheme: ThemeData(
+            scaffoldBackgroundColor: Colors.black,
               useMaterial3: true,
               // Define the default brightness and colors.
               colorScheme: ColorScheme.fromSeed(
