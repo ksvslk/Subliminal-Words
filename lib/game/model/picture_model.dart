@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/services.dart';
+import 'package:operation_hermes/game/level_data.dart';
 import 'package:xml/xml.dart';
 
 import 'package:collection/collection.dart';
@@ -27,6 +28,19 @@ class PictureModel with ChangeNotifier {
       required this.zoomEnabled,
       required this.picturePath,
       required this.svgPath}) {
+    _loadSvgLetters(svgImage: svgPath).then((loadedLetters) {
+      highlightLetters = loadedLetters;
+      notifyListeners();
+    });
+  }
+
+  void initializePicture(LevelData level)
+  {
+    scale = 1.0;
+    quarterTurn = 0;
+    zoomEnabled = level.zoomRewarded;
+    picturePath = level.picturePath;
+    svgPath = level.svgPath;
     _loadSvgLetters(svgImage: svgPath).then((loadedLetters) {
       highlightLetters = loadedLetters;
       notifyListeners();
@@ -70,7 +84,7 @@ class PictureModel with ChangeNotifier {
       highlightLetters[letterIndexToHighlight.first].show = true;
       highlightLetters[letterIndexToHighlight.first].hintGiven = true;
       _log.info(() =>
-          'Showing letter: ${highlightLetters[letterIndexToHighlight.first].letter} with show: ${highlightLetters[letterIndexToHighlight.first].show}');
+          'Showing letter - ${highlightLetters[letterIndexToHighlight.first].letter} with show - ${highlightLetters[letterIndexToHighlight.first].show}');
     }
     notifyListeners();
   }
@@ -80,7 +94,7 @@ class PictureModel with ChangeNotifier {
     if (index != -1) {
       highlightLetters[index].show = false;
       _log.info(() =>
-          'Turned ${highlightLetters[index].letter} with show: ${highlightLetters[index].show}');
+          'Turned ${highlightLetters[index].letter} with show - ${highlightLetters[index].show}');
       notifyListeners();
     }
   }
@@ -102,6 +116,7 @@ class PictureModel with ChangeNotifier {
   void reset() {
     scale = 1.0;
     quarterTurn = 0;
+    _log.log(Level.INFO, "Reseting PictureModel. PictureModel listeners - $hasListeners");
     notifyListeners();
   }
 }

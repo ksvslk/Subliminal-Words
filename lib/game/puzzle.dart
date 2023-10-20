@@ -18,9 +18,8 @@ class Puzzle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final audioController = context.read<AudioController>();
-    _log.info(() => 'Build puzzle.');
     return Consumer<LevelModel>(builder: (context, levelModel, child) {
-      _log.info(() => 'Build puzzle ALL ->.');
+      _log.info(() => 'Build puzzle.');
       return Stack(
         alignment: Alignment.bottomRight,
         children: [
@@ -70,7 +69,7 @@ class Puzzle extends StatelessWidget {
                               curve: Curves.fastOutSlowIn,
                               onEnd: () {
                                 _log.info(() =>
-                                    'Ending svg letter animation for: ${svgLetter.letter} with show: ${svgLetter.show}');
+                                    'Ending svg letter animation for - ${svgLetter.letter} with show - ${svgLetter.show}');
                                 if (svgLetter.show) {
                                   model.hideLetter(svgLetter.letter);
                                 }

@@ -16,6 +16,11 @@ class FieldModel with ChangeNotifier {
   String word = "";
 
   FieldModel({required LevelData level}) {
+    initializeLevel(level);
+  }
+
+  void initializeLevel(LevelData level)
+  {
     solution = List.generate(
         level.word.length, (index) => LetterBoxData.solutionSlot(),
         growable: false);
@@ -24,6 +29,7 @@ class FieldModel with ChangeNotifier {
         disabledLettersCount: level.disabledLettersCount);
     disabledLettersCount = level.disabledLettersCount;
     word = level.word;
+    notifyListeners();
   }
 
   void putLetter(int index, LetterBoxData data,
@@ -179,6 +185,7 @@ class FieldModel with ChangeNotifier {
     field = getFieldLetters(solutionPick: word, disabledLettersCount: 0);
     for (var element in field) { element.state = LetterBoxState.fieldPick; }
     disabledLettersCount = 0;
+    _log.log(Level.INFO, "Reseting FieldModel to ${word}. FieldModel listeners - $hasListeners");
     notifyListeners();
   }
 

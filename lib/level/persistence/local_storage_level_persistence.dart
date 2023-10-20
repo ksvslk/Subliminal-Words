@@ -26,10 +26,10 @@ class LocalStorageLevelPersistence extends LevelPersistence {
       0);
       var level2 = LevelData(
               2,
-              "TESTING",
-              "Mingi jutt mis sisaldab ZEN sõna kusagil.",
-              "assets/levels/1.png",
-              "assets/levels/1.svg",
+              "BIGS",
+              "Blablabl BIG blabla.",
+              "assets/levels/2.jpg",
+              "assets/levels/2.svg",
               false,
               false,
       0);

@@ -44,14 +44,14 @@ class GameField extends StatelessWidget {
                         icon: const Icon(Icons.music_note)),
                     IconButton(
                         onPressed: () {
-                          levelModel.reset();
+                          levelModel.loadLevel(2);
                         },
                         icon: const Icon(Icons.restore)),
                   ],
                 ),
                 ChangeNotifierProvider<PictureModel>.value(
                     value: levelModel.pictureModel, child: const Puzzle()),
-                ChangeNotifierProvider.value(
+                ChangeNotifierProvider<FieldModel>.value(
                   value: levelModel.fieldModel,
                   child: Consumer<FieldModel>(
                       builder: (context, fieldModel, child) {
@@ -92,7 +92,7 @@ class GameField extends StatelessWidget {
                   }),
                 ),
                 const Divider(),
-                ChangeNotifierProvider.value(
+                ChangeNotifierProvider<FieldModel>.value(
                   value: levelModel.fieldModel,
                   child: Consumer<FieldModel>(
                       builder: (context, fieldModel, child) {
@@ -118,7 +118,7 @@ class GameField extends StatelessWidget {
                                           if (!levelModel.levelCompleted &&
                                               data.state ==
                                                   LetterBoxState.fieldPick &&
-                                              !levelModel.isLastLetter()) {
+                                              !fieldModel.isLastLetter()) {
                                             HapticFeedback.selectionClick();
                                             audioController
                                                 .playSfx(SfxType.pickLetter);

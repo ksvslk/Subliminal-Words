@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/game/level_data.dart';
 
 class HintModel with ChangeNotifier {
   static final _log = Logger('HintModel');
@@ -26,10 +27,13 @@ class HintModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void reset()
+  void initializeHints(LevelData level, bool canLettersBeRemoved)
   {
-    lettersCanBeRemoved = true;
-    notifyListeners();
+      removalRewarded = true;
+      zoomRewarded = level.zoomRewarded;
+      highlightRewarded = true;
+      lettersCanBeRemoved = canLettersBeRemoved;
+      notifyListeners();
   }
 
 }

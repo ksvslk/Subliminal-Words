@@ -11,6 +11,7 @@ class GameFieldWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final levelModel = context.read<LevelModel>();
+    _log.log(Level.INFO, "Building GameFieldWrapper");
     return FutureBuilder(
         future: levelModel.initialize(),
         builder: (context, snapshot) {

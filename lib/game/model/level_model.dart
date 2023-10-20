@@ -7,7 +7,6 @@ import 'package:operation_hermes/game/model/picture_model.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
 
 class LevelModel with ChangeNotifier {
-
   final LevelPersistence persistence;
   ValueNotifier<AppLifecycleState>? _lifecycleNotifier;
 
@@ -29,40 +28,60 @@ class LevelModel with ChangeNotifier {
       return await persistence.getLatestLevelData();
     });
     final level = LevelData.from(latestLevelData);
-    await _createModel(level);
+    await _createModels(level);
+    _log.log(Level.INFO, "initialize");
   }
 
-  Future<void> _createModel(LevelData level) async
-  {
-   if (levelCompleted) _setLevelCompleted();
+  Future<void> _createModels(LevelData level) async {
+    levelNr = level.nr;
+    storyLine = level.story;
+
     pictureModel = PictureModel(
         scale: 1.0,
         quarterTurn: 0,
         zoomEnabled: level.zoomRewarded,
         picturePath: level.picturePath,
         svgPath: level.svgPath);
+
     fieldModel = FieldModel(level: level);
-    levelNr = level.nr;
-    storyLine = level.story;
+
     hintModel = HintModel(
         removalRewarded: true,
         zoomRewarded: level.zoomRewarded,
         highlightRewarded: true);
+
     final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
     hintModel.setLettersCanBeRemoved(canLettersBeRemovedMore);
+
+    if (levelCompleted) _setLevelCompleted();
+  }
+
+  Future<void> loadLevel(int nr) async {
+    _log.log(Level.INFO, "loadLevel");
+    persistence.getLevelNr(nr).then((value) {
+      final level = LevelData.from(value);
+
+      // LevelModel
+      levelNr = level.nr;
+      storyLine = level.story;
+
+      // PictureModel
+      pictureModel.initializePicture(level);
+
+      // FieldModel
+      fieldModel.initializeLevel(level);
+
+      // HintModel
+      final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
+      hintModel.initializeHints(level, canLettersBeRemovedMore);
+
+      if (level.levelCompleted) _setLevelCompleted();
+    });
   }
 
   void _setLevelCompleted() {
     fieldModel.setLevelCompleted();
     levelCompleted = true;
-    notifyListeners();
-  }
-
-  void reset() {
-    pictureModel.reset();
-    fieldModel.reset();
-    hintModel.reset();
-    levelCompleted = false;
     notifyListeners();
   }
 
@@ -76,29 +95,31 @@ class LevelModel with ChangeNotifier {
     pictureModel.highlightLetter();
   }
 
-  bool isLastLetter() => fieldModel.isLastLetter();
-
   bool checkForWin() {
     var win = fieldModel.checkForWin();
     levelCompleted = win;
     return win;
   }
 
-  LevelData getLevelData()
-  {
+  LevelData getLevelData() {
     return LevelData(
-      levelNr,
-      fieldModel.word,
-      storyLine,
-      pictureModel.picturePath,
-      pictureModel.svgPath,
-      hintModel.zoomRewarded,
-      levelCompleted,
-      fieldModel.disabledLettersCount
-      );
+        levelNr,
+        fieldModel.word,
+        storyLine,
+        pictureModel.picturePath,
+        pictureModel.svgPath,
+        hintModel.zoomRewarded,
+        levelCompleted,
+        fieldModel.disabledLettersCount);
   }
 
-   void attachLifecycleNotifier(
+  Future<void> _save() async {
+    final level = getLevelData();
+    final persistentData = level.getLevelDataBasic();
+    persistence.setLevelData(persistentData);
+  }
+
+  void attachLifecycleNotifier(
       ValueNotifier<AppLifecycleState> lifecycleNotifier) {
     _lifecycleNotifier?.removeListener(_handleAppLifecycle);
     lifecycleNotifier.addListener(_handleAppLifecycle);
@@ -122,20 +143,4 @@ class LevelModel with ChangeNotifier {
     super.dispose();
     _lifecycleNotifier?.removeListener(_handleAppLifecycle);
   }
-
-  Future<void> _save() async {
-    final level = getLevelData();
-    final persistentData = level.getLevelDataBasic();
-    persistence.setLevelData(persistentData);
-  }
-
-  Future<void> loadLevel(int nr) async {
-    final loadedLevel = await persistence.initialize().then((value) async {
-      return await persistence.getLevelNr(nr);
-    });
-    final level = LevelData.from(loadedLevel);
-    _createModel(level);
-  }
-
-
 }
