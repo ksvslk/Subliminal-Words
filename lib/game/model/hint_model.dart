@@ -7,9 +7,13 @@ class HintModel with ChangeNotifier {
 
   bool lettersCanBeRemoved = false;
 
-  bool removalRewarded = true;
+  bool removalRewarded = false;
   bool zoomRewarded = false;
-  bool highlightRewarded = true;
+  bool highlightRewarded = false;
+
+  bool remove3Purchased = false;
+  bool zoomPurchased = false;
+  bool highlightPurchased = false;
 
   HintModel(
       {required this.removalRewarded,

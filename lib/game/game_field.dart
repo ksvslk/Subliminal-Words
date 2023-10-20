@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
 import 'package:operation_hermes/audio/sounds.dart';
+import 'package:operation_hermes/game/ad_button_name.dart';
 import 'package:operation_hermes/game/model/field_model.dart';
 import 'package:operation_hermes/game/model/hint_model.dart';
 import 'package:operation_hermes/game/letter_box.dart';
@@ -10,7 +11,7 @@ import 'package:operation_hermes/game/letter_box_data.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/game/model/picture_model.dart';
-import 'package:operation_hermes/game/nice_button.dart';
+import 'package:operation_hermes/game/ad_button.dart';
 import 'package:operation_hermes/game/puzzle.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
 import 'package:provider/provider.dart';
@@ -55,7 +56,8 @@ class GameField extends StatelessWidget {
                   value: levelModel.fieldModel,
                   child: Consumer<FieldModel>(
                       builder: (context, fieldModel, child) {
-                        _log.log(Level.INFO, "Rebuilding GameField SOLUTION field.");
+                    _log.log(
+                        Level.INFO, "Rebuilding GameField SOLUTION field.");
                     return Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -96,7 +98,7 @@ class GameField extends StatelessWidget {
                   value: levelModel.fieldModel,
                   child: Consumer<FieldModel>(
                       builder: (context, fieldModel, child) {
-                        _log.log(Level.INFO, "Rebuilding GameField LETTERS field.");
+                    _log.log(Level.INFO, "Rebuilding GameField LETTERS field.");
                     return Column(
                       children: List.generate(
                         2,
@@ -151,51 +153,29 @@ class GameField extends StatelessWidget {
                 ),
                 ChangeNotifierProvider.value(
                   value: levelModel.hintModel,
-                  child:
-                      Consumer<HintModel>(builder: (context, hintModel, child) {
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                  child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        Flexible(
-                          child: NiceButton(
-                              buttonText: hintModel.lettersCanBeRemoved
-                                  ? "Remove 3"
-                                  : "-",
-                              callback: () {
-                                if (hintModel.removalRewarded &&
-                                    !levelModel.levelCompleted &&
-                                    hintModel.lettersCanBeRemoved) {
-                                  audioController.playSfx(SfxType.wrong);
-                                  levelModel.remove3ArbitaryLetters();
-                                }
-                              }),
+                        Expanded(
+                          flex: 1,
+                          child: AdButton(
+                            adButtonName: AdButtonName.remove3,
+                          ),
                         ),
-                        Flexible(
-                          child: NiceButton(
-                              buttonText: hintModel.zoomRewarded
-                                  ? "-"
-                                  : "Zoom + Rotate",
-                              callback: () {
-                                if (!hintModel.zoomRewarded &&
-                                    !levelModel.levelCompleted) {
-                                  audioController.playSfx(SfxType.rewardGiven);
-                                  hintModel.activateZoom();
-                                }
-                              }),
+                        Expanded(
+                          flex: 1,
+                          child: AdButton(
+                            adButtonName: AdButtonName.zoom,
+                          ),
                         ),
-                        Flexible(
-                          child: NiceButton(
-                              buttonText: "Highlight",
-                              callback: () {
-                                if (!levelModel.levelCompleted) {
-                                  audioController.playSfx(SfxType.rewardGiven);
-                                  levelModel.highlightLetter();
-                                }
-                              }),
+                        Expanded(
+                          flex: 1,
+                          child: AdButton(
+                            adButtonName: AdButtonName.highlight,
+                          ),
                         ),
                       ],
-                    );
-                  }),
+                    ),
                 ),
               ],
             ),
