@@ -171,11 +171,15 @@ class FieldModel with ChangeNotifier {
     });
   }
 
-  void resetLevel() {
+  void reset() {
     solution = List.generate(
         word.length, (index) => LetterBoxData.solutionSlot(),
         growable: false);
+    for (var element in solution) { element.state = LetterBoxState.solutionSlot; }
     field = getFieldLetters(solutionPick: word, disabledLettersCount: 0);
+    for (var element in field) { element.state = LetterBoxState.fieldPick; }
+    disabledLettersCount = 0;
+    notifyListeners();
   }
 
   // PRECONDITIONS: Total letters count > solution word length

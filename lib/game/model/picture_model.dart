@@ -99,8 +99,9 @@ class PictureModel with ChangeNotifier {
     return maps;
   }
 
-  void resetLevel() {
+  void reset() {
     scale = 1.0;
     quarterTurn = 0;
+    notifyListeners();
   }
 }

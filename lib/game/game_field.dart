@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
 import 'package:operation_hermes/audio/sounds.dart';
+import 'package:operation_hermes/game/model/field_model.dart';
 import 'package:operation_hermes/game/model/hint_model.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/game/letter_box_data.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
+import 'package:operation_hermes/game/model/picture_model.dart';
 import 'package:operation_hermes/game/nice_button.dart';
 import 'package:operation_hermes/game/puzzle.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
@@ -42,88 +44,110 @@ class GameField extends StatelessWidget {
                         icon: const Icon(Icons.music_note)),
                     IconButton(
                         onPressed: () {
-                          levelModel.loadLevel(2);
+                          levelModel.reset();
                         },
                         icon: const Icon(Icons.restore)),
                   ],
                 ),
-                ChangeNotifierProvider.value(
+                ChangeNotifierProvider<PictureModel>.value(
                     value: levelModel.pictureModel, child: const Puzzle()),
-                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  for (final (i, _) in levelModel.fieldModel.solution.indexed)
-                    Flexible(
-                      child: ChangeNotifierProvider.value(
-                        value: levelModel.fieldModel.solution[i],
-                        child: Consumer<LetterBoxData>(
-                          builder: (context, data, child) {
-                            _log.log(
-                                Level.INFO, "Rebuilding Letter in GameField");
-                            return GestureDetector(
-                              onTap: () {
-                                if (data.state == LetterBoxState.solutionPick &&
-                                    !levelModel.levelCompleted) {
-                                  audioController.playSfx(SfxType.freeLetter);
-                                  levelModel.fieldModel.removeLetter(i, data);
-                                }
-                              },
-                              child: LetterBox(
-                                key: ValueKey('solution-$i'),
-                                data: data,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                ]),
-                const Divider(),
-                Column(
-                  children: List.generate(
-                    2,
-                    (rowIndex) => Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(
-                        7,
-                        (columnIndex) {
-                          var index = rowIndex * 7 + columnIndex;
-                          return Flexible(
-                            child: ChangeNotifierProvider.value(
-                              value: levelModel.fieldModel.field[index],
-                              child: Consumer<LetterBoxData>(
-                                builder: (context, data, child) {
-                                  _log.log(Level.INFO,
-                                      "Rebuilding Letter in GameField");
-                                  return GestureDetector(
-                                    onTap: () {
-                                      if (!levelModel.levelCompleted &&
-                                          data.state ==
-                                              LetterBoxState.fieldPick &&
-                                          !levelModel.isLastLetter()) {
-                                        HapticFeedback.selectionClick();
-                                        audioController
-                                            .playSfx(SfxType.pickLetter);
-                                        levelModel.fieldModel
-                                            .putLetter(index, data);
-                                        var result = levelModel.checkForWin();
-                                        if (result) {
-                                          HapticFeedback.mediumImpact();
-                                          audioController.playSfx(SfxType.win);
+                ChangeNotifierProvider.value(
+                  value: levelModel.fieldModel,
+                  child: Consumer<FieldModel>(
+                      builder: (context, fieldModel, child) {
+                        _log.log(Level.INFO, "Rebuilding GameField SOLUTION field.");
+                    return Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (final (i, _)
+                              in levelModel.fieldModel.solution.indexed)
+                            Flexible(
+                              child: ChangeNotifierProvider.value(
+                                value: levelModel.fieldModel.solution[i],
+                                child: Consumer<LetterBoxData>(
+                                  builder: (context, data, child) {
+                                    _log.log(Level.INFO,
+                                        "Rebuilding Letter in GameField");
+                                    return GestureDetector(
+                                      onTap: () {
+                                        if (data.state ==
+                                                LetterBoxState.solutionPick &&
+                                            !levelModel.levelCompleted) {
+                                          audioController
+                                              .playSfx(SfxType.freeLetter);
+                                          levelModel.fieldModel
+                                              .removeLetter(i, data);
                                         }
-                                      }
-                                    },
-                                    child: LetterBox(
-                                      key: ValueKey('field-$index'),
-                                      data: data,
-                                    ),
-                                  );
-                                },
+                                      },
+                                      child: LetterBox(
+                                        key: ValueKey('solution-$i'),
+                                        data: data,
+                                      ),
+                                    );
+                                  },
+                                ),
                               ),
                             ),
-                          );
-                        },
+                        ]);
+                  }),
+                ),
+                const Divider(),
+                ChangeNotifierProvider.value(
+                  value: levelModel.fieldModel,
+                  child: Consumer<FieldModel>(
+                      builder: (context, fieldModel, child) {
+                        _log.log(Level.INFO, "Rebuilding GameField LETTERS field.");
+                    return Column(
+                      children: List.generate(
+                        2,
+                        (rowIndex) => Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(
+                            7,
+                            (columnIndex) {
+                              var index = rowIndex * 7 + columnIndex;
+                              return Flexible(
+                                child: ChangeNotifierProvider.value(
+                                  value: levelModel.fieldModel.field[index],
+                                  child: Consumer<LetterBoxData>(
+                                    builder: (context, data, child) {
+                                      _log.log(Level.INFO,
+                                          "Rebuilding Letter in GameField");
+                                      return GestureDetector(
+                                        onTap: () {
+                                          if (!levelModel.levelCompleted &&
+                                              data.state ==
+                                                  LetterBoxState.fieldPick &&
+                                              !levelModel.isLastLetter()) {
+                                            HapticFeedback.selectionClick();
+                                            audioController
+                                                .playSfx(SfxType.pickLetter);
+                                            levelModel.fieldModel
+                                                .putLetter(index, data);
+                                            var result =
+                                                levelModel.checkForWin();
+                                            if (result) {
+                                              HapticFeedback.mediumImpact();
+                                              audioController
+                                                  .playSfx(SfxType.win);
+                                            }
+                                          }
+                                        },
+                                        child: LetterBox(
+                                          key: ValueKey('field-$index'),
+                                          data: data,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  }),
                 ),
                 ChangeNotifierProvider.value(
                   value: levelModel.hintModel,
@@ -138,7 +162,9 @@ class GameField extends StatelessWidget {
                                   ? "Remove 3"
                                   : "-",
                               callback: () {
-                                if (hintModel.removalRewarded && !levelModel.levelCompleted && hintModel.lettersCanBeRemoved) {
+                                if (hintModel.removalRewarded &&
+                                    !levelModel.levelCompleted &&
+                                    hintModel.lettersCanBeRemoved) {
                                   audioController.playSfx(SfxType.wrong);
                                   levelModel.remove3ArbitaryLetters();
                                 }

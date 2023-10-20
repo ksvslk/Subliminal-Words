@@ -20,6 +20,8 @@ class LevelModel with ChangeNotifier {
   late FieldModel fieldModel;
   late HintModel hintModel;
 
+  bool tempFlag = false;
+
   LevelModel({required this.persistence});
 
   Future<void> initialize() async {
@@ -50,7 +52,6 @@ class LevelModel with ChangeNotifier {
     hintModel.setLettersCanBeRemoved(canLettersBeRemovedMore);
   }
 
-
   void _setLevelCompleted() {
     fieldModel.setLevelCompleted();
     levelCompleted = true;
@@ -58,8 +59,9 @@ class LevelModel with ChangeNotifier {
   }
 
   void reset() {
-    pictureModel.resetLevel();
-    fieldModel.resetLevel();
+    pictureModel.reset();
+    fieldModel.reset();
+    hintModel.reset();
     levelCompleted = false;
     notifyListeners();
   }

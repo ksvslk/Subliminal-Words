@@ -26,4 +26,10 @@ class HintModel with ChangeNotifier {
     notifyListeners();
   }
 
+  void reset()
+  {
+    lettersCanBeRemoved = true;
+    notifyListeners();
+  }
+
 }
