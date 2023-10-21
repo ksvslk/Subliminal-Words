@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
 import 'package:operation_hermes/audio/sounds.dart';
@@ -64,7 +63,7 @@ class AdButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final levelModel = context.read<LevelModel>();
     final audioController = context.read<AudioController>();
-    final adsController = context.read<AdsController>();
+    final adsController = context.watch<AdsController>();
 
     return Consumer<HintModel>(builder: (context, hintModel, child) {
       return Padding(
