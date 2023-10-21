@@ -17,7 +17,7 @@ class AdButton extends StatelessWidget {
       case AdButtonName.remove3:
         return "Remove 3";
       case AdButtonName.zoom:
-        return "Zoom";
+        return "Manipulate";
       case AdButtonName.highlight:
         return "Highlight";
     }
@@ -71,7 +71,18 @@ class AdButton extends StatelessWidget {
         child: FilledButton(
           onPressed:
               getAction(hintModel, levelModel, audioController, adsController),
-          child: Text(getName()),
+          child: FittedBox(
+                    fit: BoxFit.fitWidth,
+                    child: Text(
+                      getName(),
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontFamily:
+                            DefaultTextStyle.of(context).style.fontFamily,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
         ),
       );
     });

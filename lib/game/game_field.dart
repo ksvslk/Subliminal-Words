@@ -35,6 +35,7 @@ class GameField extends StatelessWidget {
             padding: const EdgeInsets.all(8.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Row(
                   children: [
@@ -51,7 +52,8 @@ class GameField extends StatelessWidget {
                   ],
                 ),
                 ChangeNotifierProvider<PictureModel>.value(
-                    value: levelModel.pictureModel, child: const Puzzle()),
+                    value: levelModel.pictureModel,
+                    child: const Puzzle()),
                 ChangeNotifierProvider<FieldModel>.value(
                   value: levelModel.fieldModel,
                   child: Consumer<FieldModel>(
@@ -154,28 +156,28 @@ class GameField extends StatelessWidget {
                 ChangeNotifierProvider.value(
                   value: levelModel.hintModel,
                   child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Expanded(
-                          flex: 1,
-                          child: AdButton(
-                            adButtonName: AdButtonName.remove3,
-                          ),
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Expanded(
+                        flex: 1,
+                        child: AdButton(
+                          adButtonName: AdButtonName.remove3,
                         ),
-                        Expanded(
-                          flex: 1,
-                          child: AdButton(
-                            adButtonName: AdButtonName.zoom,
-                          ),
+                      ),
+                      Expanded(
+                        flex: 1,
+                        child: AdButton(
+                          adButtonName: AdButtonName.zoom,
                         ),
-                        Expanded(
-                          flex: 1,
-                          child: AdButton(
-                            adButtonName: AdButtonName.highlight,
-                          ),
+                      ),
+                      Expanded(
+                        flex: 1,
+                        child: AdButton(
+                          adButtonName: AdButtonName.highlight,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

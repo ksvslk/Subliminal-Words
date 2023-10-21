@@ -4,10 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
 import 'package:operation_hermes/game/game_field_wrapper.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
+import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
 import 'package:operation_hermes/level/persistence/local_storage_level_persistence.dart';
 import 'dart:developer' as dev;
@@ -49,12 +51,23 @@ Future<void> main() async {
     adsController = AdsController(MobileAds.instance);
     adsController.initialize();
   }
+  
+  InAppPurchaseController? inAppPurchaseController;
+   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+     inAppPurchaseController = InAppPurchaseController(InAppPurchase.instance)
+       // Subscribing to [InAppPurchase.instance.purchaseStream] as soon
+       // as possible in order not to miss any updates.
+       ..subscribe();
+     // Ask the store what the player has bought already.
+     inAppPurchaseController.restorePurchases();
+  }
 
   runApp(
     MyApp(
         settingsPersistence: LocalStorageSettingsPersistence(),
         levelPersistence: LocalStorageLevelPersistence(),
-        adsController: adsController),
+        adsController: adsController,
+        inAppPurchaseController: inAppPurchaseController),
   );
 }
 
@@ -73,12 +86,14 @@ class MyApp extends StatelessWidget {
   final SettingsPersistence settingsPersistence;
   final LevelPersistence levelPersistence;
   final AdsController? adsController;
+  final InAppPurchaseController? inAppPurchaseController;
   
   const MyApp(
       {super.key,
       required this.settingsPersistence,
       required this.levelPersistence,
-      required this.adsController});
+      required this.adsController,
+      required this.inAppPurchaseController});
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +107,8 @@ class MyApp extends StatelessWidget {
             )..loadStateFromPersistence(),
           ),
           Provider<AdsController?>.value(value: adsController),
+          ChangeNotifierProvider<InAppPurchaseController?>.value(
+              value: inAppPurchaseController),
           ChangeNotifierProxyProvider<ValueNotifier<AppLifecycleState>,
               LevelModel>(
             lazy: false,
