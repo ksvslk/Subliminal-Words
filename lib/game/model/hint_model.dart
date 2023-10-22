@@ -11,9 +11,9 @@ class HintModel with ChangeNotifier {
   bool zoomRewarded = false;
   bool highlightRewarded = false;
 
-  bool remove3Purchased = false;
-  bool zoomPurchased = false;
-  bool highlightPurchased = false;
+  bool remove3Purchased = true;
+  bool zoomPurchased = true;
+  bool highlightPurchased = true;
 
   HintModel(
       {required this.removalRewarded,

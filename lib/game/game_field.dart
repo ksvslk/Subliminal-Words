@@ -5,7 +5,6 @@ import 'package:operation_hermes/audio/audio_controller.dart';
 import 'package:operation_hermes/audio/sounds.dart';
 import 'package:operation_hermes/game/ad_button_name.dart';
 import 'package:operation_hermes/game/model/field_model.dart';
-import 'package:operation_hermes/game/model/hint_model.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/game/letter_box_data.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
@@ -13,6 +12,7 @@ import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/game/model/picture_model.dart';
 import 'package:operation_hermes/game/ad_button.dart';
 import 'package:operation_hermes/game/puzzle.dart';
+import 'package:operation_hermes/in_app_purchase/in_app_purchase_menu.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
 import 'package:provider/provider.dart';
 
@@ -27,6 +27,15 @@ class GameField extends StatelessWidget {
     final levelModel = context.read<LevelModel>();
 
     _log.log(Level.INFO, "Rebuilding whole GameField");
+
+    void showMenu(BuildContext context) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return const InAppPurchaseMenuDialog();
+        },
+      );
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -46,14 +55,13 @@ class GameField extends StatelessWidget {
                         icon: const Icon(Icons.music_note)),
                     IconButton(
                         onPressed: () {
-                          levelModel.loadLevel(2);
+                          showMenu(context);
                         },
                         icon: const Icon(Icons.restore)),
                   ],
                 ),
                 ChangeNotifierProvider<PictureModel>.value(
-                    value: levelModel.pictureModel,
-                    child: const Puzzle()),
+                    value: levelModel.pictureModel, child: const Puzzle()),
                 ChangeNotifierProvider<FieldModel>.value(
                   value: levelModel.fieldModel,
                   child: Consumer<FieldModel>(

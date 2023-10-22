@@ -35,6 +35,12 @@ class AdButton extends StatelessWidget {
             });
           };
         }
+        else if (hintModel.remove3Purchased && hintModel.lettersCanBeRemoved) {
+          return () {
+              audioController.playSfx(SfxType.wrong);
+              levelModel.remove3ArbitaryLetters();
+          };
+        }
         return null;
       case AdButtonName.zoom:
         if (!hintModel.zoomPurchased) {
@@ -45,6 +51,12 @@ class AdButton extends StatelessWidget {
             });
           };
         }
+        else if (hintModel.zoomPurchased && !hintModel.zoomRewarded) {
+          return () {
+              audioController.playSfx(SfxType.rewardGiven);
+              hintModel.activateZoom();
+          };
+        }
         return null;
       case AdButtonName.highlight:
         if (!hintModel.highlightPurchased) {
@@ -53,6 +65,12 @@ class AdButton extends StatelessWidget {
               audioController.playSfx(SfxType.rewardGiven);
               levelModel.highlightLetter();
             });
+          };
+        }
+        else if (hintModel.highlightPurchased) {
+          return () {
+              audioController.playSfx(SfxType.rewardGiven);
+              levelModel.highlightLetter();
           };
         }
         return null;
