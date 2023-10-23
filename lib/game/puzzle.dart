@@ -3,7 +3,6 @@ import 'package:logging/logging.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
 import 'package:operation_hermes/audio/sounds.dart';
 import 'package:operation_hermes/game/filled_letter_painter.dart';
-import 'package:operation_hermes/game/model/hint_model.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/game/model/picture_model.dart';
 import 'package:path_drawing/path_drawing.dart';
@@ -19,7 +18,7 @@ class Puzzle extends StatelessWidget {
   Widget build(BuildContext context) {
     final audioController = context.read<AudioController>();
     return Consumer<LevelModel>(builder: (context, levelModel, child) {
-      _log.info(() => 'Build puzzle.');
+      _log.info(() => 'Build puzzle. Consumer of LevelModel');
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8.0),
         child: Stack(
@@ -110,57 +109,47 @@ class Puzzle extends StatelessWidget {
                 );
               }),
             ),
-            ChangeNotifierProvider<HintModel>.value(
-                value: levelModel.hintModel,
-                child: Consumer<HintModel>(
-                  builder: (context, hintModel, child) {
-                    _log.info(() => 'Build puzzle picture zoom buttons.');
-                    return Container(
-                        padding: const EdgeInsets.all(8.0),
-                        child: hintModel.zoomRewarded
-                            ? Consumer<PictureModel>(
-                                builder: (context, pictureModel, child) {
-                                _log.info(() =>
-                                    'Build puzzle picture row of zoom buttons.');
-                                return Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    IconButton.filledTonal(
-                                      icon: const Icon(Icons.zoom_out),
-                                      onPressed: pictureModel.scale <=
-                                              pictureModel.minZoom
-                                          ? null
-                                          : () {
-                                              pictureModel.setScaleDown();
-                                              audioController
-                                                  .playSfx(SfxType.zoomOut);
-                                            },
-                                    ),
-                                    IconButton.filledTonal(
-                                      icon: const Icon(Icons.zoom_in),
-                                      onPressed: pictureModel.scale >=
-                                              pictureModel.maxZoom
-                                          ? null
-                                          : () {
-                                              pictureModel.setScaleUp();
-                                              audioController
-                                                  .playSfx(SfxType.zoomIn);
-                                            },
-                                    ),
-                                    IconButton.filledTonal(
-                                      icon: const Icon(
-                                          Icons.rotate_90_degrees_cw),
-                                      onPressed: () {
-                                        audioController.playSfx(SfxType.rotate);
-                                        pictureModel.setNextQuarterTurn();
-                                      },
-                                    ),
-                                  ],
-                                );
-                              })
-                            : null);
-                  },
-                )),
+            Container(
+                padding: const EdgeInsets.all(8.0),
+                child: levelModel.manipulationEnabled
+                    ? Consumer<PictureModel>(
+                        builder: (context, pictureModel, child) {
+                        _log.info(
+                            () => 'Build puzzle picture row of zoom buttons.');
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            IconButton.filledTonal(
+                              icon: const Icon(Icons.zoom_out),
+                              onPressed: pictureModel.scale <=
+                                      pictureModel.minZoom
+                                  ? null
+                                  : () {
+                                      pictureModel.setScaleDown();
+                                      audioController.playSfx(SfxType.zoomOut);
+                                    },
+                            ),
+                            IconButton.filledTonal(
+                              icon: const Icon(Icons.zoom_in),
+                              onPressed: pictureModel.scale >=
+                                      pictureModel.maxZoom
+                                  ? null
+                                  : () {
+                                      pictureModel.setScaleUp();
+                                      audioController.playSfx(SfxType.zoomIn);
+                                    },
+                            ),
+                            IconButton.filledTonal(
+                              icon: const Icon(Icons.rotate_90_degrees_cw),
+                              onPressed: () {
+                                audioController.playSfx(SfxType.rotate);
+                                pictureModel.setNextQuarterTurn();
+                              },
+                            ),
+                          ],
+                        );
+                      })
+                    : null),
           ],
         ),
       );

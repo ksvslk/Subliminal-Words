@@ -4,7 +4,7 @@ class LevelData {
   String story;
   String picturePath;
   String svgPath;
-  bool zoomRewarded;
+  bool manipulationEnabled;
   int disabledLettersCount;
   bool levelCompleted;
 
@@ -14,7 +14,7 @@ class LevelData {
     this.story,
     this.picturePath,
     this.svgPath,
-    this.zoomRewarded,
+    this.manipulationEnabled,
     this.levelCompleted,
     this.disabledLettersCount,
   );
@@ -25,7 +25,7 @@ class LevelData {
     story = level.$2[1],
     picturePath = level.$2[2],
     svgPath = level.$2[3],
-    zoomRewarded = bool.parse(level.$2[4]),
+    manipulationEnabled = bool.parse(level.$2[4]),
     levelCompleted = bool.parse(level.$2[5]),
     disabledLettersCount = int.parse(level.$2[6]);
 
@@ -36,7 +36,7 @@ class LevelData {
       story,
       picturePath,
       svgPath,
-      zoomRewarded.toString(),
+      manipulationEnabled.toString(),
       levelCompleted.toString(),
       disabledLettersCount.toString()
     ]);

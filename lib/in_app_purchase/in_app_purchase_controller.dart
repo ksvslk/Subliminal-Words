@@ -29,6 +29,11 @@ class InAppPurchaseController extends ChangeNotifier {
 
   List<PurchasableProduct> products = [];
 
+  // This is a stupid variable because cancelled purchases ids's will come up empty.
+  // So each time we try to buy something we add the purchase to this variable and
+  // when the purchase is cancelled (empty id) we set this to purchasable.
+  PurchasableProduct? _currentPendingPurchase;
+
   /// Launches the platform UI for buying an in-app purchase.
   ///
   /// Currently, the only supported in-app purchase is no ad breaks.
@@ -44,6 +49,7 @@ class InAppPurchaseController extends ChangeNotifier {
         products.firstWhereOrNull((element) => element.id == productId);
     if (product == null) return;
     product.status = ProductStatus.pending;
+    _currentPendingPurchase = product;
     notifyListeners();
 
     _log.info('Making the purchase for: ${product.productDetails.id}');
@@ -161,8 +167,12 @@ class InAppPurchaseController extends ChangeNotifier {
           product.status = ProductStatus.purchasable;
           notifyListeners();
         case PurchaseStatus.canceled:
-          final product = products.firstWhereOrNull((element) => element.id ==  purchaseDetails.productID);
-          if (product == null) return;
+          final product = products.firstWhereOrNull(
+              (element) => element.id == purchaseDetails.productID);
+          if (product == null) {
+            _tempWorkaroundForCancelledPurchases();
+            return;
+          }
           product.status = ProductStatus.purchasable;
           notifyListeners();
       }
@@ -174,12 +184,23 @@ class InAppPurchaseController extends ChangeNotifier {
     }
   }
 
-  void _handlePurchase(String productId) {}
+
+  // This is going to be solved by the [in_app_purchase] plugin team
+  // in the future hopefully.
+  void _tempWorkaroundForCancelledPurchases() {
+    if (_currentPendingPurchase != null) {
+      final currentProduct = products.firstWhereOrNull(
+          (element) => element.id == _currentPendingPurchase?.productDetails.id);
+      currentProduct?.status = ProductStatus.purchasable;
+      _log.info(
+          'Setting status ${ProductStatus.purchasable} to ${currentProduct?.productName}');
+      _currentPendingPurchase = null;
+      notifyListeners();
+    }
+  }
 
   void _reportError(String message) {
     _log.severe(message);
-    //showSnackBar(message);
-    // TODO: _noAdBreaksPurchase = NoAdBreaksPurchase.error(message);
     notifyListeners();
   }
 

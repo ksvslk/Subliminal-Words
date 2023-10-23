@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
 import 'package:operation_hermes/audio/sounds.dart';
-import 'package:operation_hermes/game/ad_button_name.dart';
 import 'package:operation_hermes/game/model/field_model.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/game/letter_box_data.dart';
@@ -15,6 +14,8 @@ import 'package:operation_hermes/game/puzzle.dart';
 import 'package:operation_hermes/in_app_purchase/in_app_purchase_menu.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
 import 'package:provider/provider.dart';
+import '../C.dart' as C;
+
 
 class GameField extends StatelessWidget {
   const GameField({super.key});
@@ -26,7 +27,7 @@ class GameField extends StatelessWidget {
     final audioController = context.read<AudioController>();
     final levelModel = context.read<LevelModel>();
 
-    _log.log(Level.INFO, "Rebuilding whole GameField");
+    _log.log(Level.INFO, "Rebuilding whole GameField.");
 
     void showMenu(BuildContext context) {
       showDialog(
@@ -57,7 +58,7 @@ class GameField extends StatelessWidget {
                         onPressed: () {
                           showMenu(context);
                         },
-                        icon: const Icon(Icons.restore)),
+                        icon: const Icon(Icons.attach_money_outlined)),
                   ],
                 ),
                 ChangeNotifierProvider<PictureModel>.value(
@@ -161,32 +162,23 @@ class GameField extends StatelessWidget {
                     );
                   }),
                 ),
-                ChangeNotifierProvider.value(
-                  value: levelModel.hintModel,
-                  child: const Row(
+               const Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       Expanded(
                         flex: 1,
-                        child: AdButton(
-                          adButtonName: AdButtonName.remove3,
-                        ),
+                        child: AdButton(productId: C.REMOVE_3),
                       ),
                       Expanded(
                         flex: 1,
-                        child: AdButton(
-                          adButtonName: AdButtonName.zoom,
-                        ),
+                        child: AdButton(productId: C.MANIPULATE),
                       ),
                       Expanded(
                         flex: 1,
-                        child: AdButton(
-                          adButtonName: AdButtonName.highlight,
-                        ),
+                        child: AdButton(productId: C.HIGHLIGHT),
                       ),
                     ],
                   ),
-                ),
               ],
             ),
           ),

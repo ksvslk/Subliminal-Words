@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/model/field_model.dart';
-import 'package:operation_hermes/game/model/hint_model.dart';
 import 'package:operation_hermes/game/level_data.dart';
 import 'package:operation_hermes/game/model/picture_model.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
@@ -17,9 +16,9 @@ class LevelModel with ChangeNotifier {
   bool levelCompleted = false;
   late PictureModel pictureModel;
   late FieldModel fieldModel;
-  late HintModel hintModel;
 
-  bool tempFlag = false;
+  bool remove3Available = false;
+  bool manipulationEnabled = false;
 
   LevelModel({required this.persistence});
 
@@ -32,28 +31,32 @@ class LevelModel with ChangeNotifier {
     _log.log(Level.INFO, "initialize");
   }
 
+  void testNotify() {
+    notifyListeners();
+  }
+
   Future<void> _createModels(LevelData level) async {
     levelNr = level.nr;
     storyLine = level.story;
+    manipulationEnabled = level.manipulationEnabled;
 
     pictureModel = PictureModel(
         scale: 1.0,
         quarterTurn: 0,
-        zoomEnabled: level.zoomRewarded,
         picturePath: level.picturePath,
         svgPath: level.svgPath);
 
     fieldModel = FieldModel(level: level);
 
-    hintModel = HintModel(
-        removalRewarded: true,
-        zoomRewarded: level.zoomRewarded,
-        highlightRewarded: true);
-
     final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
-    hintModel.setLettersCanBeRemoved(canLettersBeRemovedMore);
+    setLettersCanBeRemoved(canLettersBeRemovedMore);
 
     if (levelCompleted) _setLevelCompleted();
+  }
+
+  void setLettersCanBeRemoved(bool newValue) {
+    remove3Available = newValue;
+    notifyListeners();
   }
 
   Future<void> loadLevel(int nr) async {
@@ -71,9 +74,8 @@ class LevelModel with ChangeNotifier {
       // FieldModel
       fieldModel.initializeLevel(level);
 
-      // HintModel
       final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
-      hintModel.initializeHints(level, canLettersBeRemovedMore);
+      setLettersCanBeRemoved(canLettersBeRemovedMore);
 
       if (level.levelCompleted) _setLevelCompleted();
     });
@@ -85,14 +87,20 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void remove3ArbitaryLetters() {
+  // Actions
+  void remove3Action() {
     fieldModel.remove3ArbitaryLetters();
     final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
-    hintModel.setLettersCanBeRemoved(canLettersBeRemovedMore);
+    setLettersCanBeRemoved(canLettersBeRemovedMore);
   }
 
-  void highlightLetter() {
+  void highlightAction() {
     pictureModel.highlightLetter();
+  }
+
+  void manipulationAction() {
+    manipulationEnabled = true;
+    notifyListeners();
   }
 
   bool checkForWin() {
@@ -108,7 +116,7 @@ class LevelModel with ChangeNotifier {
         storyLine,
         pictureModel.picturePath,
         pictureModel.svgPath,
-        hintModel.zoomRewarded,
+        manipulationEnabled,
         levelCompleted,
         fieldModel.disabledLettersCount);
   }

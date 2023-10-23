@@ -17,7 +17,6 @@ class PictureModel with ChangeNotifier {
 
   double scale;
   int quarterTurn;
-  bool zoomEnabled;
   String picturePath;
   String svgPath;
   List<SvgLetter> highlightLetters = [];
@@ -25,7 +24,6 @@ class PictureModel with ChangeNotifier {
   PictureModel(
       {required this.scale,
       required this.quarterTurn,
-      required this.zoomEnabled,
       required this.picturePath,
       required this.svgPath}) {
     _loadSvgLetters(svgImage: svgPath).then((loadedLetters) {
@@ -38,7 +36,6 @@ class PictureModel with ChangeNotifier {
   {
     scale = 1.0;
     quarterTurn = 0;
-    zoomEnabled = level.zoomRewarded;
     picturePath = level.picturePath;
     svgPath = level.svgPath;
     _loadSvgLetters(svgImage: svgPath).then((loadedLetters) {

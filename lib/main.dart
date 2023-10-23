@@ -106,7 +106,8 @@ class MyApp extends StatelessWidget {
               persistence: settingsPersistence,
             )..loadStateFromPersistence(),
           ),
-          Provider<AdsController?>.value(value: adsController),
+          ChangeNotifierProvider<AdsController?>.value(
+              value: adsController),
           ChangeNotifierProvider<InAppPurchaseController?>.value(
               value: inAppPurchaseController),
           ChangeNotifierProxyProvider<ValueNotifier<AppLifecycleState>,
