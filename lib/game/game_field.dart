@@ -11,11 +11,11 @@ import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/game/model/picture_model.dart';
 import 'package:operation_hermes/game/ad_button.dart';
 import 'package:operation_hermes/game/puzzle.dart';
-import 'package:operation_hermes/in_app_purchase/in_app_purchase_menu.dart';
+import 'package:operation_hermes/menu/in_app_purchase_menu.dart';
+import 'package:operation_hermes/menu/story_bottom_sheet.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
 import 'package:provider/provider.dart';
 import '../C.dart' as C;
-
 
 class GameField extends StatelessWidget {
   const GameField({super.key});
@@ -59,6 +59,15 @@ class GameField extends StatelessWidget {
                           showMenu(context);
                         },
                         icon: const Icon(Icons.add_shopping_cart_outlined)),
+                    IconButton(
+                        onPressed: () {
+                          showModalBottomSheet<void>(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return const StoryBottomSheet();
+                              });
+                        },
+                        icon: const Icon(Icons.article_outlined)),
                   ],
                 ),
                 ChangeNotifierProvider<PictureModel>.value(
@@ -72,11 +81,10 @@ class GameField extends StatelessWidget {
                     return Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          for (final (i, _)
-                              in levelModel.fieldModel.solution.indexed)
+                          for (final (i, _) in fieldModel.solution.indexed)
                             Flexible(
                               child: ChangeNotifierProvider.value(
-                                value: levelModel.fieldModel.solution[i],
+                                value: fieldModel.solution[i],
                                 child: Consumer<LetterBoxData>(
                                   builder: (context, data, child) {
                                     _log.log(Level.INFO,
@@ -88,8 +96,7 @@ class GameField extends StatelessWidget {
                                             !levelModel.levelCompleted) {
                                           audioController
                                               .playSfx(SfxType.freeLetter);
-                                          levelModel.fieldModel
-                                              .removeLetter(i, data);
+                                          fieldModel.removeLetter(i, data);
                                         }
                                       },
                                       child: LetterBox(
@@ -121,7 +128,7 @@ class GameField extends StatelessWidget {
                               var index = rowIndex * 7 + columnIndex;
                               return Flexible(
                                 child: ChangeNotifierProvider.value(
-                                  value: levelModel.fieldModel.field[index],
+                                  value: fieldModel.field[index],
                                   child: Consumer<LetterBoxData>(
                                     builder: (context, data, child) {
                                       _log.log(Level.INFO,
@@ -135,8 +142,7 @@ class GameField extends StatelessWidget {
                                             HapticFeedback.selectionClick();
                                             audioController
                                                 .playSfx(SfxType.pickLetter);
-                                            levelModel.fieldModel
-                                                .putLetter(index, data);
+                                            fieldModel.putLetter(index, data);
                                             var result =
                                                 levelModel.checkForWin();
                                             if (result) {
@@ -162,23 +168,23 @@ class GameField extends StatelessWidget {
                     );
                   }),
                 ),
-               const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      Expanded(
-                        flex: 1,
-                        child: AdButton(productId: C.REMOVE_3),
-                      ),
-                      Expanded(
-                        flex: 1,
-                        child: AdButton(productId: C.MANIPULATE),
-                      ),
-                      Expanded(
-                        flex: 1,
-                        child: AdButton(productId: C.HIGHLIGHT),
-                      ),
-                    ],
-                  ),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: AdButton(productId: C.REMOVE_3),
+                    ),
+                    Expanded(
+                      flex: 1,
+                      child: AdButton(productId: C.MANIPULATE),
+                    ),
+                    Expanded(
+                      flex: 1,
+                      child: AdButton(productId: C.HIGHLIGHT),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),

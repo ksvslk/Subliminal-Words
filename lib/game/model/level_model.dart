@@ -51,7 +51,7 @@ class LevelModel with ChangeNotifier {
     final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
     setLettersCanBeRemoved(canLettersBeRemovedMore);
 
-    if (levelCompleted) _setLevelCompleted();
+    if (level.levelCompleted) _setLevelCompleted();
   }
 
   void setLettersCanBeRemoved(bool newValue) {
