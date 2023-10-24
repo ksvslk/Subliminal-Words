@@ -18,7 +18,7 @@ class StoryBottomSheet extends StatelessWidget {
               decoration: BoxDecoration(
                   border: Border.all(color: Colors.transparent),
                   color: word == 'will'
-                      ? (index < 20
+                      ? (index < 40
                           ? Theme.of(context).colorScheme.tertiary
                           : Theme.of(context)
                               .colorScheme
@@ -27,12 +27,12 @@ class StoryBottomSheet extends StatelessWidget {
                       : null,
                   borderRadius: const BorderRadius.all(Radius.circular(8.0))),
               child: Text(
-                index < 20 ? word : "➹",
+                index < 40 ? word : "✴︎",
                 style: word == 'will'
                     ? TextStyle(
                         fontFamily:
                             DefaultTextStyle.of(context).style.fontFamily,
-                        color: index < 20
+                        color: index < 40
                             ? Theme.of(context).colorScheme.onTertiary
                             : Theme.of(context)
                                 .colorScheme
@@ -44,7 +44,7 @@ class StoryBottomSheet extends StatelessWidget {
                     : TextStyle(
                         fontFamily:
                             DefaultTextStyle.of(context).style.fontFamily,
-                        color: index < 20
+                        color: index < 40
                             ? Theme.of(context).colorScheme.onSurfaceVariant
                             : Theme.of(context)
                                 .colorScheme
