@@ -58,8 +58,6 @@ Future<void> main() async {
        // Subscribing to [InAppPurchase.instance.purchaseStream] as soon
        // as possible in order not to miss any updates.
        ..subscribe();
-     // Ask the store what the player has bought already.
-     inAppPurchaseController.restorePurchases();
   }
 
   runApp(

@@ -90,7 +90,7 @@ class InAppPurchaseController extends ChangeNotifier {
   }
 
   /// Subscribes to the [inAppPurchaseInstance.purchaseStream].
-  void subscribe() {
+void subscribe() {
     _subscription?.cancel();
     _subscription =
         inAppPurchaseInstance.purchaseStream.listen((purchaseDetailsList) {
@@ -122,6 +122,11 @@ class InAppPurchaseController extends ChangeNotifier {
     }
     products =
         response.productDetails.map((e) => PurchasableProduct(e)).toList();
+    _log.info('Loaded products:');
+    for (var element in products) {
+      _log.info('${element.id} - ${element.status.name}');
+    }
+    restorePurchases();
     notifyListeners();
   }
 
@@ -137,36 +142,28 @@ class InAppPurchaseController extends ChangeNotifier {
 
       switch (purchaseDetails.status) {
         case PurchaseStatus.pending:
-          final product = products.firstWhereOrNull(
-              (element) => element.id == purchaseDetails.productID);
-          if (product == null) return;
-          product.status = ProductStatus.pending;
-          notifyListeners();
+          _log.severe('Purchase is pending: $purchaseDetails');
+          setProductStatus(ProductStatus.pending, purchaseDetails.productID);
         case PurchaseStatus.purchased:
+          _log.severe('Purchase is purchased: $purchaseDetails');
+          setProductStatus(ProductStatus.purchased, purchaseDetails.productID);
         case PurchaseStatus.restored:
           bool valid = await _verifyPurchase(purchaseDetails);
           if (valid) {
-            final product = products.firstWhereOrNull(
-                (element) => element.id == purchaseDetails.productID);
-            if (product == null) return;
-            product.status = ProductStatus.purchased;
-            notifyListeners();
+            _log.severe('Purchase is restored: $purchaseDetails');
+            setProductStatus(
+                ProductStatus.purchased, purchaseDetails.productID);
           } else {
             _log.severe('Purchase verification failed: $purchaseDetails');
-            final product = products.firstWhereOrNull(
-                (element) => element.id == purchaseDetails.productID);
-            if (product == null) return;
-            product.status = ProductStatus.purchasable;
-            notifyListeners();
+            setProductStatus(
+                ProductStatus.purchasable, purchaseDetails.productID);
           }
         case PurchaseStatus.error:
           _log.severe('Error with purchase: ${purchaseDetails.error}');
-          final product = products.firstWhereOrNull(
-              (element) => element.id == purchaseDetails.productID);
-          if (product == null) return;
-          product.status = ProductStatus.purchasable;
-          notifyListeners();
+          setProductStatus(
+              ProductStatus.purchasable, purchaseDetails.productID);
         case PurchaseStatus.canceled:
+          _log.severe('Purchase is canceled: $purchaseDetails');
           final product = products.firstWhereOrNull(
               (element) => element.id == purchaseDetails.productID);
           if (product == null) {
@@ -184,13 +181,20 @@ class InAppPurchaseController extends ChangeNotifier {
     }
   }
 
+  void setProductStatus(ProductStatus productStatus, String productId) {
+    final product =
+        products.firstWhereOrNull((element) => element.id == productId);
+    if (product == null) return;
+    product.status = productStatus;
+    notifyListeners();
+  }
 
   // This is going to be solved by the [in_app_purchase] plugin team
   // in the future hopefully.
   void _tempWorkaroundForCancelledPurchases() {
     if (_currentPendingPurchase != null) {
-      final currentProduct = products.firstWhereOrNull(
-          (element) => element.id == _currentPendingPurchase?.productDetails.id);
+      final currentProduct = products.firstWhereOrNull((element) =>
+          element.id == _currentPendingPurchase?.productDetails.id);
       currentProduct?.status = ProductStatus.purchasable;
       _log.info(
           'Setting status ${ProductStatus.purchasable} to ${currentProduct?.productName}');

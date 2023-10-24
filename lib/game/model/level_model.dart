@@ -39,7 +39,7 @@ class LevelModel with ChangeNotifier {
     levelNr = level.nr;
     storyLine = level.story;
     manipulationEnabled = level.manipulationEnabled;
-
+    
     pictureModel = PictureModel(
         scale: 1.0,
         quarterTurn: 0,

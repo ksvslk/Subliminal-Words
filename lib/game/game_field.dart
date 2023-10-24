@@ -58,7 +58,7 @@ class GameField extends StatelessWidget {
                         onPressed: () {
                           showMenu(context);
                         },
-                        icon: const Icon(Icons.attach_money_outlined)),
+                        icon: const Icon(Icons.add_shopping_cart_outlined)),
                   ],
                 ),
                 ChangeNotifierProvider<PictureModel>.value(
