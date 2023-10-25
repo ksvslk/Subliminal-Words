@@ -5,21 +5,22 @@ import 'package:flutter/material.dart';
 
 class StoryBottomSheet extends StatelessWidget {
   const StoryBottomSheet({super.key});
-
+  final testLimit = 4;
   @override
   Widget build(BuildContext context) {
     String text =
-        'The value provided in fontFamily will act as the preferred/first font family that will be searched for, followed in order by the font families in fontFamilyFallback. If all font families are exhausted and no match was found, the default platform font family will be used instead. Unlike TextStyle.fontFamilyFallback, the font does not need to contain the desired glyphs to match.The value provided in fontFamily will act as the preferred/first font family that will be searched for, followed in order by the font families in fontFamilyFallback. If all font families are exhausted and no match was found, the default platform font family will be used instead. Unlike TextStyle.fontFamilyFallback, the font does not need to contain the desired glyphs to match.';
+        'The value will provided in fontFamily will act as';
     List<String> words = text.split(' ');
     List<WidgetSpan> spans = words.mapIndexed((index, word) {
       return WidgetSpan(
           child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 2.0),
               padding: const EdgeInsets.symmetric(horizontal: 6.0),
               decoration: BoxDecoration(
                   border: Border.all(color: Colors.transparent),
                   color: word == 'will'
-                      ? (index < 40
-                          ? Theme.of(context).colorScheme.tertiary
+                      ? (index < testLimit
+                          ? Theme.of(context).colorScheme.primary
                           : Theme.of(context)
                               .colorScheme
                               .secondaryContainer
@@ -27,13 +28,13 @@ class StoryBottomSheet extends StatelessWidget {
                       : null,
                   borderRadius: const BorderRadius.all(Radius.circular(8.0))),
               child: Text(
-                index < 40 ? word : "✴︎",
+                index < testLimit ? word : "✴︎",
                 style: word == 'will'
                     ? TextStyle(
                         fontFamily:
                             DefaultTextStyle.of(context).style.fontFamily,
-                        color: index < 40
-                            ? Theme.of(context).colorScheme.onTertiary
+                        color: index < testLimit
+                            ? Theme.of(context).colorScheme.onPrimary
                             : Theme.of(context)
                                 .colorScheme
                                 .onSecondaryContainer
@@ -44,7 +45,7 @@ class StoryBottomSheet extends StatelessWidget {
                     : TextStyle(
                         fontFamily:
                             DefaultTextStyle.of(context).style.fontFamily,
-                        color: index < 40
+                        color: index < testLimit
                             ? Theme.of(context).colorScheme.onSurfaceVariant
                             : Theme.of(context)
                                 .colorScheme

@@ -22,6 +22,7 @@ class LevelModel with ChangeNotifier {
 
   LevelModel({required this.persistence});
 
+
   Future<void> initialize() async {
     final latestLevelData = await persistence.initialize().then((value) async {
       return await persistence.getLatestLevelData();

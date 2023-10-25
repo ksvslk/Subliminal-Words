@@ -13,6 +13,7 @@ import 'package:operation_hermes/game/ad_button.dart';
 import 'package:operation_hermes/game/puzzle.dart';
 import 'package:operation_hermes/menu/in_app_purchase_menu.dart';
 import 'package:operation_hermes/menu/story_bottom_sheet.dart';
+import 'package:operation_hermes/menu/story_tablo.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
 import 'package:provider/provider.dart';
 import '../C.dart' as C;
@@ -48,26 +49,53 @@ class GameField extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    IconButton(
-                        onPressed: () {
-                          settings.toggleMusicOn();
-                        },
-                        icon: const Icon(Icons.music_note)),
-                    IconButton(
-                        onPressed: () {
-                          showMenu(context);
-                        },
-                        icon: const Icon(Icons.add_shopping_cart_outlined)),
-                    IconButton(
-                        onPressed: () {
+                    Flexible(
+                        flex: 1,
+                        child: IconButton(
+                            onPressed: () {},
+                            icon: const Icon(Icons.settings))),
+                    Flexible(
+                        flex: 1,
+                        child: IconButton(
+                            onPressed: () {
+                              showMenu(context);
+                            },
+                            icon:
+                                const Icon(Icons.add_shopping_cart_outlined))),
+                    Flexible(
+                      flex: 6,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(
+                              10), // Adjust the radius as needed
+                          border:
+                              Border.all(color: Theme.of(context).colorScheme.outline), // Border style
+                        ),
+                        padding: const EdgeInsets.all(
+                            8), // Padding inside the container
+                        child: /* GestureDetector(
+                        onTap: () {
                           showModalBottomSheet<void>(
                               context: context,
                               builder: (BuildContext context) {
                                 return const StoryBottomSheet();
                               });
                         },
-                        icon: const Icon(Icons.article_outlined)),
+                        child: */
+                            const StoryTablo(
+                          previousLevelWordAndStory: (
+                            "sun",
+                            "Amid the vast city's hustle, a sun begins to rise on Max."
+                          ),
+                          currentLevelWordAndStory: (
+                            "old",
+                            "Recalling old tales of valor, he aspires to be more than his past."
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 ChangeNotifierProvider<PictureModel>.value(
