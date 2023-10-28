@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
+import 'package:operation_hermes/game/game_field.dart';
 import 'package:operation_hermes/game/game_field_wrapper.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart';
@@ -21,6 +23,7 @@ import 'settings/settings_controller.dart';
 import 'audio/audio_controller.dart';
 
 Future<void> main() async {
+  //debugPaintSizeEnabled = true;
   // Subscribe to log messages.
   Logger.root.onRecord.listen((record) {
     if (record.level >= Level.INFO) {
@@ -51,13 +54,13 @@ Future<void> main() async {
     adsController = AdsController(MobileAds.instance);
     adsController.initialize();
   }
-  
+
   InAppPurchaseController? inAppPurchaseController;
-   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
-     inAppPurchaseController = InAppPurchaseController(InAppPurchase.instance)
-       // Subscribing to [InAppPurchase.instance.purchaseStream] as soon
-       // as possible in order not to miss any updates.
-       ..subscribe();
+  if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+    inAppPurchaseController = InAppPurchaseController(InAppPurchase.instance)
+      // Subscribing to [InAppPurchase.instance.purchaseStream] as soon
+      // as possible in order not to miss any updates.
+      ..subscribe();
   }
 
   runApp(
@@ -85,7 +88,7 @@ class MyApp extends StatelessWidget {
   final LevelPersistence levelPersistence;
   final AdsController? adsController;
   final InAppPurchaseController? inAppPurchaseController;
-  
+
   const MyApp(
       {super.key,
       required this.settingsPersistence,
@@ -95,6 +98,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    
     return AppLifecycleObserver(
       child: MultiProvider(
         providers: [
@@ -104,8 +108,7 @@ class MyApp extends StatelessWidget {
               persistence: settingsPersistence,
             )..loadStateFromPersistence(),
           ),
-          ChangeNotifierProvider<AdsController?>.value(
-              value: adsController),
+          ChangeNotifierProvider<AdsController?>.value(value: adsController),
           ChangeNotifierProvider<InAppPurchaseController?>.value(
               value: inAppPurchaseController),
           ChangeNotifierProxyProvider<ValueNotifier<AppLifecycleState>,
@@ -113,7 +116,7 @@ class MyApp extends StatelessWidget {
             lazy: false,
             create: (context) => LevelModel(
               persistence: levelPersistence,
-            ),
+            )..initialize(),
             update: (BuildContext context,
                 ValueNotifier<AppLifecycleState> lifecycleNotifier,
                 LevelModel? levelModel) {
@@ -158,7 +161,9 @@ class MyApp extends StatelessWidget {
                 brightness: Brightness.dark,
               ),
               fontFamily: 'Gabarito'),
-          home: const GameFieldWrapper(),
+          home: const Scaffold(
+            body: GameFieldWrapper(),
+          )
         ),
       ),
     );

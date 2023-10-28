@@ -16,8 +16,8 @@ class LocalStorageLevelPersistence extends LevelPersistence {
       // Prepopulate
       var level1 = LevelData(
               1,
-              "ZEN",
-              "Mingi jutt mis sisaldab ZEN sõna kusagil.",
+              "SUN",
+              "Amid shadows and bleak landscapes, hope was as distant as the morning sun.",
               "assets/levels/1.png",
               "assets/levels/1.svg",
               false,
@@ -25,15 +25,25 @@ class LocalStorageLevelPersistence extends LevelPersistence {
       0);
       var level2 = LevelData(
               2,
-              "BIGS",
-              "Blablabl BIG blabla.",
+              "OLD",
+              "Each day, a struggle against his world's confines, inspired by legends old.",
               "assets/levels/2.jpg",
               "assets/levels/2.svg",
               false,
               false,
       0);
+         var level3 = LevelData(
+              3,
+              "FEAR",
+              "Nightly, Max ventured into darkness, unflinching, facing his deepest fear.",
+              "assets/levels/1.jpg",
+              "assets/levels/1.svg",
+              false,
+              false,
+      0);
       setLevelData(level1.getLevelDataBasic());
       setLevelData(level2.getLevelDataBasic());
+      setLevelData(level3.getLevelDataBasic());
 
       // Mark the prefs as initialized
       await prefs.setBool('initialized', true);
@@ -58,9 +68,20 @@ class LocalStorageLevelPersistence extends LevelPersistence {
   @override
   Future<(String, List<String>)> getLevelNr(int nr) async {
     final prefs = await instanceFuture;
-    List<String> lastLevelData =
-        prefs.getStringList(nr.toString())!;
-    return (nr.toString(), lastLevelData);
+    List<String> levelInfo = prefs.getStringList(nr.toString())!;
+    return (nr.toString(), levelInfo);
+  }
+  
+  @override
+  Future<(String, String)?> getLastLevelWordAndStory(int lastLevelNr) async {
+    final prefs = await instanceFuture;
+    List<String>? levelInfo = prefs.getStringList(lastLevelNr.toString());
+    if (levelInfo != null) {
+      final previousLevel = LevelData.from((lastLevelNr.toString(), levelInfo));
+      return (previousLevel.word, previousLevel.story);
+    } else  {
+      return null;
+    }
   }
   
 }

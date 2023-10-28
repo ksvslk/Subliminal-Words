@@ -49,9 +49,7 @@ dependencies:
   dotted_border: ^2.1.0
   google_mobile_ads: ^3.1.0
   in_app_purchase: ^3.1.11
-  animated_text_kit: ^4.2.2
   animations: ^2.0.8
-
 
 dev_dependencies:
   flutter_test:

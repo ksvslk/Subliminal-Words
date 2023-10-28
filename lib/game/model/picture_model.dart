@@ -32,16 +32,25 @@ class PictureModel with ChangeNotifier {
     });
   }
 
-  void initializePicture(LevelData level)
+  Future<void> initializePicture(LevelData level) async
   {
     scale = 1.0;
     quarterTurn = 0;
     picturePath = level.picturePath;
     svgPath = level.svgPath;
-    _loadSvgLetters(svgImage: svgPath).then((loadedLetters) {
+    await _loadSvgLetters(svgImage: svgPath).then((loadedLetters) {
       highlightLetters = loadedLetters;
+      highlightLetters.forEach((element) {
+      _log.log(Level.INFO, "${element.letter}:${element.show}");
+        
+      },);
       notifyListeners();
     });
+  }
+
+  void setLevelComplete()
+  {
+    for (var element in highlightLetters) {element.show = true;}
   }
 
   void setScaleDown() {

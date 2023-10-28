@@ -12,7 +12,8 @@ class LevelModel with ChangeNotifier {
   static final _log = Logger('LevelModel');
 
   int levelNr = -1;
-  String storyLine = "";
+  (String, String) currentWordAndStory = ("", "");
+  (String, String) previousWordAndStory = ("", "");
   bool levelCompleted = false;
   late PictureModel pictureModel;
   late FieldModel fieldModel;
@@ -22,25 +23,31 @@ class LevelModel with ChangeNotifier {
 
   LevelModel({required this.persistence});
 
-
   Future<void> initialize() async {
     final latestLevelData = await persistence.initialize().then((value) async {
       return await persistence.getLatestLevelData();
     });
     final level = LevelData.from(latestLevelData);
-    await _createModels(level);
+    final previousStory = await persistence.initialize().then((value) async {
+      return await persistence.getLastLevelWordAndStory(level.nr - 1);
+    });
+    await _createModels(level, previousStory);
     _log.log(Level.INFO, "initialize");
   }
 
-  void testNotify() {
-    notifyListeners();
-  }
-
-  Future<void> _createModels(LevelData level) async {
+  Future<void> _createModels(
+      LevelData level, (String, String)? previousStory) async {
     levelNr = level.nr;
-    storyLine = level.story;
+    currentWordAndStory = (level.word, level.story);
+
+    previousWordAndStory = previousStory ?? ("", "And so it starts...");
+    previousWordAndStory = (
+      previousWordAndStory.$1.toLowerCase(),
+      previousWordAndStory.$2
+    );
+
     manipulationEnabled = level.manipulationEnabled;
-    
+
     pictureModel = PictureModel(
         scale: 1.0,
         quarterTurn: 0,
@@ -60,31 +67,60 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> nextLevel() async
+  {
+    loadLevel(levelNr +1);
+  }
+
   Future<void> loadLevel(int nr) async {
     _log.log(Level.INFO, "loadLevel");
-    persistence.getLevelNr(nr).then((value) {
-      final level = LevelData.from(value);
-
-      // LevelModel
-      levelNr = level.nr;
-      storyLine = level.story;
-
-      // PictureModel
-      pictureModel.initializePicture(level);
-
-      // FieldModel
-      fieldModel.initializeLevel(level);
-
-      final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
-      setLettersCanBeRemoved(canLettersBeRemovedMore);
-
-      if (level.levelCompleted) _setLevelCompleted();
+    persistence.getLevelNr(nr).then((currentLevel) {
+      final level = LevelData.from(currentLevel);
+      persistence
+          .getLastLevelWordAndStory(nr - 1)
+          .then((prevLevelWordAndStory) {
+        _log.info(previousWordAndStory);
+        assignInitialLevelValues(level, prevLevelWordAndStory);
+        _log.log(Level.INFO,
+            "Assigned level values for level nr: $nr and previous level story is: $previousWordAndStory");
+      }).onError((error, stackTrace) {
+        _log.severe("Error getting the story for level ${nr - 1}", error);
+      });
+    }).onError((error, stackTrace) {
+      _log.severe("Could not load the level nr: $nr", error);
     });
   }
 
+  Future<void> assignInitialLevelValues(
+      LevelData level, (String, String)? previousStory) async {
+    
+
+    // LevelModel
+    levelNr = level.nr;
+    currentWordAndStory = (level.word, level.story);
+
+    previousWordAndStory = previousStory ?? ("", "And so it starts...");
+    previousWordAndStory = (
+      previousWordAndStory.$1.toLowerCase(),
+      previousWordAndStory.$2
+    );
+
+    // PictureModel
+    await pictureModel.initializePicture(level);
+
+    // FieldModel
+    fieldModel.initializeLevel(level);
+
+    final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
+    setLettersCanBeRemoved(canLettersBeRemovedMore);
+    levelCompleted = false;
+    notifyListeners();
+  }
+
   void _setLevelCompleted() {
-    fieldModel.setLevelCompleted();
     levelCompleted = true;
+    fieldModel.setLevelCompleted();
+    pictureModel.setLevelComplete();
     notifyListeners();
   }
 
@@ -107,6 +143,7 @@ class LevelModel with ChangeNotifier {
   bool checkForWin() {
     var win = fieldModel.checkForWin();
     levelCompleted = win;
+    notifyListeners();
     return win;
   }
 
@@ -114,7 +151,7 @@ class LevelModel with ChangeNotifier {
     return LevelData(
         levelNr,
         fieldModel.word,
-        storyLine,
+        currentWordAndStory.$2,
         pictureModel.picturePath,
         pictureModel.svgPath,
         manipulationEnabled,

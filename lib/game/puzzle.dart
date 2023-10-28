@@ -17,23 +17,28 @@ class Puzzle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final audioController = context.read<AudioController>();
+
     return Consumer<LevelModel>(builder: (context, levelModel, child) {
       _log.info(() => 'Build puzzle. Consumer of LevelModel');
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
+      return AspectRatio(
+        aspectRatio: 1,
         child: Stack(
-          alignment: Alignment.bottomRight,
-          children: [
-            Positioned.fill(
-              child: Image.asset(
-                'assets/other/grid.png',
-                repeat: ImageRepeat.repeat,
-                color: Theme.of(context).colorScheme.secondaryContainer,
-                colorBlendMode: BlendMode.modulate,
-              ),
-            ),
-            Container(
+          fit: StackFit
+              .expand, // This ensures the stack takes the full size of its parent
+          children: <Widget>[
+            GestureDetector(
+              onTap: levelModel.levelCompleted ? () {
+                levelModel.nextLevel();
+              } : null,
+              child: Container(
               decoration: BoxDecoration(
+                image: DecorationImage(
+                    image: const AssetImage(
+                        'assets/other/grid.png'), // Replace with your image's path
+                    repeat: ImageRepeat.repeat,
+                    colorFilter: ColorFilter.mode(
+                        Theme.of(context).colorScheme.secondaryContainer,
+                        BlendMode.modulate)),
                 color: Theme.of(context)
                     .colorScheme
                     .secondaryContainer
@@ -42,114 +47,126 @@ class Puzzle extends StatelessWidget {
                     color: Theme.of(context).colorScheme.secondary, width: 2),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Consumer<PictureModel>(builder: (context, model, child) {
-                _log.info(() => 'Build puzzle RotatedBox.');
-                return RotatedBox(
-                  quarterTurns: model.quarterTurn,
-                  child: AnimatedContainer(
-                    foregroundDecoration: BoxDecoration(
-                      border: Border.all(
-                          width: model.scale < 1.0
-                              ? double.parse(
-                                  (1.5 / model.scale).toStringAsFixed(1))
-                              : 0.0,
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
-                    ),
-                    duration: const Duration(milliseconds: 150),
-                    curve: Curves.easeOutBack,
-                    transformAlignment: Alignment.center,
-                    transform: Matrix4.diagonal3(
-                        vec3.Vector3(model.scale, model.scale, model.scale)),
-                    child: Stack(
-                      children: [
-                        Image.asset(
-                          model.picturePath,
-                          fit: BoxFit.fill,
-                        ),
-                        ...model.highlightLetters
-                            .map(
-                              (svgLetter) => AnimatedOpacity(
-                                duration: Duration(
-                                    milliseconds: svgLetter.show ? 750 : 750),
-                                opacity:
-                                    svgLetter.show || levelModel.levelCompleted
+            ),
+            ),
+            // The image
+            ChangeNotifierProvider<PictureModel>.value(
+              value: levelModel.pictureModel,
+              child: Consumer<PictureModel>(
+                builder: (context, model, child) {
+                  return RotatedBox(
+                    quarterTurns: model.quarterTurn,
+                    child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        curve: Curves.easeOutBack,
+                        transformAlignment: Alignment.center,
+                        transform: Matrix4.diagonal3(vec3.Vector3(
+                            model.scale, model.scale, model.scale)),
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.asset(
+                                model.picturePath,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                            ...model.highlightLetters
+                                .map(
+                                  (svgLetter) => AnimatedOpacity(
+                                    duration: Duration(
+                                        milliseconds:
+                                            svgLetter.show ? 750 : 750),
+                                    opacity: svgLetter.show ||
+                                            levelModel.levelCompleted
                                         ? 1.0
                                         : 0.0,
-                                curve: Curves.fastOutSlowIn,
-                                onEnd: () {
-                                  _log.info(() =>
-                                      'Ending svg letter animation for - ${svgLetter.letter} with show - ${svgLetter.show}');
-                                  if (svgLetter.show) {
-                                    model.hideLetter(svgLetter.letter);
-                                  }
-                                },
-                                child: CustomPaint(
-                                  painter: FilledLetterPainter(
-                                    path: parseSvgPathData(svgLetter.path),
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary
-                                        .withOpacity(0.75),
-                                  ),
-                                  child: AspectRatio(
-                                    aspectRatio: 1 / 1,
-                                    child: Container(
-                                      color: Colors
-                                          .transparent, // Or any other color to visualize it
+                                    curve: Curves.fastOutSlowIn,
+                                    onEnd: () {
+                                      _log.info(() =>
+                                          'Ending svg letter animation for - ${svgLetter.letter} with show - ${svgLetter.show}');
+                                      if (svgLetter.show) {
+                                        model.hideLetter(svgLetter.letter);
+                                      }
+                                    },
+                                    child: CustomPaint(
+                                      painter: FilledLetterPainter(
+                                        path: parseSvgPathData(svgLetter.path),
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary
+                                            .withOpacity(0.75),
+                                      ),
+                                      child: AspectRatio(
+                                        aspectRatio: 1 / 1,
+                                        child: Container(
+                                          color: Colors
+                                              .transparent, // Or any other color to visualize it
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ],
-                    ),
+                                )
+                                .toList(),
+                          ],
+                        )
+                        // PROBLEM CHILD ABOVE
+                        ),
+                  );
+                },
+              ),
+            ),
+
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                    strokeAlign: BorderSide.strokeAlignCenter,
+                    color: Theme.of(context).colorScheme.secondary,
+                    width: 2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            // Manipulation buttons, positioned bottom right
+            ChangeNotifierProvider<PictureModel>.value(
+              value: levelModel.pictureModel,
+              child: Consumer<PictureModel>(
+                  builder: (context, pictureModel, child) {
+                return Positioned(
+                  bottom: 4,
+                  right: 4,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      IconButton.filledTonal(
+                        icon: const Icon(Icons.zoom_out),
+                        onPressed: pictureModel.scale <= pictureModel.minZoom
+                            ? null
+                            : () {
+                                pictureModel.setScaleDown();
+                                audioController.playSfx(SfxType.zoomOut);
+                              },
+                      ),
+                      IconButton.filledTonal(
+                        icon: const Icon(Icons.zoom_in),
+                        onPressed: pictureModel.scale >= pictureModel.maxZoom
+                            ? null
+                            : () {
+                                pictureModel.setScaleUp();
+                                audioController.playSfx(SfxType.zoomIn);
+                              },
+                      ),
+                      IconButton.filledTonal(
+                        icon: const Icon(Icons.rotate_90_degrees_cw),
+                        onPressed: () {
+                          audioController.playSfx(SfxType.rotate);
+                          pictureModel.setNextQuarterTurn();
+                        },
+                      )
+                    ],
                   ),
                 );
               }),
             ),
-            Container(
-                padding: const EdgeInsets.all(8.0),
-                child: levelModel.manipulationEnabled
-                    ? Consumer<PictureModel>(
-                        builder: (context, pictureModel, child) {
-                        _log.info(
-                            () => 'Build puzzle picture row of zoom buttons.');
-                        return Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            IconButton.filledTonal(
-                              icon: const Icon(Icons.zoom_out),
-                              onPressed: pictureModel.scale <=
-                                      pictureModel.minZoom
-                                  ? null
-                                  : () {
-                                      pictureModel.setScaleDown();
-                                      audioController.playSfx(SfxType.zoomOut);
-                                    },
-                            ),
-                            IconButton.filledTonal(
-                              icon: const Icon(Icons.zoom_in),
-                              onPressed: pictureModel.scale >=
-                                      pictureModel.maxZoom
-                                  ? null
-                                  : () {
-                                      pictureModel.setScaleUp();
-                                      audioController.playSfx(SfxType.zoomIn);
-                                    },
-                            ),
-                            IconButton.filledTonal(
-                              icon: const Icon(Icons.rotate_90_degrees_cw),
-                              onPressed: () {
-                                audioController.playSfx(SfxType.rotate);
-                                pictureModel.setNextQuarterTurn();
-                              },
-                            ),
-                          ],
-                        );
-                      })
-                    : null),
           ],
         ),
       );
