@@ -19,18 +19,19 @@ class Puzzle extends StatelessWidget {
     final audioController = context.read<AudioController>();
 
     return Consumer<LevelModel>(builder: (context, levelModel, child) {
-      _log.info(() => 'Build puzzle. Consumer of LevelModel');
-      return AspectRatio(
+      _log.info(() => 'Build puzzle. Consumer of LevelModel. Level complete: ${levelModel.levelCompleted}');
+      return   GestureDetector(
+              onTap: levelModel.levelCompleted ? () {
+                _log.info(Level.INFO, "TER!!");
+                levelModel.nextLevel();
+              } : null,
+              child: AspectRatio(
         aspectRatio: 1,
         child: Stack(
           fit: StackFit
               .expand, // This ensures the stack takes the full size of its parent
           children: <Widget>[
-            GestureDetector(
-              onTap: levelModel.levelCompleted ? () {
-                levelModel.nextLevel();
-              } : null,
-              child: Container(
+          Container(
               decoration: BoxDecoration(
                 image: DecorationImage(
                     image: const AssetImage(
@@ -44,10 +45,9 @@ class Puzzle extends StatelessWidget {
                     .secondaryContainer
                     .withOpacity(0.25),
                 border: Border.all(
-                    color: Theme.of(context).colorScheme.secondary, width: 2),
+                    color: Theme.of(context).colorScheme.secondary, width: 1),
                 borderRadius: BorderRadius.circular(4),
               ),
-            ),
             ),
             // The image
             ChangeNotifierProvider<PictureModel>.value(
@@ -63,9 +63,12 @@ class Puzzle extends StatelessWidget {
                         transform: Matrix4.diagonal3(vec3.Vector3(
                             model.scale, model.scale, model.scale)),
                         child: Stack(
+                          fit: StackFit
+              .expand,
+                          alignment: Alignment.center,
                           children: [
                             ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(4),
                               child: Image.asset(
                                 model.picturePath,
                                 fit: BoxFit.contain,
@@ -122,12 +125,12 @@ class Puzzle extends StatelessWidget {
                 border: Border.all(
                     strokeAlign: BorderSide.strokeAlignCenter,
                     color: Theme.of(context).colorScheme.secondary,
-                    width: 2),
+                    width: 1),
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
             // Manipulation buttons, positioned bottom right
-            ChangeNotifierProvider<PictureModel>.value(
+            levelModel.manipulationEnabled ? ChangeNotifierProvider<PictureModel>.value(
               value: levelModel.pictureModel,
               child: Consumer<PictureModel>(
                   builder: (context, pictureModel, child) {
@@ -166,8 +169,9 @@ class Puzzle extends StatelessWidget {
                   ),
                 );
               }),
-            ),
+            ) : const SizedBox.shrink(),
           ],
+        ),
         ),
       );
     });

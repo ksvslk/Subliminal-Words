@@ -25,7 +25,7 @@ class GameFieldWrapper extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.all(8.0),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     Flexible(flex: 1, child: TopBar()),
                     Flexible(flex: 8, child: Puzzle()),

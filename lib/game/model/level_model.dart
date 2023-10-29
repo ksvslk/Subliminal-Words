@@ -3,6 +3,7 @@ import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/model/field_model.dart';
 import 'package:operation_hermes/game/level_data.dart';
 import 'package:operation_hermes/game/model/picture_model.dart';
+import 'package:operation_hermes/game/model/story_model.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
 
 class LevelModel with ChangeNotifier {
@@ -12,11 +13,10 @@ class LevelModel with ChangeNotifier {
   static final _log = Logger('LevelModel');
 
   int levelNr = -1;
-  (String, String) currentWordAndStory = ("", "");
-  (String, String) previousWordAndStory = ("", "");
   bool levelCompleted = false;
   late PictureModel pictureModel;
   late FieldModel fieldModel;
+  late StoryModel storyModel;
 
   bool remove3Available = false;
   bool manipulationEnabled = false;
@@ -38,13 +38,11 @@ class LevelModel with ChangeNotifier {
   Future<void> _createModels(
       LevelData level, (String, String)? previousStory) async {
     levelNr = level.nr;
-    currentWordAndStory = (level.word, level.story);
 
-    previousWordAndStory = previousStory ?? ("", "And so it starts...");
-    previousWordAndStory = (
-      previousWordAndStory.$1.toLowerCase(),
-      previousWordAndStory.$2
-    );
+    storyModel = StoryModel();
+    storyModel.previousWordAndStory = previousStory ?? ("", "And so it starts...");
+    storyModel.currentWordAndStory = (level.word, level.story);
+    storyModel.addNextStory(storyModel.previousWordAndStory);
 
     manipulationEnabled = level.manipulationEnabled;
 
@@ -67,9 +65,8 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> nextLevel() async
-  {
-    loadLevel(levelNr +1);
+  Future<void> nextLevel() async {
+    await loadLevel(levelNr + 1);
   }
 
   Future<void> loadLevel(int nr) async {
@@ -79,10 +76,7 @@ class LevelModel with ChangeNotifier {
       persistence
           .getLastLevelWordAndStory(nr - 1)
           .then((prevLevelWordAndStory) {
-        _log.info(previousWordAndStory);
         assignInitialLevelValues(level, prevLevelWordAndStory);
-        _log.log(Level.INFO,
-            "Assigned level values for level nr: $nr and previous level story is: $previousWordAndStory");
       }).onError((error, stackTrace) {
         _log.severe("Error getting the story for level ${nr - 1}", error);
       });
@@ -93,18 +87,12 @@ class LevelModel with ChangeNotifier {
 
   Future<void> assignInitialLevelValues(
       LevelData level, (String, String)? previousStory) async {
-    
-
     // LevelModel
     levelNr = level.nr;
-    currentWordAndStory = (level.word, level.story);
 
-    previousWordAndStory = previousStory ?? ("", "And so it starts...");
-    previousWordAndStory = (
-      previousWordAndStory.$1.toLowerCase(),
-      previousWordAndStory.$2
-    );
-
+    storyModel.previousWordAndStory = previousStory ?? ("", "And so it starts...");
+    storyModel.currentWordAndStory = (level.word, level.story);
+ 
     // PictureModel
     await pictureModel.initializePicture(level);
 
@@ -143,6 +131,7 @@ class LevelModel with ChangeNotifier {
   bool checkForWin() {
     var win = fieldModel.checkForWin();
     levelCompleted = win;
+    if (win) storyModel.addNextStory(storyModel.currentWordAndStory);
     notifyListeners();
     return win;
   }
@@ -151,7 +140,7 @@ class LevelModel with ChangeNotifier {
     return LevelData(
         levelNr,
         fieldModel.word,
-        currentWordAndStory.$2,
+        storyModel.currentWordAndStory.$2,
         pictureModel.picturePath,
         pictureModel.svgPath,
         manipulationEnabled,

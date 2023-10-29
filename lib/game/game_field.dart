@@ -23,7 +23,9 @@ class GameField extends StatelessWidget {
 
     return Column(
       children: [
+        const Flexible(child: FractionallySizedBox(heightFactor: 0.5)),
         Flexible(
+          flex: 10,
           child: ChangeNotifierProvider<FieldModel>.value(
             value: levelModel.fieldModel,
             child: Consumer<FieldModel>(builder: (context, fieldModel, child) {
@@ -64,9 +66,10 @@ class GameField extends StatelessWidget {
             }),
           ),
         ),
-        const Spacer(),
+        const Flexible(child: FractionallySizedBox(heightFactor: 0.5)),
         ...List.generate(2, (rowIndex) {
           return Flexible(
+            flex: 10,
             child: ChangeNotifierProvider<FieldModel>.value(
               value: levelModel.fieldModel,
               child:

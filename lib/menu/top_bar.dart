@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:operation_hermes/menu/in_app_purchase_menu.dart';
+import 'package:operation_hermes/menu/story_bottom_sheet.dart';
 import 'package:operation_hermes/menu/story_tablo.dart';
 
 class TopBar extends StatelessWidget {
@@ -17,7 +19,12 @@ class TopBar extends StatelessWidget {
             flex: 1,
             child: IconButton(
                 onPressed: () {
-                  //showMenu(context);
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return const InAppPurchaseMenuDialog();
+                    },
+                  );
                 },
                 icon: const Icon(Icons.add_shopping_cart_outlined))),
         Flexible(

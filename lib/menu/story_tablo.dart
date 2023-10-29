@@ -2,6 +2,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
+import 'package:operation_hermes/game/model/story_model.dart';
 import 'package:provider/provider.dart';
 
 class StoryTablo extends StatefulWidget {
@@ -13,11 +14,9 @@ class StoryTablo extends StatefulWidget {
 
 class _StoryTabloState extends State<StoryTablo>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
   late ScrollController _scrollController;
   final RegExp punctuation = RegExp(r"[.,!?]");
 
-  final List<Widget> storyRowChildren = [];
   static final _log = Logger('StoryTablo');
 
   RichText getRichText(
@@ -26,7 +25,8 @@ class _StoryTabloState extends State<StoryTablo>
     final inlineSpans = words.mapIndexed((index, word) {
       return WidgetSpan(
           child: Text('$word ',
-              style: word.replaceAll(punctuation, "") == levelWordAndStory.$1.toLowerCase()
+              style: word.replaceAll(punctuation, "") ==
+                      levelWordAndStory.$1.toLowerCase()
                   ? TextStyle(
                       fontFamily: DefaultTextStyle.of(context).style.fontFamily,
                       color: Theme.of(context).colorScheme.primary,
@@ -45,73 +45,50 @@ class _StoryTabloState extends State<StoryTablo>
     );
   }
 
+  List<RichText> getStories(List<(String,String)> stories)
+  {
+    for (var element in stories) {_log.log(Level.INFO, "rich text: $element");}
+    return List.of(stories.map((e) => getRichText(context, e)));
+  }
+
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    _controller = AnimationController(
-      duration: const Duration(seconds: 5),
-      vsync: this,
-    );
   }
 
-  void _scrollToEnd() {
+  void _scrollToEnd(StoryModel model) {
     _scrollController.animateTo(_scrollController.position.maxScrollExtent,
         duration: const Duration(seconds: 5), curve: Curves.linear);
   }
 
   @override
   Widget build(BuildContext context) {
-    final levelModel = context.watch<LevelModel>();
-
-    void addCompletedLevelText() {
-      final currentLevelStory =
-          getRichText(context, (levelModel.currentWordAndStory));
-      setState(() {
-        storyRowChildren.add(currentLevelStory);
-      });
-      _log.info("Count of story row children: ${storyRowChildren.length}");
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(seconds: 10),
-        curve: Curves.linear,
-      ).whenComplete(() {
-        if (storyRowChildren.length == 3) storyRowChildren.removeAt(0);
-      });
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToEnd());
-
-    // Game just started
-    if (storyRowChildren.isEmpty) {
-      final previousStory =
-          getRichText(context, levelModel.previousWordAndStory);
-      storyRowChildren.add(previousStory);
-    // When level is completed and previous already in place
-    } else if (storyRowChildren.isNotEmpty && levelModel.levelCompleted) {
-      addCompletedLevelText();
-    }
-    _log.info(
-        "Rebuilding in consumer: Count of story row children: ${storyRowChildren.length}");
-
-    return SizedBox(
-      width: MediaQuery.of(context).size.width,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        controller: _scrollController,
-        clipBehavior: Clip.hardEdge,
-        physics:
-            const NeverScrollableScrollPhysics(), // Prevent manual scrolling
-        child: Row(
-          children: storyRowChildren,
-        ),
-      ),
-    );
+    final levelModel = context.read<LevelModel>();
+    return ChangeNotifierProvider<StoryModel>.value(
+        value: levelModel.storyModel,
+        child: Consumer<StoryModel>(builder: (context, model, child) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToEnd(model));
+          _log.info(
+              "Rebuilding in consumer: Count of story row children: ${model.storyToCreate.length}");
+          return SizedBox(
+            width: MediaQuery.of(context).size.width,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              controller: _scrollController,
+              clipBehavior: Clip.hardEdge,
+              physics:
+                  const NeverScrollableScrollPhysics(), // Prevent manual scrolling
+              child: Row(
+                children: getStories(model.storyToCreate)
+              ),
+            ),
+          );
+        }));
   }
 
   @override
   void dispose() {
-    _controller.dispose();
     _scrollController.dispose();
     super.dispose();
   }

@@ -18,7 +18,7 @@ class LocalStorageLevelPersistence extends LevelPersistence {
               1,
               "SUN",
               "Amid shadows and bleak landscapes, hope was as distant as the morning sun.",
-              "assets/levels/1.png",
+              "assets/levels/1.jpg",
               "assets/levels/1.svg",
               false,
               false,
@@ -36,14 +36,24 @@ class LocalStorageLevelPersistence extends LevelPersistence {
               3,
               "FEAR",
               "Nightly, Max ventured into darkness, unflinching, facing his deepest fear.",
-              "assets/levels/1.jpg",
+              "assets/levels/1.png",
               "assets/levels/1.svg",
+              false,
+              false,
+      0);
+           var level4 = LevelData(
+              4,
+              "STRONG",
+              "Journeying through the city's heart, every corner, he grew strong.",
+              "assets/levels/2.jpg",
+              "assets/levels/2.svg",
               false,
               false,
       0);
       setLevelData(level1.getLevelDataBasic());
       setLevelData(level2.getLevelDataBasic());
       setLevelData(level3.getLevelDataBasic());
+      setLevelData(level4.getLevelDataBasic());
 
       // Mark the prefs as initialized
       await prefs.setBool('initialized', true);
