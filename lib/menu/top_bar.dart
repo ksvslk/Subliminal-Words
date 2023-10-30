@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/menu/in_app_purchase_menu.dart';
+import 'package:operation_hermes/menu/settings_menu.dart';
 import 'package:operation_hermes/menu/story_bottom_sheet.dart';
 import 'package:operation_hermes/menu/story_tablo.dart';
 
@@ -14,7 +15,8 @@ class TopBar extends StatelessWidget {
         Flexible(
             flex: 1,
             child:
-                IconButton(onPressed: () {}, icon: const Icon(Icons.settings))),
+                const SettingsMenu()
+                ),
         Flexible(
             flex: 1,
             child: IconButton(

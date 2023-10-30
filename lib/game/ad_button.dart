@@ -33,7 +33,7 @@ class AdButton extends StatelessWidget {
     // REMOVE_3 - Kui rohkem tähti enam ei saa eemaldada - DISABLED, Exhausted
     if ((productId == C.MANIPULATE && manipulationExhausted) ||
         (productId == C.REMOVE_3 && !remove3Available)) {
-          _log.log(Level.INFO, "Applied - $productId");
+      _log.log(Level.INFO, "Applied - $productId");
       return (null, ('Applied', const Icon(Icons.done_rounded)));
     }
 
@@ -50,7 +50,8 @@ class AdButton extends StatelessWidget {
         .firstWhereOrNull((element) => element.id == C.ALL_IN_PACK);
     if (product.status == ProductStatus.purchased ||
         allInPack?.status == ProductStatus.purchased) {
-           _log.log(Level.INFO, "Purchased (or all in ${allInPack?.status.name}) - $productId");
+      _log.log(Level.INFO,
+          "Purchased (or all in ${allInPack?.status.name}) - $productId");
       return (
         getSuccessfulAction(audioController, levelModel),
         (product.productName, const Icon(Icons.bolt))
@@ -60,26 +61,31 @@ class AdButton extends StatelessWidget {
     // ✔︎ Kui pole ostetud ja kui pole reklaami näidata - DISABLED, product name
     if (product.status != ProductStatus.purchased &&
         !adsController.isAdAvailable()) {
-          _log.log(Level.INFO, "No purchase, no ads - $productId");
-      return (null, (product.productName, const Icon(Icons.hourglass_top_outlined)));
+      _log.log(Level.INFO, "No purchase, no ads - $productId");
+      return (
+        null,
+        (product.productName, const Icon(Icons.hourglass_top_outlined))
+      );
     }
 
     // ✔︎ Kui pole ostetud ja ON reklaami näidata - ENABLED, Product name ▷
     if (product.status != ProductStatus.purchased &&
         adsController.isAdAvailable()) {
-          _log.log(Level.INFO, "No purchase, ADS available! - $productId");
+      _log.log(Level.INFO, "No purchase, ADS available! - $productId");
       callback() => {
             adsController.showRewardedAd(() {
               getSuccessfulAction(audioController, levelModel)?.call();
             })
           };
-      return (callback, (product.productName, const Icon(Icons.slideshow_rounded)));
+      return (
+        callback,
+        (product.productName, const Icon(Icons.slideshow_rounded))
+      );
     }
 
     throw StateError(
         "'¯\_(ツ)_/¯' -> Product: $productId, ${product.status.name}, Ad: ${adsController.isAdAvailable()}, Iap controller: ${iapController.products.map((e) => e.id)}");
   }
-
 
   Function()? getSuccessfulAction(
       AudioController audioController, LevelModel levelModel) {
@@ -104,7 +110,6 @@ class AdButton extends StatelessWidget {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     final audioController = context.read<AudioController>();
@@ -112,13 +117,42 @@ class AdButton extends StatelessWidget {
       _log.log(Level.INFO, "Building AdsController");
       return Consumer<InAppPurchaseController>(
           builder: (context, iapController, _) {
-      _log.log(Level.INFO, "Building InAppPurchaseController");
+        _log.log(Level.INFO, "Building InAppPurchaseController");
         return Consumer<LevelModel>(builder: (context, levelModel, _) {
-        _log.log(Level.INFO, "Building LevelModel");
-          final callbackAndText = getCallbackAndText(context, iapController,
-              adsController, levelModel.manipulationEnabled, levelModel.remove3Available, audioController, levelModel);
+          _log.log(Level.INFO, "Building LevelModel");
+          final callbackAndText = getCallbackAndText(
+              context,
+              iapController,
+              adsController,
+              levelModel.manipulationEnabled,
+              levelModel.remove3Available,
+              audioController,
+              levelModel);
           return Padding(
-            padding: const EdgeInsets.all(4.0),
+              padding: const EdgeInsets.all(4.0),
+              child: FilledButton(
+                style: ButtonStyle(
+  shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+    RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(10.0),
+    )
+  )
+),
+                onPressed:
+                    !levelModel.levelCompleted ? callbackAndText.$1 : null,
+                child: Column(
+                  mainAxisAlignment:
+                      MainAxisAlignment.center,
+                  children: [
+                    callbackAndText.$2.$2, // Example icon
+                    FittedBox(
+                        fit: BoxFit.fitWidth,
+                        child: Text(callbackAndText.$2.$1, maxLines: 1),
+                        ),
+                  ],
+                ),
+              )
+/*
             child: FilledButton.icon(
               onPressed: !levelModel.levelCompleted ? callbackAndText.$1 : null,
               icon: callbackAndText.$2.$2,
@@ -134,7 +168,8 @@ class AdButton extends StatelessWidget {
                 ),
               ),
             ),
-          );
+            */
+              );
         });
       });
     });
