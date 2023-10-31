@@ -7,6 +7,7 @@ class LevelData {
   bool manipulationEnabled;
   int disabledLettersCount;
   bool levelCompleted;
+  bool unlocked;
 
   LevelData(
     this.nr,
@@ -17,6 +18,7 @@ class LevelData {
     this.manipulationEnabled,
     this.levelCompleted,
     this.disabledLettersCount,
+    this.unlocked,
   );
 
   LevelData.from((String, List<String>) level):
@@ -27,7 +29,8 @@ class LevelData {
     svgPath = level.$2[3],
     manipulationEnabled = bool.parse(level.$2[4]),
     levelCompleted = bool.parse(level.$2[5]),
-    disabledLettersCount = int.parse(level.$2[6]);
+    disabledLettersCount = int.parse(level.$2[6]),
+    unlocked = bool.parse(level.$2[7]);
 
 
   (String, List<String>) getLevelDataBasic() {
@@ -38,7 +41,8 @@ class LevelData {
       svgPath,
       manipulationEnabled.toString(),
       levelCompleted.toString(),
-      disabledLettersCount.toString()
+      disabledLettersCount.toString(),
+      unlocked.toString()
     ]);
   }
 

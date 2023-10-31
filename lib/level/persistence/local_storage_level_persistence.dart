@@ -22,7 +22,7 @@ class LocalStorageLevelPersistence extends LevelPersistence {
               "assets/levels/1.svg",
               false,
               false,
-      0);
+      0,false);
       var level2 = LevelData(
               2,
               "OLD",
@@ -31,7 +31,7 @@ class LocalStorageLevelPersistence extends LevelPersistence {
               "assets/levels/2.svg",
               false,
               false,
-      0);
+      0,false);
          var level3 = LevelData(
               3,
               "FEAR",
@@ -40,7 +40,7 @@ class LocalStorageLevelPersistence extends LevelPersistence {
               "assets/levels/1.svg",
               false,
               false,
-      0);
+      0,false);
            var level4 = LevelData(
               4,
               "STRONG",
@@ -49,7 +49,7 @@ class LocalStorageLevelPersistence extends LevelPersistence {
               "assets/levels/2.svg",
               false,
               false,
-      0);
+      0,false);
       setLevelData(level1.getLevelDataBasic());
       setLevelData(level2.getLevelDataBasic());
       setLevelData(level3.getLevelDataBasic());
@@ -92,6 +92,21 @@ class LocalStorageLevelPersistence extends LevelPersistence {
     } else  {
       return null;
     }
+  }
+  
+  @override
+  Future<List<LevelData>> getAllLevels() async {
+    final prefs = await instanceFuture;
+    List<LevelData> levels = List.empty(growable: true);
+    for (var i = 0; i < 100; i++) {
+      final levelStrings = prefs.getStringList(i.toString());
+      if (levelStrings != null)
+      {
+        final levelData = LevelData.from((i.toString(), levelStrings));
+        levels.add(levelData);
+      }
+    }
+    return levels;
   }
   
 }

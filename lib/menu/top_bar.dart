@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/menu/in_app_purchase_menu.dart';
 import 'package:operation_hermes/menu/settings_menu.dart';
+import 'package:operation_hermes/menu/story_bottom_sheet.dart';
 import 'package:operation_hermes/menu/story_tablo.dart';
 
 class TopBar extends StatelessWidget {
@@ -31,11 +32,22 @@ class TopBar extends StatelessWidget {
                 borderRadius:
                     BorderRadius.circular(10), // Adjust the radius as needed
                 border: Border.all(
-                    color:
-                        Theme.of(context).colorScheme.secondary), // Border style
+                    color: Theme.of(context)
+                        .colorScheme
+                        .secondary), // Border style
               ),
               padding: const EdgeInsets.all(8), // Padding inside the container
-              child: const StoryTablo()),
+              child: GestureDetector(
+                child: const StoryTablo(),
+                onTap: () {
+                  showBottomSheet(
+                    context: context,
+                    builder: (context) {
+                      return const StoryBottomSheet();
+                    },
+                  );
+                },
+              )),
         ),
       ],
     );

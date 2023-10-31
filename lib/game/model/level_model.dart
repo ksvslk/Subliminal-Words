@@ -14,6 +14,7 @@ class LevelModel with ChangeNotifier {
 
   int levelNr = -1;
   bool levelCompleted = false;
+  bool unlocked = false;
   late PictureModel pictureModel;
   late FieldModel fieldModel;
   late StoryModel storyModel;
@@ -56,7 +57,7 @@ class LevelModel with ChangeNotifier {
 
     final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
     setLettersCanBeRemoved(canLettersBeRemovedMore);
-
+    unlocked = level.unlocked;
     if (level.levelCompleted) _setLevelCompleted();
   }
 
@@ -102,7 +103,22 @@ class LevelModel with ChangeNotifier {
     final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
     setLettersCanBeRemoved(canLettersBeRemovedMore);
     levelCompleted = false;
+    unlocked = level.unlocked;
+
     notifyListeners();
+  }
+
+  Future<(List<(String, String)>, int)> getAllLevelsWordAndStories() async
+  {
+      final levels = await persistence.getAllLevels();
+      var index = 0;
+      for (var level in levels) {
+        level.story.split(' ').forEach((storyWord) {
+          if (!level.unlocked) return;
+          index = index + 1;
+        });
+      }
+      return (levels.map((e) => (e.word.toLowerCase(), e.story)).toList(), index);      
   }
 
   void _setLevelCompleted() {
@@ -131,7 +147,11 @@ class LevelModel with ChangeNotifier {
   bool checkForWin() {
     var win = fieldModel.checkForWin();
     levelCompleted = win;
-    if (win) storyModel.addNextStory(storyModel.currentWordAndStory);
+    unlocked = win;
+    if (win) {
+      _save();
+      storyModel.addNextStory(storyModel.currentWordAndStory);
+    };
     notifyListeners();
     return win;
   }
@@ -145,7 +165,9 @@ class LevelModel with ChangeNotifier {
         pictureModel.svgPath,
         manipulationEnabled,
         levelCompleted,
-        fieldModel.disabledLettersCount);
+        fieldModel.disabledLettersCount,
+        unlocked
+        );
   }
 
   Future<void> _save() async {
