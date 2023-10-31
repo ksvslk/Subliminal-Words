@@ -19,159 +19,166 @@ class Puzzle extends StatelessWidget {
     final audioController = context.read<AudioController>();
 
     return Consumer<LevelModel>(builder: (context, levelModel, child) {
-      _log.info(() => 'Build puzzle. Consumer of LevelModel. Level complete: ${levelModel.levelCompleted}');
-      return   GestureDetector(
-              onTap: levelModel.levelCompleted ? () {
+      _log.info(() =>
+          'Build puzzle. Consumer of LevelModel. Level complete: ${levelModel.levelCompleted}');
+      return GestureDetector(
+        onTap: levelModel.levelCompleted
+            ? () {
                 _log.info(Level.INFO, "TER!!");
                 levelModel.nextLevel();
-              } : null,
-              child: AspectRatio(
-        aspectRatio: 1,
-        child: Stack(
-          fit: StackFit
-              .expand, // This ensures the stack takes the full size of its parent
-          children: <Widget>[
-          Container(
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                    image: const AssetImage(
-                        'assets/other/grid.png'), // Replace with your image's path
-                    repeat: ImageRepeat.repeat,
-                    colorFilter: ColorFilter.mode(
-                        Theme.of(context).colorScheme.secondaryContainer,
-                        BlendMode.modulate)),
-                color: Theme.of(context)
-                    .colorScheme
-                    .secondaryContainer
-                    .withOpacity(0.25),
-                border: Border.all(
-                    color: Theme.of(context).colorScheme.secondary, width: 1),
-                borderRadius: BorderRadius.circular(4),
+              }
+            : null,
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: Stack(
+            fit: StackFit
+                .expand, // This ensures the stack takes the full size of its parent
+            children: <Widget>[
+              Container(
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                      image: const AssetImage(
+                          'assets/other/grid.png'), // Replace with your image's path
+                      repeat: ImageRepeat.repeat,
+                      colorFilter: ColorFilter.mode(
+                          Theme.of(context).colorScheme.secondaryContainer,
+                          BlendMode.modulate)),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .secondaryContainer
+                      .withOpacity(0.25),
+                  border: Border.all(
+                      color: Theme.of(context).colorScheme.secondary, width: 1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
-            ),
-            // The image
-            ChangeNotifierProvider<PictureModel>.value(
-              value: levelModel.pictureModel,
-              child: Consumer<PictureModel>(
-                builder: (context, model, child) {
-                  return RotatedBox(
-                    quarterTurns: model.quarterTurn,
-                    child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        curve: Curves.easeOutBack,
-                        transformAlignment: Alignment.center,
-                        transform: Matrix4.diagonal3(vec3.Vector3(
-                            model.scale, model.scale, model.scale)),
-                        child: Stack(
-                          fit: StackFit
-              .expand,
-                          alignment: Alignment.center,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: Image.asset(
-                                model.picturePath,
-                                fit: BoxFit.contain,
+              // The image
+              ChangeNotifierProvider<PictureModel>.value(
+                value: levelModel.pictureModel,
+                child: Consumer<PictureModel>(
+                  builder: (context, model, child) {
+                    return RotatedBox(
+                      quarterTurns: model.quarterTurn,
+                      child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          curve: Curves.easeOutBack,
+                          transformAlignment: Alignment.center,
+                          transform: Matrix4.diagonal3(vec3.Vector3(
+                              model.scale, model.scale, model.scale)),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            alignment: Alignment.center,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: Image.asset(
+                                  model.picturePath,
+                                  fit: BoxFit.contain,
+                                ),
                               ),
-                            ),
-                            ...model.highlightLetters
-                                .map(
-                                  (svgLetter) => AnimatedOpacity(
-                                    duration: Duration(
-                                        milliseconds:
-                                            svgLetter.show ? 750 : 750),
-                                    opacity: svgLetter.show ||
-                                            levelModel.levelCompleted
-                                        ? 1.0
-                                        : 0.0,
-                                    curve: Curves.fastOutSlowIn,
-                                    onEnd: () {
-                                      _log.info(() =>
-                                          'Ending svg letter animation for - ${svgLetter.letter} with show - ${svgLetter.show}');
-                                      if (svgLetter.show) {
-                                        model.hideLetter(svgLetter.letter);
-                                      }
-                                    },
-                                    child: CustomPaint(
-                                      painter: FilledLetterPainter(
-                                        path: parseSvgPathData(svgLetter.path),
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary
-                                            .withOpacity(0.75),
-                                      ),
-                                      child: AspectRatio(
-                                        aspectRatio: 1 / 1,
-                                        child: Container(
-                                          color: Colors
-                                              .transparent, // Or any other color to visualize it
+                              ...model.highlightLetters
+                                  .map(
+                                    (svgLetter) => AnimatedOpacity(
+                                      duration: Duration(
+                                          milliseconds:
+                                              svgLetter.show ? 750 : 750),
+                                      opacity: svgLetter.show ||
+                                              levelModel.levelCompleted
+                                          ? 1.0
+                                          : 0.0,
+                                      curve: Curves.fastOutSlowIn,
+                                      onEnd: () {
+                                        _log.info(() =>
+                                            'Ending svg letter animation for - ${svgLetter.letter} with show - ${svgLetter.show}');
+                                        if (svgLetter.show) {
+                                          model.hideLetter(svgLetter.letter);
+                                        }
+                                      },
+                                      child: CustomPaint(
+                                        painter: FilledLetterPainter(
+                                            path: parseSvgPathData(
+                                                svgLetter.path),
+                                            letterOutlineColor:
+                                                Theme.of(context)
+                                                    .colorScheme
+                                                    .secondary),
+                                        child: AspectRatio(
+                                          aspectRatio: 1 / 1,
+                                          child: Container(
+                                            color: Colors
+                                                .transparent, // Or any other color to visualize it
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                )
-                                .toList(),
-                          ],
-                        )
-                        // PROBLEM CHILD ABOVE
-                        ),
-                  );
-                },
+                                  )
+                                  .toList(),
+                            ],
+                          )
+                          // PROBLEM CHILD ABOVE
+                          ),
+                    );
+                  },
+                ),
               ),
-            ),
 
-            Container(
-              decoration: BoxDecoration(
-                border: Border.all(
-                    strokeAlign: BorderSide.strokeAlignCenter,
-                    color: Theme.of(context).colorScheme.secondary,
-                    width: 1),
-                borderRadius: BorderRadius.circular(4),
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                      strokeAlign: BorderSide.strokeAlignCenter,
+                      color: Theme.of(context).colorScheme.secondary,
+                      width: 1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
-            ),
-            // Manipulation buttons, positioned bottom right
-            levelModel.manipulationEnabled ? ChangeNotifierProvider<PictureModel>.value(
-              value: levelModel.pictureModel,
-              child: Consumer<PictureModel>(
-                  builder: (context, pictureModel, child) {
-                return Positioned(
-                  bottom: 4,
-                  right: 4,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      IconButton.filledTonal(
-                        icon: const Icon(Icons.zoom_out),
-                        onPressed: pictureModel.scale <= pictureModel.minZoom
-                            ? null
-                            : () {
-                                pictureModel.setScaleDown();
-                                audioController.playSfx(SfxType.zoomOut);
-                              },
-                      ),
-                      IconButton.filledTonal(
-                        icon: const Icon(Icons.zoom_in),
-                        onPressed: pictureModel.scale >= pictureModel.maxZoom
-                            ? null
-                            : () {
-                                pictureModel.setScaleUp();
-                                audioController.playSfx(SfxType.zoomIn);
-                              },
-                      ),
-                      IconButton.filledTonal(
-                        icon: const Icon(Icons.rotate_90_degrees_cw),
-                        onPressed: () {
-                          audioController.playSfx(SfxType.rotate);
-                          pictureModel.setNextQuarterTurn();
-                        },
-                      )
-                    ],
-                  ),
-                );
-              }),
-            ) : const SizedBox.shrink(),
-          ],
-        ),
+              // Manipulation buttons, positioned bottom right
+              levelModel.manipulationEnabled
+                  ? ChangeNotifierProvider<PictureModel>.value(
+                      value: levelModel.pictureModel,
+                      child: Consumer<PictureModel>(
+                          builder: (context, pictureModel, child) {
+                        return Positioned(
+                          bottom: 4,
+                          right: 4,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              IconButton.filledTonal(
+                                icon: const Icon(Icons.zoom_out),
+                                onPressed:
+                                    pictureModel.scale <= pictureModel.minZoom
+                                        ? null
+                                        : () {
+                                            pictureModel.setScaleDown();
+                                            audioController
+                                                .playSfx(SfxType.zoomOut);
+                                          },
+                              ),
+                              IconButton.filledTonal(
+                                icon: const Icon(Icons.zoom_in),
+                                onPressed: pictureModel.scale >=
+                                        pictureModel.maxZoom
+                                    ? null
+                                    : () {
+                                        pictureModel.setScaleUp();
+                                        audioController.playSfx(SfxType.zoomIn);
+                                      },
+                              ),
+                              IconButton.filledTonal(
+                                icon: const Icon(Icons.rotate_90_degrees_cw),
+                                onPressed: () {
+                                  audioController.playSfx(SfxType.rotate);
+                                  pictureModel.setNextQuarterTurn();
+                                },
+                              )
+                            ],
+                          ),
+                        );
+                      }),
+                    )
+                  : const SizedBox.shrink(),
+            ],
+          ),
         ),
       );
     });

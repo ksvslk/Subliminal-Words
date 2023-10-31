@@ -32,7 +32,7 @@ class TopBar extends StatelessWidget {
                     BorderRadius.circular(10), // Adjust the radius as needed
                 border: Border.all(
                     color:
-                        Theme.of(context).colorScheme.outline), // Border style
+                        Theme.of(context).colorScheme.secondary), // Border style
               ),
               padding: const EdgeInsets.all(8), // Padding inside the container
               child: const StoryTablo()),

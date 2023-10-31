@@ -13,13 +13,7 @@ enum AboutSubMenuItem {
   privacy,
 }
 
-enum ThemeSubMenuItem {
-  red,
-  yellow,
-  green,
-  blue,
-  purple,
-}
+enum ThemeSubMenuItem { red, yellow, green, blue, purple }
 
 final Uri _feedbackUri =
     Uri.parse('https://play.google.com/store/apps/details?id=com.indest.hah');
@@ -30,6 +24,19 @@ Future<void> _launchUrl(Uri url) async {
   if (!await launchUrl(url)) {
     throw Exception('Could not launch $url');
   }
+}
+
+MenuItemButton getMenuButton(Color color, SettingsController settings) {
+  return MenuItemButton(
+      onPressed: () {
+        settings.changeSeedColor(color);
+      },
+      child: settings.seedColor.value == color.value
+          ? CircleAvatar(
+              backgroundColor: color,
+              child:
+                  Icon(Icons.check, color: color.blendWith(Colors.black, 0.5)))
+          : CircleAvatar(backgroundColor: color));
 }
 
 class SettingsMenu extends StatefulWidget {
@@ -76,69 +83,19 @@ class _SettingsMenuState extends State<SettingsMenu> {
                       switch (item) {
                         case ThemeSubMenuItem.red:
                           const color = Color.fromARGB(255, 255, 0, 0);
-                          return MenuItemButton(
-                              onPressed: () {
-                                settings.changeSeedColor(color);
-                              },
-                              child: settings.seedColor.value == color.value
-                                  ? CircleAvatar(
-                                      backgroundColor: color,
-                                      child: Icon(Icons.check,
-                                          color: color.blendWith(
-                                              Colors.black, 0.5)))
-                                  : const CircleAvatar(backgroundColor: color));
+                          return getMenuButton(color, settings);
                         case ThemeSubMenuItem.yellow:
                           const color = Color.fromARGB(255, 255, 255, 0);
-                          return MenuItemButton(
-                              onPressed: () {
-                                settings.changeSeedColor(color);
-                              },
-                              child: settings.seedColor.value == color.value
-                                  ? CircleAvatar(
-                                      backgroundColor: color,
-                                      child: Icon(Icons.check,
-                                          color: color.blendWith(
-                                              Colors.black, 0.5)))
-                                  : const CircleAvatar(backgroundColor: color));
+                          return getMenuButton(color, settings);
                         case ThemeSubMenuItem.green:
                           const color = Color.fromARGB(255, 0, 255, 0);
-                          return MenuItemButton(
-                              onPressed: () {
-                                settings.changeSeedColor(color);
-                              },
-                              child: settings.seedColor.value == color.value
-                                  ? CircleAvatar(
-                                      backgroundColor: color,
-                                      child: Icon(Icons.check,
-                                          color: color.blendWith(
-                                              Colors.black, 0.5)))
-                                  : const CircleAvatar(backgroundColor: color));
+                          return getMenuButton(color, settings);
                         case ThemeSubMenuItem.blue:
                           const color = Color.fromARGB(255, 0, 0, 255);
-                          return MenuItemButton(
-                              onPressed: () {
-                                settings.changeSeedColor(color);
-                              },
-                              child: settings.seedColor.value == color.value
-                                  ? CircleAvatar(
-                                      backgroundColor: color,
-                                      child: Icon(Icons.check,
-                                          color: color.blendWith(
-                                              Colors.black, 0.5)))
-                                  : const CircleAvatar(backgroundColor: color));
+                          return getMenuButton(color, settings);
                         case ThemeSubMenuItem.purple:
                           const color = Color.fromARGB(255, 255, 0, 255);
-                          return MenuItemButton(
-                              onPressed: () {
-                                settings.changeSeedColor(color);
-                              },
-                              child: settings.seedColor.value == color.value
-                                  ? CircleAvatar(
-                                      backgroundColor: color,
-                                      child: Icon(Icons.check,
-                                          color: color.blendWith(
-                                              Colors.black, 0.5)))
-                                  : const CircleAvatar(backgroundColor: color));
+                          return getMenuButton(color, settings);
                       }
                     }).toList(),
                     child: Text(item.name),
@@ -146,7 +103,9 @@ class _SettingsMenuState extends State<SettingsMenu> {
                 });
           case MenuItem.feedback:
             return MenuItemButton(
-                onPressed: () {_launchUrl(_feedbackUri);},
+                onPressed: () {
+                  _launchUrl(_feedbackUri);
+                },
                 leadingIcon: const Icon(Icons.keyboard_outlined),
                 child: Text(item.name));
           case MenuItem.sound:

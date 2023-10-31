@@ -3,31 +3,30 @@ import 'package:flutter/material.dart';
 class FilledLetterPainter extends CustomPainter {
   const FilledLetterPainter({
     required this.path,
-    required this.color,
+    required this.letterOutlineColor,
   });
 
   final Path path;
-  final Color color;
+  final Color letterOutlineColor;
 
   @override
   bool shouldRepaint(FilledLetterPainter oldDelegate) =>
-      oldDelegate.path != path || oldDelegate.color != color;
+      oldDelegate.path != path || oldDelegate.letterOutlineColor != letterOutlineColor;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const mainColor =  Color.fromRGBO(254, 89, 194, 1.0);
     var scale = size.width / 512;
     canvas.scale(scale,scale);
 
     // Base stroke
     final Paint neonBase = Paint()
-      ..color = mainColor.withOpacity(0.75)
+      ..color = letterOutlineColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
     // Glow
     final Paint neonGlow = Paint()
-      ..color = mainColor.withOpacity(0.65)  // Adjust opacity for desired glow intensity
+      ..color = letterOutlineColor  // Adjust opacity for desired glow intensity
       ..style = PaintingStyle.stroke
       ..strokeWidth = 5.0  // Adjust for desired glow spread
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);  // Blur to soften the glow edges
