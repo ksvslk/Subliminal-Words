@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/game/letter_box.dart';
+import 'package:operation_hermes/menu/licenses_dialog.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 enum MenuItem { achievements, theme, feedback, sound, music, about }
 
@@ -17,6 +19,17 @@ enum ThemeSubMenuItem {
   green,
   blue,
   purple,
+}
+
+final Uri _feedbackUri =
+    Uri.parse('https://play.google.com/store/apps/details?id=com.indest.hah');
+final Uri _followUri = Uri.parse('https://twitter.com/IndestGames');
+final Uri _privacyUri = Uri.parse('https://indest.ee/privacy-policy/');
+
+Future<void> _launchUrl(Uri url) async {
+  if (!await launchUrl(url)) {
+    throw Exception('Could not launch $url');
+  }
 }
 
 class SettingsMenu extends StatefulWidget {
@@ -68,9 +81,11 @@ class _SettingsMenuState extends State<SettingsMenu> {
                                 settings.changeSeedColor(color);
                               },
                               child: settings.seedColor.value == color.value
-                                  ?  CircleAvatar(
+                                  ? CircleAvatar(
                                       backgroundColor: color,
-                                      child: Icon(Icons.check, color: color.blendWith(Colors.black, 0.5)))
+                                      child: Icon(Icons.check,
+                                          color: color.blendWith(
+                                              Colors.black, 0.5)))
                                   : const CircleAvatar(backgroundColor: color));
                         case ThemeSubMenuItem.yellow:
                           const color = Color.fromARGB(255, 255, 255, 0);
@@ -79,9 +94,11 @@ class _SettingsMenuState extends State<SettingsMenu> {
                                 settings.changeSeedColor(color);
                               },
                               child: settings.seedColor.value == color.value
-                                  ?  CircleAvatar(
+                                  ? CircleAvatar(
                                       backgroundColor: color,
-                                     child: Icon(Icons.check, color: color.blendWith(Colors.black, 0.5)))
+                                      child: Icon(Icons.check,
+                                          color: color.blendWith(
+                                              Colors.black, 0.5)))
                                   : const CircleAvatar(backgroundColor: color));
                         case ThemeSubMenuItem.green:
                           const color = Color.fromARGB(255, 0, 255, 0);
@@ -92,7 +109,9 @@ class _SettingsMenuState extends State<SettingsMenu> {
                               child: settings.seedColor.value == color.value
                                   ? CircleAvatar(
                                       backgroundColor: color,
-                                      child: Icon(Icons.check, color: color.blendWith(Colors.black, 0.5)))
+                                      child: Icon(Icons.check,
+                                          color: color.blendWith(
+                                              Colors.black, 0.5)))
                                   : const CircleAvatar(backgroundColor: color));
                         case ThemeSubMenuItem.blue:
                           const color = Color.fromARGB(255, 0, 0, 255);
@@ -101,9 +120,11 @@ class _SettingsMenuState extends State<SettingsMenu> {
                                 settings.changeSeedColor(color);
                               },
                               child: settings.seedColor.value == color.value
-                                  ?  CircleAvatar(
+                                  ? CircleAvatar(
                                       backgroundColor: color,
-                                   child: Icon(Icons.check, color: color.blendWith(Colors.black, 0.5)))
+                                      child: Icon(Icons.check,
+                                          color: color.blendWith(
+                                              Colors.black, 0.5)))
                                   : const CircleAvatar(backgroundColor: color));
                         case ThemeSubMenuItem.purple:
                           const color = Color.fromARGB(255, 255, 0, 255);
@@ -112,9 +133,11 @@ class _SettingsMenuState extends State<SettingsMenu> {
                                 settings.changeSeedColor(color);
                               },
                               child: settings.seedColor.value == color.value
-                                  ?  CircleAvatar(
+                                  ? CircleAvatar(
                                       backgroundColor: color,
-                                    child: Icon(Icons.check, color: color.blendWith(Colors.black, 0.5)))
+                                      child: Icon(Icons.check,
+                                          color: color.blendWith(
+                                              Colors.black, 0.5)))
                                   : const CircleAvatar(backgroundColor: color));
                       }
                     }).toList(),
@@ -123,7 +146,7 @@ class _SettingsMenuState extends State<SettingsMenu> {
                 });
           case MenuItem.feedback:
             return MenuItemButton(
-                onPressed: () {},
+                onPressed: () {_launchUrl(_feedbackUri);},
                 leadingIcon: const Icon(Icons.keyboard_outlined),
                 child: Text(item.name));
           case MenuItem.sound:
@@ -158,7 +181,32 @@ class _SettingsMenuState extends State<SettingsMenu> {
             return SubmenuButton(
               leadingIcon: const Icon(Icons.info_outline),
               menuChildren: AboutSubMenuItem.values.map((item) {
-                return MenuItemButton(onPressed: () {}, child: Text(item.name));
+                switch (item) {
+                  case AboutSubMenuItem.follow:
+                    return MenuItemButton(
+                        onPressed: () {
+                          _launchUrl(_followUri);
+                        },
+                        child: Text(item.name));
+
+                  case AboutSubMenuItem.licenses:
+                    return MenuItemButton(
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return const LicensesDialog();
+                            },
+                          );
+                        },
+                        child: Text(item.name));
+                  case AboutSubMenuItem.privacy:
+                    return MenuItemButton(
+                        onPressed: () {
+                          _launchUrl(_privacyUri);
+                        },
+                        child: Text(item.name));
+                }
               }).toList(),
               child: Text(item.name),
             );
