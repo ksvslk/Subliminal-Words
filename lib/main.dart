@@ -98,74 +98,79 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    
     return AppLifecycleObserver(
-      child: MultiProvider(
-        providers: [
-          Provider<SettingsController>(
-            lazy: false,
-            create: (context) => SettingsController(
-              persistence: settingsPersistence,
-            )..loadStateFromPersistence(),
-          ),
-          ChangeNotifierProvider<AdsController?>.value(value: adsController),
-          ChangeNotifierProvider<InAppPurchaseController?>.value(
-              value: inAppPurchaseController),
-          ChangeNotifierProxyProvider<ValueNotifier<AppLifecycleState>,
-              LevelModel>(
-            lazy: false,
-            create: (context) => LevelModel(
-              persistence: levelPersistence,
-            )..initialize(),
-            update: (BuildContext context,
-                ValueNotifier<AppLifecycleState> lifecycleNotifier,
-                LevelModel? levelModel) {
-              if (levelModel == null) throw ArgumentError.notNull();
-              levelModel.attachLifecycleNotifier(lifecycleNotifier);
-              return levelModel;
-            },
-          ),
-          ProxyProvider2<SettingsController, ValueNotifier<AppLifecycleState>,
-              AudioController>(
-            // Ensures that the AudioController is created on startup,
-            // and not "only when it's needed", as is default behavior.
-            // This way, music starts immediately.
-            lazy: false,
-            create: (context) => AudioController()..initialize(),
-            update: (context, settings, lifecycleNotifier, audio) {
-              if (audio == null) throw ArgumentError.notNull();
-              audio.attachSettings(settings);
-              audio.attachLifecycleNotifier(lifecycleNotifier);
-              return audio;
-            },
-            dispose: (context, audio) => audio.dispose(),
-          ),
-        ],
-        child: MaterialApp(
-          title: 'Subliminal Words',
-          theme: ThemeData(
-              scaffoldBackgroundColor: Colors.white,
-              useMaterial3: true,
-              // Define the default brightness and colors.
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: mainSeedColor,
-                brightness: Brightness.light,
-              ),
-              fontFamily: 'Gabarito'),
-          darkTheme: ThemeData(
-              scaffoldBackgroundColor: Colors.black,
-              useMaterial3: true,
-              // Define the default brightness and colors.
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: mainSeedColor,
-                brightness: Brightness.dark,
-              ),
-              fontFamily: 'Gabarito'),
-          home: const Scaffold(
-            body: GameFieldWrapper(),
-          )
+        child: MultiProvider(
+      providers: [
+        Provider<SettingsController>(
+          lazy: false,
+          create: (context) => SettingsController(
+            persistence: settingsPersistence,
+          )..loadStateFromPersistence(),
         ),
-      ),
-    );
+        ChangeNotifierProvider<AdsController?>.value(value: adsController),
+        ChangeNotifierProvider<InAppPurchaseController?>.value(
+            value: inAppPurchaseController),
+        ChangeNotifierProxyProvider<ValueNotifier<AppLifecycleState>,
+            LevelModel>(
+          lazy: false,
+          create: (context) => LevelModel(
+            persistence: levelPersistence,
+          )..initialize(),
+          update: (BuildContext context,
+              ValueNotifier<AppLifecycleState> lifecycleNotifier,
+              LevelModel? levelModel) {
+            if (levelModel == null) throw ArgumentError.notNull();
+            levelModel.attachLifecycleNotifier(lifecycleNotifier);
+            return levelModel;
+          },
+        ),
+        ProxyProvider2<SettingsController, ValueNotifier<AppLifecycleState>,
+            AudioController>(
+          // Ensures that the AudioController is created on startup,
+          // and not "only when it's needed", as is default behavior.
+          // This way, music starts immediately.
+          lazy: false,
+          create: (context) => AudioController()..initialize(),
+          update: (context, settings, lifecycleNotifier, audio) {
+            if (audio == null) throw ArgumentError.notNull();
+            audio.attachSettings(settings);
+            audio.attachLifecycleNotifier(lifecycleNotifier);
+            return audio;
+          },
+          dispose: (context, audio) => audio.dispose(),
+        ),
+      ],
+      builder: (context, child) {
+        final settingsController = context.read<SettingsController>();
+        return ValueListenableBuilder(
+          valueListenable: settingsController.seedColor,
+          builder: (context, changingSeedColor, child) {
+            return MaterialApp(
+                title: 'Subliminal Words',
+                theme: ThemeData(
+                    scaffoldBackgroundColor: Colors.white,
+                    useMaterial3: true,
+                    // Define the default brightness and colors.
+                    colorScheme: ColorScheme.fromSeed(
+                      seedColor: Color(changingSeedColor),
+                      brightness: Brightness.light,
+                    ),
+                    fontFamily: 'Gabarito'),
+                darkTheme: ThemeData(
+                    scaffoldBackgroundColor: Colors.black,
+                    useMaterial3: true,
+                    // Define the default brightness and colors.
+                    colorScheme: ColorScheme.fromSeed(
+                      seedColor: Color(changingSeedColor),
+                      brightness: Brightness.dark,
+                    ),
+                    fontFamily: 'Gabarito'),
+                home: const Scaffold(
+                  body: GameFieldWrapper(),
+                ));
+          },
+        );
+      },
+    ));
   }
 }

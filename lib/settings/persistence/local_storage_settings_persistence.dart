@@ -2,6 +2,8 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
+import 'dart:ui';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'settings_persistence.dart';
 
@@ -19,17 +21,17 @@ class LocalStorageSettingsPersistence extends SettingsPersistence {
     return prefs.getBool('musicOn') ?? true;
   }
 
-  @override
-  Future<bool> getMuted({required bool defaultValue}) async {
-    final prefs = await instanceFuture;
-    return prefs.getBool('mute') ?? defaultValue;
-  }
-
 
   @override
   Future<bool> getSoundsOn() async {
     final prefs = await instanceFuture;
     return prefs.getBool('soundsOn') ?? true;
+  }
+
+    @override
+  Future<int> getSeedColor() async {
+    final prefs = await instanceFuture;
+    return prefs.getInt('seedColor') ?? const Color.fromARGB(255, 0, 0, 255).value;
   }
 
   // SET
@@ -40,16 +42,15 @@ class LocalStorageSettingsPersistence extends SettingsPersistence {
   }
 
   @override
-  Future<void> saveMuted(bool value) async {
-    final prefs = await instanceFuture;
-    await prefs.setBool('mute', value);
-  }
-
-  @override
   Future<void> saveSoundsOn(bool value) async {
     final prefs = await instanceFuture;
     await prefs.setBool('soundsOn', value);
   }
 
+  @override
+  Future<void> saveSeedColor(int value) async {
+    final prefs = await instanceFuture;
+    await prefs.setInt('seedColor', value);
+  }
 
 }

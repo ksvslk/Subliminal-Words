@@ -9,10 +9,10 @@
 abstract class SettingsPersistence {
 
   Future<bool> getMusicOn();
-  Future<bool> getMuted({required bool defaultValue});
   Future<bool> getSoundsOn();
+  Future<int> getSeedColor();
 
   Future<void> saveMusicOn(bool value);
-  Future<void> saveMuted(bool value);
   Future<void> saveSoundsOn(bool value);
+  Future<void> saveSeedColor(int value);
 }

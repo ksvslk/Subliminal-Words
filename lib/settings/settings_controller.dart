@@ -2,7 +2,7 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import 'persistence/settings_persistence.dart';
 
@@ -16,6 +16,7 @@ class SettingsController {
 
   ValueNotifier<bool> soundsOn = ValueNotifier(false);
   ValueNotifier<bool> musicOn = ValueNotifier(false);
+  ValueNotifier<int> seedColor = ValueNotifier(const Color.fromARGB(255, 0, 0, 255).value);
 
   /// Creates a new instance of [SettingsController] backed by [persistence].
   SettingsController({required SettingsPersistence persistence})
@@ -26,7 +27,15 @@ class SettingsController {
     await Future.wait([
       _persistence.getSoundsOn().then((value) => soundsOn.value = value),
       _persistence.getMusicOn().then((value) => musicOn.value = value),
+      _persistence.getSeedColor().then((value) => seedColor.value = value),
     ]);
+  }
+
+  void changeSeedColor(Color color)
+  {
+    print("Changing seed color to: ${color.value}");
+    seedColor.value = color.value;
+    _persistence.saveSeedColor(seedColor.value);
   }
 
   void toggleMusicOn() {

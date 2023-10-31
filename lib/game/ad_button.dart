@@ -129,27 +129,27 @@ class AdButton extends StatelessWidget {
               audioController,
               levelModel);
           return Padding(
-              padding: const EdgeInsets.all(4.0),
+              padding: const EdgeInsets.all(1.0),
               child: FilledButton(
                 style: ButtonStyle(
-  shape: MaterialStateProperty.all<RoundedRectangleBorder>(
-    RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(10.0),
-    )
-  )
-),
+                    shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+                        RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.0),
+                ))),
                 onPressed:
                     !levelModel.levelCompleted ? callbackAndText.$1 : null,
-                child: Column(
-                  mainAxisAlignment:
-                      MainAxisAlignment.center,
+                child: Padding(padding: const EdgeInsets.all(1.0),child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    callbackAndText.$2.$2, // Example icon
-                    FittedBox(
-                        fit: BoxFit.fitWidth,
-                        child: Text(callbackAndText.$2.$1, maxLines: 1),
-                        ),
+                    Flexible(flex: 10, child: callbackAndText.$2.$2),
+                    const Spacer(flex: 1),
+                    Flexible(
+                      flex: 10,
+                      child: FittedBox(
+                          child: Text(callbackAndText.$2.$1, maxLines: 1)),
+                    ),
                   ],
+                ),
                 ),
               )
 /*

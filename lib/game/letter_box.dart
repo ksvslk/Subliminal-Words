@@ -20,55 +20,43 @@ class _LetterBoxState extends State<LetterBox> {
     Color getContainerColor() {
       switch (widget.data.state) {
         case LetterBoxState.solutionSlot:
-          return Theme.of(context)
-              .colorScheme
-              .secondaryContainer
-              .withOpacity(0.25);
+          return Theme.of(context).colorScheme.secondaryContainer
+          .blendWith(Theme.of(context).colorScheme.surface, 0.75);
+        //.withOpacity(0.25);
         case LetterBoxState.solutionPick:
           return Theme.of(context).colorScheme.surfaceVariant;
         case LetterBoxState.fieldPick:
           return Theme.of(context).colorScheme.primaryContainer;
         case LetterBoxState.fieldSlot:
-          return Theme.of(context)
-              .colorScheme
-              .secondaryContainer
-              .withOpacity(0.25);
+          return Theme.of(context).colorScheme.secondaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.25);
+        //.withOpacity(0.25);
         case LetterBoxState.locked:
           return Theme.of(context).colorScheme.tertiaryContainer;
         case LetterBoxState.removed:
-          return Theme.of(context)
-              .colorScheme
-              .secondaryContainer
-              .withOpacity(0.1);
+          return Theme.of(context).colorScheme.secondaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.9);
+        //.withOpacity(0.1);
       }
     }
 
     Color getContainerBorderColor() {
       switch (widget.data.state) {
         case LetterBoxState.solutionSlot:
-          return Theme.of(context)
-              .colorScheme
-              .onSecondaryContainer
-              .withOpacity(0.5);
+          return Theme.of(context).colorScheme.onSecondaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.5);
+        //.withOpacity(0.5);
         case LetterBoxState.solutionPick:
           return Theme.of(context).colorScheme.onSurfaceVariant;
         case LetterBoxState.fieldPick:
-          return Theme.of(context)
-              .colorScheme
-              .onPrimaryContainer
-              .withOpacity(0.5);
+          return Theme.of(context).colorScheme.onPrimaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.5);
+        //.withOpacity(0.5);
         case LetterBoxState.fieldSlot:
-          return Theme.of(context)
-              .colorScheme
-              .onSecondaryContainer
-              .withOpacity(0.5);
+          return Theme.of(context).colorScheme.onSecondaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.5);
+        //.withOpacity(0.5);
         case LetterBoxState.removed:
-          return Theme.of(context).colorScheme.onSurface.withOpacity(0.1);
+          return Theme.of(context).colorScheme.onSurface.blendWith(Theme.of(context).colorScheme.surface, 0.9);
+        //.withOpacity(0.1);
         case LetterBoxState.locked:
-          return Theme.of(context)
-              .colorScheme
-              .onTertiaryContainer
-              .withOpacity(0.5);
+          return Theme.of(context).colorScheme.onTertiaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.5);
+        //.withOpacity(0.5);
       }
     }
 
@@ -85,7 +73,8 @@ class _LetterBoxState extends State<LetterBox> {
         case LetterBoxState.locked:
           return Theme.of(context).colorScheme.onTertiaryContainer;
         case LetterBoxState.removed:
-          return Theme.of(context).colorScheme.secondary.withOpacity(0.1);
+          return Theme.of(context).colorScheme.onSecondaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.9);
+        //.withOpacity(0.1);
       }
     }
 
@@ -113,7 +102,7 @@ class _LetterBoxState extends State<LetterBox> {
         case LetterBoxState.solutionPick:
           return fontSize;
         case LetterBoxState.fieldPick:
-          return fontSize;
+          return fontSize / 1.1;
         case LetterBoxState.fieldSlot:
           return 0.0;
         case LetterBoxState.locked:
@@ -162,5 +151,16 @@ class _LetterBoxState extends State<LetterBox> {
         ),
       ),
     );
+  }
+}
+
+extension ColorBlending on Color {
+  /// Blends this color with another color.
+  /// 
+  /// [other]: The color to blend with.
+  /// [blendFactor]: A value between 0.0 (only this color) and 1.0 (only the other color).
+  Color blendWith(Color other, double blendFactor) {
+    blendFactor = blendFactor.clamp(0.0, 1.0);
+    return Color.lerp(this, other, blendFactor)!;
   }
 }
