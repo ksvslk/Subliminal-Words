@@ -44,9 +44,9 @@ class _LetterBoxState extends State<LetterBox> {
           return Theme.of(context).colorScheme.onSecondaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.5);
         //.withOpacity(0.5);
         case LetterBoxState.solutionPick:
-          return Theme.of(context).colorScheme.onSurfaceVariant;
+          return Theme.of(context).colorScheme.secondary;
         case LetterBoxState.fieldPick:
-          return Theme.of(context).colorScheme.onPrimaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.5);
+          return Theme.of(context).colorScheme.secondaryContainer.blendWith(Theme.of(context).colorScheme.primary, 0.2);
         //.withOpacity(0.5);
         case LetterBoxState.fieldSlot:
           return Theme.of(context).colorScheme.onSecondaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.5);
