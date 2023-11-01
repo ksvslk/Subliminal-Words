@@ -100,8 +100,7 @@ class Puzzle extends StatelessWidget {
                                                 svgLetter.path),
                                             letterOutlineColor:
                                                 Theme.of(context)
-                                                    .colorScheme
-                                                    .secondary),
+                                                    .colorScheme.primary),
                                         child: AspectRatio(
                                           aspectRatio: 1 / 1,
                                           child: Container(

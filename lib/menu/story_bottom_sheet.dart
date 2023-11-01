@@ -89,16 +89,25 @@ class StoryBottomSheet extends StatelessWidget {
             }).toList();
 
             return Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: SingleChildScrollView(
-                child: Center(
-                  child: RichText(
-                    text: TextSpan(children: spans),
-                    textAlign: TextAlign.justify,
-                  ),
-                ),
-              ),
-            );
+              padding: const EdgeInsets.all(16.0),
+              child: DraggableScrollableSheet(
+                maxChildSize: 0.5,
+                initialChildSize: 0.5,
+                expand: false,
+                builder: (context, scrollController) {
+                  return RawScrollbar(
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Center(
+                          child: RichText(
+                            text: TextSpan(children: spans),
+                            textAlign: TextAlign.left,
+                          ),
+                        ),
+                      ),
+                    );
+                }));
           } else {
             return const CircularProgressIndicator();
           }

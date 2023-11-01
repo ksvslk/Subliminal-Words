@@ -40,12 +40,9 @@ class TopBar extends StatelessWidget {
               child: GestureDetector(
                 child: const StoryTablo(),
                 onTap: () {
-                  showBottomSheet(
-                    context: context,
-                    builder: (context) {
-                      return const StoryBottomSheet();
-                    },
-                  );
+                  showModalBottomSheet(
+                    isScrollControlled: true,
+                    context: context, builder:(context) => const StoryBottomSheet());
                 },
               )),
         ),
