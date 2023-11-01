@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
@@ -19,27 +17,25 @@ class StoryBottomSheet extends StatelessWidget {
         future: allLevels,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.done) {
-            final levelWords = snapshot.data!.$1.map((e) => e.$1).toList();
+            final wordToLeveNr = {for (var item in snapshot.data!.$1) item.$1.toLowerCase() : item.$3};
             final allTextWords = snapshot.data!.$1.fold(
                 List<String>.empty(growable: true),
                 (previousValue, element) =>
                     previousValue + element.$2.split(' '));
             final limit = snapshot.data!.$2;
 
-            _log.log(Level.INFO, "Building again with limit: $limit");
-            allTextWords.forEach((element) {
-              _log.log(Level.INFO, "Next: $element");
-            });
-
             List<WidgetSpan> spans = allTextWords.mapIndexed((index, word) {
+              final wordWithoutPunctuation = word.replaceAll(punctuation, '');
+              final text = index < limit ? word : "✴︎";
+              final isWordLevel = wordToLeveNr.containsKey(wordWithoutPunctuation);
+              final levelNr = wordToLeveNr[wordWithoutPunctuation] ?? -1;
               return WidgetSpan(
                   child: Container(
                       margin: const EdgeInsets.symmetric(vertical: 2.0),
                       padding: const EdgeInsets.symmetric(horizontal: 6.0),
                       decoration: BoxDecoration(
                           border: Border.all(color: Colors.transparent),
-                          color: levelWords
-                                  .contains(word.replaceAll(punctuation, ''))
+                          color: isWordLevel
                               ? (index < limit
                                   ? Theme.of(context).colorScheme.primary
                                   : Theme.of(context)
@@ -49,10 +45,15 @@ class StoryBottomSheet extends StatelessWidget {
                               : null,
                           borderRadius:
                               const BorderRadius.all(Radius.circular(8.0))),
-                      child: Text(
-                        index < limit ? word : "✴︎",
-                        style: levelWords
-                                .contains(word.replaceAll(punctuation, ''))
+                      child: GestureDetector(
+                        onTap: isWordLevel ? () {
+                          _log.log(Level.INFO, "Now loading level $levelNr ");
+                          levelModel.loadLevel(levelNr);
+                          Navigator.pop(context);
+                          } : null,
+                        child: Text(
+                        text,
+                        style: isWordLevel
                             ? TextStyle(
                                 fontFamily: DefaultTextStyle.of(context)
                                     .style
@@ -85,7 +86,7 @@ class StoryBottomSheet extends StatelessWidget {
                                     .titleLarge
                                     ?.fontSize,
                               ),
-                      )));
+                      ))));
             }).toList();
 
             return Padding(

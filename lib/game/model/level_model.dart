@@ -108,7 +108,7 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<(List<(String, String)>, int)> getAllLevelsWordAndStories() async
+  Future<(List<(String, String, int)>, int)> getAllLevelsWordAndStories() async
   {
       final levels = await persistence.getAllLevels();
       var index = 0;
@@ -118,7 +118,7 @@ class LevelModel with ChangeNotifier {
           index = index + 1;
         });
       }
-      return (levels.map((e) => (e.word.toLowerCase(), e.story)).toList(), index);      
+      return (levels.map((e) => (e.word.toLowerCase(), e.story, e.nr)).toList(), index);      
   }
 
   void _setLevelCompleted() {
