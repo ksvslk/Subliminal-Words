@@ -81,8 +81,6 @@ flutter:
     - assets/music/
     - assets/sfx/
     - assets/other/
-    - assets/
-  #   - images/a_dot_ham.jpeg
   fonts:
     - family: Gabarito
       fonts:

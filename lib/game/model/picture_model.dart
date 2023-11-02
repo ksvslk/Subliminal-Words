@@ -40,10 +40,6 @@ class PictureModel with ChangeNotifier {
     svgPath = level.svgPath;
     await _loadSvgLetters(svgImage: svgPath).then((loadedLetters) {
       highlightLetters = loadedLetters;
-      highlightLetters.forEach((element) {
-      _log.log(Level.INFO, "${element.letter}:${element.show}");
-        
-      },);
       notifyListeners();
     });
   }

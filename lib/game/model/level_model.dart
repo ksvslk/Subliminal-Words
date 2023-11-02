@@ -51,7 +51,7 @@ class LevelModel with ChangeNotifier {
         scale: 1.0,
         quarterTurn: 0,
         picturePath: level.picturePath,
-        svgPath: level.svgPath);
+        svgPath: level.svgPath)..initializePicture(level);
 
     fieldModel = FieldModel(level: level);
 

@@ -33,7 +33,6 @@ class SettingsController {
 
   void changeSeedColor(Color color)
   {
-    print("Changing seed color to: ${color.value}");
     seedColor.value = color.value;
     _persistence.saveSeedColor(seedColor.value);
   }

@@ -61,7 +61,7 @@ class Puzzle extends StatelessWidget {
                       quarterTurns: model.quarterTurn,
                       child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
-                          curve: Curves.easeOutBack,
+                          curve: Curves.easeIn,
                           transformAlignment: Alignment.center,
                           transform: Matrix4.diagonal3(vec3.Vector3(
                               model.scale, model.scale, model.scale)),
@@ -80,8 +80,7 @@ class Puzzle extends StatelessWidget {
                                   .map(
                                     (svgLetter) => AnimatedOpacity(
                                       duration: Duration(
-                                          milliseconds:
-                                              svgLetter.show ? 750 : 750),
+                                          milliseconds: svgLetter.show ? 1750 : 1750),
                                       opacity: svgLetter.show ||
                                               levelModel.levelCompleted
                                           ? 1.0
@@ -92,6 +91,8 @@ class Puzzle extends StatelessWidget {
                                             'Ending svg letter animation for - ${svgLetter.letter} with show - ${svgLetter.show}');
                                         if (svgLetter.show) {
                                           model.hideLetter(svgLetter.letter);
+                                           _log.info(() =>
+                                            'hideLetter - ${svgLetter.letter}}');
                                         }
                                       },
                                       child: CustomPaint(

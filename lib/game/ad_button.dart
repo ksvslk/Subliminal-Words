@@ -152,23 +152,6 @@ class AdButton extends StatelessWidget {
                 ),
                 ),
               )
-/*
-            child: FilledButton.icon(
-              onPressed: !levelModel.levelCompleted ? callbackAndText.$1 : null,
-              icon: callbackAndText.$2.$2,
-              label: FittedBox(
-                fit: BoxFit.fitWidth,
-                child: Text(
-                  callbackAndText.$2.$1,
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontFamily: DefaultTextStyle.of(context).style.fontFamily,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-            */
               );
         });
       });
