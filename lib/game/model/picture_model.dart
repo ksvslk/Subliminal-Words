@@ -46,7 +46,7 @@ class PictureModel with ChangeNotifier {
 
   void setLevelComplete()
   {
-    for (var element in highlightLetters) {element.show = true;}
+    for (var element in highlightLetters) { element.show = true; }
   }
 
   void setScaleDown() {
@@ -110,7 +110,7 @@ class PictureModel with ChangeNotifier {
       String name = element.getAttribute('id').toString();
       String path = element.getAttribute('d').toString();
       var svgLetter = SvgLetter(letterPath: path, letterName: name);
-      maps.add(svgLetter);
+      if (name.length <= 3) maps.add(svgLetter);
     }
     return maps;
   }

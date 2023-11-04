@@ -151,7 +151,8 @@ class LevelModel with ChangeNotifier {
     if (win) {
       _save();
       storyModel.addNextStory(storyModel.currentWordAndStory);
-    };
+      pictureModel.setLevelComplete();
+    }
     notifyListeners();
     return win;
   }

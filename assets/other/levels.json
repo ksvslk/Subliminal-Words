@@ -1,701 +1,701 @@
 [
     {
         "nr": 1,
-        "word": "night",
-        "story": "Max wandered into the dark night, seeking signs of trouble in the quiet.",
+        "word": "you",
+        "story": "Max, a young boy, grew up in a tiny house you might stumble upon in an old neighborhood.",
         "imagePath": "assets/levels/1.jpg",
         "svgPath": "assets/levels/1.svg"
     },
     {
         "nr": 2,
-        "word": "city",
-        "story": "In the sprawling city, danger lurked in unseen corners, hidden from the daylight.",
+        "word": "one",
+        "story": "His room, sparse and small, had one dimly lit lamp.",
         "imagePath": "assets/levels/2.jpg",
         "svgPath": "assets/levels/2.svg"
     },
     {
         "nr": 3,
-        "word": "hero",
-        "story": "Despite his humble beginnings, Max never hesitated to act, becoming an unsung hero.",
+        "word": "like",
+        "story": "Outside, the city, vast and unforgiving, sprawled like a sleeping giant.",
         "imagePath": "assets/levels/3.jpg",
         "svgPath": "assets/levels/3.svg"
     },
     {
         "nr": 4,
-        "word": "fight",
-        "story": "Each fight, whether in shadowed alleys or against inner demons, tested his resolve.",
+        "word": "dream",
+        "story": "Tales of valor and heroism whispered in the air, sparking his dream.",
         "imagePath": "assets/levels/4.jpg",
         "svgPath": "assets/levels/4.svg"
     },
     {
         "nr": 5,
-        "word": "light",
-        "story": "The light in his heart outshone the darkness, guiding him through peril.",
+        "word": "flame",
+        "story": "Poverty was a relentless presence, yet it couldn't dim his hope's flame.",
         "imagePath": "assets/levels/5.jpg",
         "svgPath": "assets/levels/5.svg"
     },
     {
         "nr": 6,
-        "word": "power",
-        "story": "His power wasn't in strength alone, but in the unwavering spirit that fueled his journey.",
+        "word": "wonder",
+        "story": "Each day, he roamed the winding streets, eyes wide with wonder and curiosity.",
         "imagePath": "assets/levels/6.jpg",
         "svgPath": "assets/levels/6.svg"
     },
     {
         "nr": 7,
-        "word": "truth",
-        "story": "Max sought truth, not glory, unveiling secrets hidden deep within the city's heart.",
+        "word": "untold",
+        "story": "Towering buildings cast long shadows, hiding secrets and stories untold.",
         "imagePath": "assets/levels/7.jpg",
         "svgPath": "assets/levels/7.svg"
     },
     {
         "nr": 8,
-        "word": "fear",
-        "story": "Confronting his greatest fear, Max stood resolute, unyielding in the face of despair.",
+        "word": "rage",
+        "story": "He saw inequality and injustice, fueling a growing, internal rage.",
         "imagePath": "assets/levels/8.jpg",
         "svgPath": "assets/levels/8.svg"
     },
     {
         "nr": 9,
-        "word": "peace",
-        "story": "Unexpected allies joined his quest, united by a common goal of peace and safety.",
+        "word": "lore",
+        "story": "Hidden among alleys, he discovered a tattered book of ancient lore.",
         "imagePath": "assets/levels/9.jpg",
         "svgPath": "assets/levels/9.svg"
     },
     {
         "nr": 10,
-        "word": "chaos",
-        "story": "Max's determination grew as chaos spread, vowing to restore order at any cost.",
+        "word": "spark",
+        "story": "Words of wisdom, courage, and power leapt from the pages, igniting a spark.",
         "imagePath": "assets/levels/10.jpg",
         "svgPath": "assets/levels/10.svg"
     },
     {
         "nr": 11,
-        "word": "dream",
-        "story": "Haunted by a dream of a better world, Max's conviction grew stronger.",
+        "word": "become",
+        "story": "Max's heart was set; he would become a beacon of light in this darkness.",
         "imagePath": "assets/levels/11.jpg",
         "svgPath": "assets/levels/11.svg"
     },
     {
         "nr": 12,
-        "word": "gloom",
-        "story": "The city's gloom couldn't dim the fire that Max carried within him.",
+        "word": "mind",
+        "story": "Training began, with each day strengthening his body and mind.",
         "imagePath": "assets/levels/12.jpg",
         "svgPath": "assets/levels/12.svg"
     },
     {
         "nr": 13,
-        "word": "crime",
-        "story": "Fighting crime at every turn, Max became a beacon of justice.",
+        "word": "tiger",
+        "story": "He learned to move with the agility and silence of a hunting tiger.",
         "imagePath": "assets/levels/13.jpg",
         "svgPath": "assets/levels/13.svg"
     },
     {
         "nr": 14,
-        "word": "wall",
-        "story": "In the face of fear, Max's courage was like a towering, unbreakable wall.",
+        "word": "soul",
+        "story": "Secretly, he crafted a suit, an armor to protect his identity and soul.",
         "imagePath": "assets/levels/14.jpg",
         "svgPath": "assets/levels/14.svg"
     },
     {
         "nr": 15,
-        "word": "resolve",
-        "story": "As the night deepened, Max's resolve only became more steadfast and determined.",
+        "word": "city",
+        "story": "Nightly, he patrolled, a silent guardian watching over the sleeping city.",
         "imagePath": "assets/levels/15.jpg",
         "svgPath": "assets/levels/15.svg"
     },
     {
         "nr": 16,
-        "word": "shadow",
-        "story": "Every shadow seemed to whisper secrets, offering clues that only Max could understand.",
+        "word": "spread",
+        "story": "His presence did not go unnoticed; whispers of a shadowy figure spread.",
         "imagePath": "assets/levels/16.jpg",
         "svgPath": "assets/levels/16.svg"
     },
     {
         "nr": 17,
-        "word": "legend",
-        "story": "Max became a legend, not only in the city but also in hearts far beyond.",
+        "word": "enemy",
+        "story": "Criminals began to fear the night, wary of the unseen enemy.",
         "imagePath": "assets/levels/17.jpg",
         "svgPath": "assets/levels/17.svg"
     },
     {
         "nr": 18,
-        "word": "spirit",
-        "story": "His spirit, unchained and free, soared above the cityscape, bringing hope to the hopeless.",
+        "word": "skill",
+        "story": "Max faced thieves and villains, each encounter testing his skill.",
         "imagePath": "assets/levels/18.jpg",
         "svgPath": "assets/levels/18.svg"
     },
     {
         "nr": 19,
-        "word": "street",
-        "story": "Every street whispered tales of Max's bravery and his tireless crusade against darkness.",
+        "word": "Raven",
+        "story": "But a greater evil lurked, a mastermind of chaos known as the Raven.",
         "imagePath": "assets/levels/19.jpg",
         "svgPath": "assets/levels/19.svg"
     },
     {
         "nr": 20,
-        "word": "battle",
-        "story": "Every battle, though hard-fought, was a step towards the dawn of a new era.",
+        "word": "power",
+        "story": "Their first clash was fierce, a battle of wit, strength, and raw power.",
         "imagePath": "assets/levels/20.jpg",
         "svgPath": "assets/levels/20.svg"
     },
     {
         "nr": 21,
-        "word": "villain",
-        "story": "Each villain that crossed his path found themselves facing Max's unwavering resolve.",
+        "word": "eternal",
+        "story": "The Raven's plan was apocalyptic, aiming to engulf the city in eternal night.",
         "imagePath": "assets/levels/21.jpg",
         "svgPath": "assets/levels/21.svg"
     },
     {
         "nr": 22,
-        "word": "actions",
-        "story": "The greater the danger, the more heroic Max's actions became.",
+        "word": "factory",
+        "story": "Max, undeterred, infiltrated the villain's lair, a forgotten factory.",
         "imagePath": "assets/levels/22.jpg",
         "svgPath": "assets/levels/22.svg"
     },
     {
         "nr": 23,
-        "word": "gadget",
-        "story": "Max's arsenal of gadgetry became the stuff of legends in the city's underbelly.",
+        "word": "fears",
+        "story": "There, he confronted not just the Raven, but his own inner fears.",
         "imagePath": "assets/levels/23.jpg",
         "svgPath": "assets/levels/23.svg"
     },
     {
         "nr": 24,
-        "word": "silent",
-        "story": "Lurking in the shadow, Max was a silent guardian, ever watchful and ready.",
+        "word": "steel",
+        "story": "The final battle raged, clashing in a symphony of fury and steel.",
         "imagePath": "assets/levels/24.jpg",
         "svgPath": "assets/levels/24.svg"
     },
     {
         "nr": 25,
-        "word": "symbol",
-        "story": "To many, Max was not just a hero, but a symbol of hope and strength.",
+        "word": "victory",
+        "story": "With a decisive move, Max disarmed the Raven, securing a momentous victory.",
         "imagePath": "assets/levels/25.jpg",
         "svgPath": "assets/levels/25.svg"
     },
     {
         "nr": 26,
-        "word": "choice",
-        "story": "Each choice Max made was a step toward shaping a better future for all.",
+        "word": "start",
+        "story": "Peace returned, yet Max knew his journey as a guardian was just the start.",
         "imagePath": "assets/levels/26.jpg",
         "svgPath": "assets/levels/26.svg"
     },
     {
         "nr": 27,
-        "word": "people",
-        "story": "Max taught the people to face their fear, to find their inner strength and resilience.",
+        "word": "rise",
+        "story": "Every sunset promised the rise of heroes and the enduring power of light.",
         "imagePath": "assets/levels/27.jpg",
         "svgPath": "assets/levels/27.svg"
     },
     {
         "nr": 28,
-        "word": "despair",
-        "story": "His presence was like a beacon, casting light into the darkest corners of despair.",
+        "word": "faint",
+        "story": "In his heart, he carried the city's spirit, a flame that would never faint.",
         "imagePath": "assets/levels/28.jpg",
         "svgPath": "assets/levels/28.svg"
     },
     {
         "nr": 29,
-        "word": "pursuit",
-        "story": "Uncovering the truth behind corruption, Max was relentless in his pursuit of justice.",
+        "word": "night",
+        "story": "His story became a beacon of hope for all those lost in their own night.",
         "imagePath": "assets/levels/29.jpg",
         "svgPath": "assets/levels/29.svg"
     },
     {
         "nr": 30,
-        "word": "alley",
-        "story": "In every dark alley, Max's name was whispered as a guardian against evil.",
+        "word": "glow",
+        "story": "Max's legacy would live on, whispered in legends under the moon's gentle glow.",
         "imagePath": "assets/levels/30.jpg",
         "svgPath": "assets/levels/30.svg"
     },
     {
         "nr": 31,
-        "word": "tribute",
-        "story": "Every fight he engaged in stood as a tribute to his relentless spirit and commitment.",
+        "word": "bravery",
+        "story": "In time, new threats arose, challenging Max's resolve and bravery.",
         "imagePath": "assets/levels/31.jpg",
         "svgPath": "assets/levels/31.svg"
     },
     {
         "nr": 32,
-        "word": "ahead",
-        "story": "As night descended, Max's resolve only grew stronger, preparing for what lay ahead.",
+        "word": "market",
+        "story": "A network of spies and informants began to form, centered in the bustling market.",
         "imagePath": "assets/levels/32.jpg",
         "svgPath": "assets/levels/32.svg"
     },
     {
         "nr": 33,
-        "word": "always",
-        "story": "Wandering the street, he became a shadowy protector, unseen but always present.",
+        "word": "jungle",
+        "story": "Information was key; it flowed like a river through the dense urban jungle.",
         "imagePath": "assets/levels/33.jpg",
         "svgPath": "assets/levels/33.svg"
     },
     {
         "nr": 34,
-        "word": "legacy",
-        "story": "Max's legacy was being written with every heroic deed and whispered tale.",
+        "word": "shadow",
+        "story": "Max's new nemesis, Viper, emerged from the underworld like a toxic shadow.",
         "imagePath": "assets/levels/34.jpg",
         "svgPath": "assets/levels/34.svg"
     },
     {
         "nr": 35,
-        "word": "heart",
-        "story": "In the heart of danger, Max's courage shone brightest, guiding those lost in fear.",
+        "word": "tunnels",
+        "story": "Their encounters were brief, Viper always vanishing into a network of tunnels.",
         "imagePath": "assets/levels/35.jpg",
         "svgPath": "assets/levels/35.svg"
     },
     {
         "nr": 36,
-        "word": "signal",
-        "story": "A signal in the sky became the herald of his arrival, and a warning to evildoers.",
+        "word": "scheme",
+        "story": "Max realized that Viper was just a puppet in a larger, more sinister scheme.",
         "imagePath": "assets/levels/36.jpg",
         "svgPath": "assets/levels/36.svg"
     },
     {
         "nr": 37,
-        "word": "enemy",
-        "story": "No enemy was too great or too nefarious for Max to confront.",
+        "word": "docks",
+        "story": "Clues pointed to an old, forgotten part of the city known as the docks.",
         "imagePath": "assets/levels/37.jpg",
         "svgPath": "assets/levels/37.svg"
     },
     {
         "nr": 38,
-        "word": "mask",
-        "story": "Behind his mask lay the resolve to fight injustice wherever it lurked.",
+        "word": "dangers",
+        "story": "There, amid rusting ships and silent warehouses, lurked unseen dangers.",
         "imagePath": "assets/levels/38.jpg",
         "svgPath": "assets/levels/38.svg"
     },
     {
         "nr": 39,
-        "word": "trust",
-        "story": "In him, the people found trust, seeing a hero in their darkest times.",
+        "word": "secrets",
+        "story": "Max deciphered codes leading to a concealed vault, filled with secrets.",
         "imagePath": "assets/levels/39.jpg",
         "svgPath": "assets/levels/39.svg"
     },
     {
         "nr": 40,
-        "word": "vision",
-        "story": "His vision for a safer world fueled his every move and strategy.",
+        "word": "empire",
+        "story": "Unraveling Viper's network, he found connections to a global criminal empire.",
         "imagePath": "assets/levels/40.jpg",
         "svgPath": "assets/levels/40.svg"
     },
     {
         "nr": 41,
-        "word": "subdued",
-        "story": "In moments of risk, Max subdued his fear with the force of his strong convictions.",
+        "word": "allies",
+        "story": "Max couldn't fight this battle alone; he needed trustworthy allies.",
         "imagePath": "assets/levels/41.jpg",
         "svgPath": "assets/levels/41.svg"
     },
     {
         "nr": 42,
-        "word": "courage",
-        "story": "His courage became a beacon of hope for those who had none.",
+        "word": "labs",
+        "story": "He found them in unlikely places, from gritty bars to high-tech labs.",
         "imagePath": "assets/levels/42.jpg",
         "svgPath": "assets/levels/42.svg"
     },
     {
         "nr": 43,
-        "word": "moment",
-        "story": "Lurking in the shadow, he awaited the right moment to strike against injustice.",
+        "word": "arts",
+        "story": "Each ally brought unique skills, from hacking to mastery in various arts.",
         "imagePath": "assets/levels/43.jpg",
         "svgPath": "assets/levels/43.svg"
     },
     {
         "nr": 44,
-        "word": "crusade",
-        "story": "An unexpected ally appeared, offering help in his crusade against darkness.",
+        "word": "craft",
+        "story": "Together, they formed a covert team, each member a master of their craft.",
         "imagePath": "assets/levels/44.jpg",
         "svgPath": "assets/levels/44.svg"
     },
     {
         "nr": 45,
-        "word": "protect",
-        "story": "Each villain that rose against him only strengthened his resolve to protect the innocent.",
+        "word": "spies",
+        "story": "Their combined efforts slowly dismantled Viper's vast web of spies.",
         "imagePath": "assets/levels/45.jpg",
         "svgPath": "assets/levels/45.svg"
     },
     {
         "nr": 46,
-        "word": "brink",
-        "story": "His beloved city, now teetering on the brink of chaos, needed him more than ever.",
+        "word": "man",
+        "story": "A significant victory came with the capture of Viper's right-hand man.",
         "imagePath": "assets/levels/46.jpg",
         "svgPath": "assets/levels/46.svg"
     },
     {
         "nr": 47,
-        "word": "clash",
-        "story": "As the night deepened, the clash between good and evil became inevitable.",
+        "word": "cache",
+        "story": "Secrets spilled, revealing the location of a massive arms cache.",
         "imagePath": "assets/levels/47.jpg",
         "svgPath": "assets/levels/47.svg"
     },
     {
         "nr": 48,
-        "word": "time",
-        "story": "Unseen, unheard, but always there, Max was the true hero of his time.",
+        "word": "method",
+        "story": "Nightly raids and precision strikes became their primary method.",
         "imagePath": "assets/levels/48.jpg",
         "svgPath": "assets/levels/48.svg"
     },
     {
         "nr": 49,
-        "word": "storm",
-        "story": "The conflict continued fiercely, its sounds resonating through the quiet streets like a storm.",
+        "word": "move",
+        "story": "The tide was turning, but at a cost; danger shadowed their every move.",
         "imagePath": "assets/levels/49.jpg",
         "svgPath": "assets/levels/49.svg"
     },
     {
         "nr": 50,
-        "word": "destiny",
-        "story": "Fulfilling his destiny, Max embraced his role as the guardian of peace and justice.",
+        "word": "terror",
+        "story": "The final showdown loomed, promising an end to Viper's reign of terror.",
         "imagePath": "assets/levels/50.jpg",
         "svgPath": "assets/levels/50.svg"
     },
     {
         "nr": 51,
-        "word": "doubt",
-        "story": "Amidst his struggles, moments of doubt occasionally clouded Max's judgment.",
+        "word": "past",
+        "story": "The showdown took place in an abandoned arena, echoing with ghosts of the past.",
         "imagePath": "assets/levels/51.jpg",
         "svgPath": "assets/levels/51.svg"
     },
     {
         "nr": 52,
-        "word": "mission",
-        "story": "Yet, he always returned to his core mission, guided by an unyielding pursuit of truth.",
+        "word": "minions",
+        "story": "Viper was cunning, armed with deadly weapons and fierce minions.",
         "imagePath": "assets/levels/52.jpg",
         "svgPath": "assets/levels/52.svg"
     },
     {
         "nr": 53,
-        "word": "honor",
-        "story": "Max's honor dictated his every action, ensuring he never strayed from his moral compass.",
+        "word": "will",
+        "story": "The battle was brutal, testing the limits of Max's strength and will.",
         "imagePath": "assets/levels/53.jpg",
         "svgPath": "assets/levels/53.svg"
     },
     {
         "nr": 54,
-        "word": "eyes",
-        "story": "Gaining trust from those he protected, Max became an icon in the eyes of the people.",
+        "word": "face",
+        "story": "In the heat of combat, Max's mask was torn, revealing his true face.",
         "imagePath": "assets/levels/54.jpg",
         "svgPath": "assets/levels/54.svg"
     },
     {
         "nr": 55,
-        "word": "justice",
-        "story": "His unwavering dedication to justice inspired others to follow in his footsteps.",
+        "word": "rule",
+        "story": "With a blend of strategy and valor, Max overpowered Viper, ending his rule.",
         "imagePath": "assets/levels/55.jpg",
         "svgPath": "assets/levels/55.svg"
     },
     {
         "nr": 56,
-        "word": "simple",
-        "story": "Max's legacy would be a tale of a simple man becoming a legend.",
+        "word": "relief",
+        "story": "After Viper's defeat, the city breathed a sigh of collective relief.",
         "imagePath": "assets/levels/56.jpg",
         "svgPath": "assets/levels/56.svg"
     },
     {
         "nr": 57,
-        "word": "threat",
-        "story": "A new threat loomed, testing Max's resolve and the promises he had made.",
+        "word": "heroes",
+        "story": "Max, now more than a myth, inspired a new generation of heroes.",
         "imagePath": "assets/levels/57.jpg",
         "svgPath": "assets/levels/57.svg"
     },
     {
         "nr": 58,
-        "word": "commit",
-        "story": "Confronted with a seemingly insurmountable decision, Max reflected on the sacrifice that he may need to commit to.",
+        "word": "forms",
+        "story": "He understood that evil, like a hydra, would always find new forms.",
         "imagePath": "assets/levels/58.jpg",
         "svgPath": "assets/levels/58.svg"
     },
     {
         "nr": 59,
-        "word": "balance",
-        "story": "The future of his city hung in balance, depending on his next action.",
+        "word": "dim",
+        "story": "Yet, in the hearts of the brave, the light of justice would never dim.",
         "imagePath": "assets/levels/59.jpg",
         "svgPath": "assets/levels/59.svg"
     },
     {
         "nr": 60,
-        "word": "odds",
-        "story": "His clear vision for a better world was what kept him fighting against all odds.",
+        "word": "battle",
+        "story": "His mission was eternal, a constant battle between shadow and light.",
         "imagePath": "assets/levels/60.jpg",
         "svgPath": "assets/levels/60.svg"
     },
     {
         "nr": 61,
-        "word": "leading",
-        "story": "During the bleakest moments, Max's bravery was most luminous, leading him through danger.",
+        "word": "walls",
+        "story": "Stories of Max's adventures spread far beyond the city's walls.",
         "imagePath": "assets/levels/61.jpg",
         "svgPath": "assets/levels/61.svg"
     },
     {
         "nr": 62,
-        "word": "firm",
-        "story": "Even in the overwhelming shadow of uncertainty, he stood firm and resolute.",
+        "word": "deeds",
+        "story": "People from all walks of life drew courage from his deeds.",
         "imagePath": "assets/levels/62.jpg",
         "svgPath": "assets/levels/62.svg"
     },
     {
         "nr": 63,
-        "word": "depth",
-        "story": "Confronting his enemy, Max realized the true depth of the villain's depravity.",
+        "word": "limits",
+        "story": "As years passed, Max became a symbol, transcending his human limits.",
         "imagePath": "assets/levels/63.jpg",
         "svgPath": "assets/levels/63.svg"
     },
     {
         "nr": 64,
-        "word": "sorrow",
-        "story": "Sorrow for those lost fueled his commitment to safeguard others from harm.",
+        "word": "valor",
+        "story": "Monuments and murals across the city depicted his acts of valor.",
         "imagePath": "assets/levels/64.jpg",
         "svgPath": "assets/levels/64.svg"
     },
     {
         "nr": 65,
-        "word": "victory",
-        "story": "Each small victory in his quest felt like a step towards a greater good.",
+        "word": "pursuit",
+        "story": "His legacy was not in being invincible but in his relentless pursuit.",
         "imagePath": "assets/levels/65.jpg",
         "svgPath": "assets/levels/65.svg"
     },
     {
         "nr": 66,
-        "word": "friend",
-        "story": "Unlikely alliances formed, as Max found a friend in a former foe.",
+        "word": "freedom",
+        "story": "Max knew that vigilance was the price of peace and freedom.",
         "imagePath": "assets/levels/66.jpg",
         "svgPath": "assets/levels/66.svg"
     },
     {
         "nr": 67,
-        "word": "wavered",
-        "story": "Despite the omnipresent danger, Max's resolve to fight never wavered.",
+        "word": "world",
+        "story": "Night after night, he stood watch, a sentinel in an ever-changing world.",
         "imagePath": "assets/levels/67.jpg",
         "svgPath": "assets/levels/67.svg"
     },
     {
         "nr": 68,
-        "word": "secret",
-        "story": "A heavy burden, Max safeguarded his secret identity from even those closest to him.",
+        "word": "growth",
+        "story": "Each dawn brought new challenges, but also new opportunities for growth.",
         "imagePath": "assets/levels/68.jpg",
         "svgPath": "assets/levels/68.svg"
     },
     {
         "nr": 69,
-        "word": "loyalty",
-        "story": "His unyielding loyalty to his cause earned him both respect and enemies.",
+        "word": "hero",
+        "story": "His journey was a reminder: in each of us resides a potential hero.",
         "imagePath": "assets/levels/69.jpg",
         "svgPath": "assets/levels/69.svg"
     },
     {
         "nr": 70,
-        "word": "journey",
-        "story": "The path Max walked seemed predestined, a journey marked by fate and destiny.",
+        "word": "light",
+        "story": "The story of Max and the city continues, an unending dance of darkness and light.",
         "imagePath": "assets/levels/70.jpg",
         "svgPath": "assets/levels/70.svg"
     },
     {
         "nr": 71,
-        "word": "marking",
-        "story": "Earning the city's trust was a milestone, marking Max as a true hero.",
+        "word": "chaos",
+        "story": "Unbeknownst to Max, a new menace, Serpent, began weaving a network of chaos.",
         "imagePath": "assets/levels/71.jpg",
         "svgPath": "assets/levels/71.svg"
     },
     {
         "nr": 72,
-        "word": "grow",
-        "story": "He faced his fear, realizing it was the only way to grow stronger.",
+        "word": "poison",
+        "story": "Serpent's influence crept like poison through the underbelly of the city.",
         "imagePath": "assets/levels/72.jpg",
         "svgPath": "assets/levels/72.svg"
     },
     {
         "nr": 73,
-        "word": "mantle",
-        "story": "Max's actions brought honor to those who had previously worn the hero's mantle.",
+        "word": "threat",
+        "story": "Max, vigilant as ever, tracked the subtle signs of this emerging threat.",
         "imagePath": "assets/levels/73.jpg",
         "svgPath": "assets/levels/73.svg"
     },
     {
         "nr": 74,
-        "word": "endure",
-        "story": "He was not just fighting for today, but for a legacy that would endure.",
+        "word": "last",
+        "story": "Clashes in the shadows became frequent, each encounter more dangerous than the last.",
         "imagePath": "assets/levels/74.jpg",
         "svgPath": "assets/levels/74.svg"
     },
     {
         "nr": 75,
-        "word": "molded",
-        "story": "When presented with a tough decision, Max was aware that every choice molded his future.",
+        "word": "virus",
+        "story": "Max deciphered Serpent's plan: to unleash a deadly virus upon the world.",
         "imagePath": "assets/levels/75.jpg",
         "svgPath": "assets/levels/75.svg"
     },
     {
         "nr": 76,
-        "word": "distant",
-        "story": "Max's dream of a peaceful city seemed distant, yet he pressed on.",
+        "word": "lab",
+        "story": "The race to find the virus's antidote led Max to a secluded lab.",
         "imagePath": "assets/levels/76.jpg",
         "svgPath": "assets/levels/76.svg"
     },
     {
         "nr": 77,
-        "word": "sacrifice",
-        "story": "Sacrifice was inevitable; he understood some battles demanded a personal cost.",
+        "word": "comply",
+        "story": "Inside, he encountered scientists forced to comply with Serpent's sinister will.",
         "imagePath": "assets/levels/77.jpg",
         "svgPath": "assets/levels/77.svg"
     },
     {
         "nr": 78,
-        "word": "conflict",
-        "story": "His unwavering moral principle became the guiding star in his conflict with the dark forces.",
+        "word": "trap",
+        "story": "Stealthily, he secured a sample of the antidote, narrowly escaping a lethal trap.",
         "imagePath": "assets/levels/78.jpg",
         "svgPath": "assets/levels/78.svg"
     },
     {
         "nr": 79,
-        "word": "never",
-        "story": "Though each battle left its mark, Max's determination never wavered.",
+        "word": "chaotic",
+        "story": "The streets turned chaotic as the virus's impact began to show.",
         "imagePath": "assets/levels/79.jpg",
         "svgPath": "assets/levels/79.svg"
     },
     {
         "nr": 80,
-        "word": "arduous",
-        "story": "The journey was long and arduous, but Max's spirit never faltered.",
+        "word": "lives",
+        "story": "Time was running out; Max's every move was crucial to save countless lives.",
         "imagePath": "assets/levels/80.jpg",
         "svgPath": "assets/levels/80.svg"
     },
     {
         "nr": 81,
-        "word": "closer",
-        "story": "Each victory brought Max closer to his ultimate goal: peace for the city.",
+        "word": "forest",
+        "story": "The final confrontation was inevitable, in the heart of the forest.",
         "imagePath": "assets/levels/81.jpg",
         "svgPath": "assets/levels/81.svg"
     },
     {
         "nr": 82,
-        "word": "greater",
-        "story": "Moving past the shadows of skepticism, he gained greater confidence and determination.",
+        "word": "ready",
+        "story": "Serpent, armed with advanced technology and a ruthless army, was ready.",
         "imagePath": "assets/levels/82.jpg",
         "svgPath": "assets/levels/82.svg"
     },
     {
         "nr": 83,
-        "word": "thrived",
-        "story": "Max began to see a future where his city thrived, free of fear and crime.",
+        "word": "hope",
+        "story": "Battle ensued, a whirlwind of fury, skill, and desperate hope.",
         "imagePath": "assets/levels/83.jpg",
         "svgPath": "assets/levels/83.svg"
     },
     {
         "nr": 84,
-        "word": "tough",
-        "story": "He was turning into a legend, a sign of hope and tough spirit.",
+        "word": "cost",
+        "story": "In a daring move, Max delivered the antidote, but at a great personal cost.",
         "imagePath": "assets/levels/84.jpg",
         "svgPath": "assets/levels/84.svg"
     },
     {
         "nr": 85,
-        "word": "front",
-        "story": "Max's courage inspired others to join his cause, creating a united front.",
+        "word": "safety",
+        "story": "Wounded, he still managed to defeat Serpent, ensuring the city's safety.",
         "imagePath": "assets/levels/85.jpg",
         "svgPath": "assets/levels/85.svg"
     },
     {
         "nr": 86,
-        "word": "bravery",
-        "story": "True heroism, he learned, was about small acts of bravery repeated day after day.",
+        "word": "severe",
+        "story": "Recovery was slow; Max's injuries were severe but not fatal.",
         "imagePath": "assets/levels/86.jpg",
         "svgPath": "assets/levels/86.svg"
     },
     {
         "nr": 87,
-        "word": "change",
-        "story": "Change was happening, slowly but surely, as the city began to heal.",
+        "word": "price",
+        "story": "He pondered his life, the sacrifices made, and the price of being a hero.",
         "imagePath": "assets/levels/87.jpg",
         "svgPath": "assets/levels/87.svg"
     },
     {
         "nr": 88,
-        "word": "struggle",
-        "story": "The struggle shaped Max, forging him into more than a hero - a beacon of hope.",
+        "word": "joys",
+        "story": "In the quiet of his recovery, he found solace in simple, everyday joys.",
         "imagePath": "assets/levels/88.jpg",
         "svgPath": "assets/levels/88.svg"
     },
     {
         "nr": 89,
-        "word": "reflect",
-        "story": "His enduring legacy would reflect his determination, compassionate nature, and steadfast resolve.",
+        "word": "noise",
+        "story": "The city, now healed, continued to buzz with life and endless noise.",
         "imagePath": "assets/levels/89.jpg",
         "svgPath": "assets/levels/89.svg"
     },
     {
         "nr": 90,
-        "word": "beyond",
-        "story": "Max came to realize that his journey extended beyond himself; it was for the future of everyone.",
+        "word": "battles",
+        "story": "Max realized that heroes were everywhere, each fighting their own silent battles.",
         "imagePath": "assets/levels/90.jpg",
         "svgPath": "assets/levels/90.svg"
     },
     {
         "nr": 91,
-        "word": "forged",
-        "story": "Each battle forged Max's character, turning challenges into stepping stones.",
+        "word": "mentor",
+        "story": "With time, Max chose to mentor a new generation of heroes.",
         "imagePath": "assets/levels/91.jpg",
         "svgPath": "assets/levels/91.svg"
     },
     {
         "nr": 92,
-        "word": "sky",
-        "story": "Under the night sky, Max patrolled, ever vigilant, ever determined.",
+        "word": "skills",
+        "story": "Each protege brought a unique perspective and set of skills.",
         "imagePath": "assets/levels/92.jpg",
         "svgPath": "assets/levels/92.svg"
     },
     {
         "nr": 93,
-        "word": "reality",
-        "story": "His dream of a safer city was becoming a tangible reality.",
+        "word": "mercy",
+        "story": "He taught them the importance of balance between strength and mercy.",
         "imagePath": "assets/levels/93.jpg",
         "svgPath": "assets/levels/93.svg"
     },
     {
         "nr": 94,
-        "word": "words",
-        "story": "Max became a symbol of justice, his actions speaking louder than words.",
+        "word": "justice",
+        "story": "Together, they stood against the darkness, protectors of truth and justice.",
         "imagePath": "assets/levels/94.jpg",
         "svgPath": "assets/levels/94.svg"
     },
     {
         "nr": 95,
-        "word": "impact",
-        "story": "The impact of his deeds rippled through the community, instilling a newfound hope.",
+        "word": "heart",
+        "story": "Max's legacy was secure, his teachings embedded in the city's heart.",
         "imagePath": "assets/levels/95.jpg",
         "svgPath": "assets/levels/95.svg"
     },
     {
         "nr": 96,
-        "word": "flame",
-        "story": "Max's spirit, unbroken by adversity, became an unquenchable flame against darkness.",
+        "word": "strong",
+        "story": "As an elder, Max watched his city transform, resilient and strong.",
         "imagePath": "assets/levels/96.jpg",
         "svgPath": "assets/levels/96.svg"
     },
     {
         "nr": 97,
-        "word": "lesson",
-        "story": "The greatest lesson Max learned was that every individual has the power to make a difference.",
+        "word": "mythos",
+        "story": "Tales of his exploits became part of the city's vibrant mythos.",
         "imagePath": "assets/levels/97.jpg",
         "svgPath": "assets/levels/97.svg"
     },
     {
         "nr": 98,
-        "word": "beacon",
-        "story": "His legacy would be a beacon, guiding future generations towards light and truth.",
+        "word": "courage",
+        "story": "He smiled, knowing his journey had inspired hope and courage.",
         "imagePath": "assets/levels/98.jpg",
         "svgPath": "assets/levels/98.svg"
     },
     {
         "nr": 99,
-        "word": "person",
-        "story": "Max, once an ordinary person, had truly become an unforgettable hero.",
+        "word": "spirit",
+        "story": "In the end, Max's story was about the triumph of spirit over insurmountable odds.",
         "imagePath": "assets/levels/99.jpg",
         "svgPath": "assets/levels/99.svg"
     },
     {
         "nr": 100,
-        "word": "future",
-        "story": "The future, though uncertain, looked brighter with Max leading the charge against injustice.",
+        "word": "beacon",
+        "story": "And so, the legend of Max, the silent guardian, became an eternal beacon of light.",
         "imagePath": "assets/levels/100.jpg",
         "svgPath": "assets/levels/100.svg"
     }

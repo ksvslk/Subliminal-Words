@@ -57,6 +57,8 @@ class Puzzle extends StatelessWidget {
                 value: levelModel.pictureModel,
                 child: Consumer<PictureModel>(
                   builder: (context, model, child) {
+                    _log.log(Level.INFO, "now with letters: ${model.highlightLetters.first.letter}");
+
                     return RotatedBox(
                       quarterTurns: model.quarterTurn,
                       child: AnimatedContainer(
@@ -80,19 +82,19 @@ class Puzzle extends StatelessWidget {
                                   .map(
                                     (svgLetter) => AnimatedOpacity(
                                       duration: Duration(
-                                          milliseconds: svgLetter.show ? 1750 : 1750),
-                                      opacity: svgLetter.show ||
-                                              levelModel.levelCompleted
+                                          milliseconds: svgLetter.show ? 1750 : 0),
+                                      opacity: (svgLetter.show)
                                           ? 1.0
                                           : 0.0,
                                       curve: Curves.fastOutSlowIn,
                                       onEnd: () {
+                                      
                                         _log.info(() =>
                                             'Ending svg letter animation for - ${svgLetter.letter} with show - ${svgLetter.show}');
                                         if (svgLetter.show) {
                                           model.hideLetter(svgLetter.letter);
-                                           _log.info(() =>
-                                            'hideLetter - ${svgLetter.letter}}');
+                                          _log.info(() =>
+                                              'hideLetter - ${svgLetter.letter}}');
                                         }
                                       },
                                       child: CustomPaint(
@@ -101,7 +103,8 @@ class Puzzle extends StatelessWidget {
                                                 svgLetter.path),
                                             letterOutlineColor:
                                                 Theme.of(context)
-                                                    .colorScheme.primary),
+                                                    .colorScheme
+                                                    .primary),
                                         child: AspectRatio(
                                           aspectRatio: 1 / 1,
                                           child: Container(
