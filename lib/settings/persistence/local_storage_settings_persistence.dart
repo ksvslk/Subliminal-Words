@@ -6,6 +6,8 @@ import 'dart:ui';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'settings_persistence.dart';
+import 'package:operation_hermes/C.dart' as C;
+
 
 /// An implementation of [SettingsPersistence] that uses
 /// `package:shared_preferences`.
@@ -31,7 +33,7 @@ class LocalStorageSettingsPersistence extends SettingsPersistence {
     @override
   Future<int> getSeedColor() async {
     final prefs = await instanceFuture;
-    return prefs.getInt('seedColor') ?? const Color.fromARGB(255, 0, 0, 255).value;
+    return prefs.getInt('seedColor') ?? C.DEFAULT_THEME_COLOR.value;
   }
 
   // SET

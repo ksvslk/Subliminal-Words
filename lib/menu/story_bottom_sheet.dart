@@ -17,7 +17,7 @@ class StoryBottomSheet extends StatelessWidget {
         future: allLevels,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.done) {
-            final wordToLeveNr = {for (var item in snapshot.data!.$1) item.$1.toLowerCase() : item.$3};
+            final wordToLeveNr = {for (var item in snapshot.data!.$1) item.$1.replaceAll(punctuation, '') : item.$3};
             final allTextWords = snapshot.data!.$1.fold(
                 List<String>.empty(growable: true),
                 (previousValue, element) =>
@@ -29,6 +29,7 @@ class StoryBottomSheet extends StatelessWidget {
               final text = index < limit ? word : "✴︎";
               final isWordLevel = wordToLeveNr.containsKey(wordWithoutPunctuation);
               final levelNr = wordToLeveNr[wordWithoutPunctuation] ?? -1;
+
               return WidgetSpan(
                   child: Container(
                       margin: const EdgeInsets.symmetric(vertical: 2.0),

@@ -5,6 +5,7 @@
 import 'package:flutter/widgets.dart';
 
 import 'persistence/settings_persistence.dart';
+import 'package:operation_hermes/C.dart' as C;
 
 /// An class that holds settings like [playerName] or [musicOn],
 /// and saves them to an injected persistence store.
@@ -16,7 +17,7 @@ class SettingsController {
 
   ValueNotifier<bool> soundsOn = ValueNotifier(false);
   ValueNotifier<bool> musicOn = ValueNotifier(false);
-  ValueNotifier<int> seedColor = ValueNotifier(const Color.fromARGB(255, 0, 0, 255).value);
+  ValueNotifier<int> seedColor = ValueNotifier(C.DEFAULT_THEME_COLOR.value);
 
   /// Creates a new instance of [SettingsController] backed by [persistence].
   SettingsController({required SettingsPersistence persistence})

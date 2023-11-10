@@ -81,8 +81,6 @@ Logger _log = Logger('main.dart');
 //Color.fromARGB(255, 255, 255, 0)
 //Color.fromARGB(255, 255, 0, 0)
 
-const mainSeedColor = Color.fromARGB(255, 0, 0, 255);
-
 class MyApp extends StatelessWidget {
   final SettingsPersistence settingsPersistence;
   final LevelPersistence levelPersistence;
