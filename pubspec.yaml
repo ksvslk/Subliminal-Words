@@ -52,6 +52,8 @@ dependencies:
   animations: ^2.0.8
   url_launcher: ^6.2.1
   auto_size_text: ^3.0.0
+  get: ^4.6.6
+  animated_text_kit: ^4.2.2
 
 
 dev_dependencies:

@@ -89,6 +89,8 @@ class LocalStorageLevelPersistence extends LevelPersistence {
           level['story'],
           "assets/levels/${level['nr']}.jpg",
           "assets/levels/${level['nr']}.svg",
+          level['tooltipStart'],
+          level['tooltipEnd'],
           false,
           false,
           0,

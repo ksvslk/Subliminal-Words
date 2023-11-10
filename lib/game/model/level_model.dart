@@ -13,6 +13,8 @@ class LevelModel with ChangeNotifier {
   static final _log = Logger('LevelModel');
 
   int levelNr = -1;
+  String tooltipStart = "";
+  String tooltipEnd = "";
   bool levelCompleted = false;
   bool unlocked = false;
   late PictureModel pictureModel;
@@ -39,6 +41,8 @@ class LevelModel with ChangeNotifier {
   Future<void> _createModels(
       LevelData level, (String, String)? previousStory) async {
     levelNr = level.nr;
+    tooltipStart = level.tooltipStart;
+    tooltipEnd = level.tooltipEnd;
 
     storyModel = StoryModel();
     storyModel.previousWordAndStory = previousStory ?? ("", "And so it starts...");
@@ -66,6 +70,12 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
+  void hideTooltipStart()
+  {
+    tooltipStart = "";
+    notifyListeners();
+  }
+
   Future<void> nextLevel() async {
     await loadLevel(levelNr + 1);
   }
@@ -90,7 +100,9 @@ class LevelModel with ChangeNotifier {
       LevelData level, (String, String)? previousStory) async {
     // LevelModel
     levelNr = level.nr;
-
+    tooltipStart = level.tooltipStart;
+    tooltipEnd = level.tooltipEnd;
+    
     storyModel.previousWordAndStory = previousStory ?? ("", "And so it starts...");
     storyModel.currentWordAndStory = (level.word, level.story);
  
@@ -164,6 +176,8 @@ class LevelModel with ChangeNotifier {
         storyModel.currentWordAndStory.$2,
         pictureModel.picturePath,
         pictureModel.svgPath,
+        tooltipStart,
+        tooltipEnd,
         manipulationEnabled,
         levelCompleted,
         fieldModel.disabledLettersCount,
