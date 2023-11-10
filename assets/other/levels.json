@@ -50,7 +50,7 @@
         "story": "Each day, he roamed the winding streets, eyes wide with wonder and curiosity.",
         "imagePath": "assets/levels/6.jpg",
         "svgPath": "assets/levels/6.svg",
-        "tooltipStart":"",
+        "tooltipStart":"You’ll find a variety of color themes in the top left corner menu. Choose whichever resonates best with you.",
         "tooltipEnd":""
     },
     {
@@ -293,7 +293,7 @@
         "story": "Information was key; it flowed like a river through the dense urban jungle.",
         "imagePath": "assets/levels/33.jpg",
         "svgPath": "assets/levels/33.svg",
-        "tooltipStart":"",
+        "tooltipStart":"Feel free to leave feedback on the game whenever you're ready; your input is invaluable to me.",
         "tooltipEnd":""
     },
     {
