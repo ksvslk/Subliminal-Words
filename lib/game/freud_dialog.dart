@@ -38,7 +38,7 @@ class FreudDialog extends StatelessWidget {
             margin: const EdgeInsets.all(
                 8.0),
             child: Image.asset(
-              'assets/other/freud200.png',
+              'assets/other/freud200_winter.png',
               fit: BoxFit.scaleDown,
             ),
           ),
