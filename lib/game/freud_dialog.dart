@@ -14,22 +14,21 @@ class FreudDialog extends StatelessWidget {
     final levelModel = context.watch<LevelModel>();
 
     return ChangeNotifierProvider<LevelModel>.value(
-        value: levelModel,
-        child: Consumer<LevelModel>(builder: (context, levelModel, child) {
-          _log.log(Level.INFO, "Building: tooltip start: ${levelModel.tooltipStart}, ${levelModel.tooltipEnd}");
-
-          var showTooltip = (false, "");
-          if (!levelModel.levelCompleted &&
-              levelModel.tooltipStart.isNotEmpty) {
-            showTooltip = (true, levelModel.tooltipStart);
-          } else if (levelModel.levelCompleted &&
-              levelModel.tooltipEnd.isNotEmpty) {
-            showTooltip = (true, levelModel.tooltipEnd);
-          }
-          return showTooltip.$1
-              ? Expanded(
-                  child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
+      value: levelModel,
+      child: Consumer<LevelModel>(builder: (context, levelModel, child) {
+        _log.log(Level.INFO,
+            "Building: tooltip start: ${levelModel.tooltipStart}, ${levelModel.tooltipEnd}");
+        var showTooltip = (false, "");
+        if (!levelModel.levelCompleted && levelModel.tooltipStart.isNotEmpty) {
+          showTooltip = (true, levelModel.tooltipStart);
+        } else if (levelModel.levelCompleted &&
+            levelModel.tooltipEnd.isNotEmpty) {
+          showTooltip = (true, levelModel.tooltipEnd);
+        }
+        return showTooltip.$1
+            ? Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
                   onTap: () {
                     if (levelModel.levelCompleted) {
                       levelModel.nextLevel();
@@ -38,6 +37,21 @@ class FreudDialog extends StatelessWidget {
                     }
                   },
                   child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin:
+                            Alignment.center, // Start the gradient from the top
+                        end: Alignment
+                            .bottomCenter, // End the gradient at the bottom
+                        colors: [
+                          Theme.of(context).colorScheme.background.withOpacity(
+                              0.0), // The top color of the gradientf
+                          Theme.of(context)
+                              .colorScheme
+                              .background, // The bottom color of the gradient
+                        ],
+                      ),
+                    ),
                     alignment: Alignment.bottomCenter,
                     width: double.infinity,
                     height: double.infinity,
@@ -76,12 +90,10 @@ class FreudDialog extends StatelessWidget {
                                     isRepeatingAnimation: false,
                                     displayFullTextOnTap: true,
                                     animatedTexts: [
-                                      TypewriterAnimatedText(
-                                          showTooltip.$2,
+                                      TypewriterAnimatedText(showTooltip.$2,
                                           speed:
                                               const Duration(milliseconds: 80),
-                                          cursor: "🀫"
-                                          ),
+                                          cursor: "🀫"),
                                     ],
                                   ),
                                 ),
@@ -101,8 +113,10 @@ class FreudDialog extends StatelessWidget {
                           ),
                         ]),
                   ),
-                ))
-              : const SizedBox.shrink();
-        }));
+                ),
+              )
+            : const SizedBox.shrink();
+      }),
+    );
   }
 }
