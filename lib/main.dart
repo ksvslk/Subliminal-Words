@@ -11,6 +11,7 @@ import 'package:operation_hermes/ads/ads_controller.dart';
 import 'package:operation_hermes/game/game_field.dart';
 import 'package:operation_hermes/game/game_field_wrapper.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
+import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
 import 'package:operation_hermes/level/persistence/local_storage_level_persistence.dart';
@@ -55,6 +56,13 @@ Future<void> main() async {
     adsController.initialize();
   }
 
+  GamesServicesController? gamesServicesController;
+  if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+     gamesServicesController = GamesServicesController()
+       // Attempt to log the player in.
+       ..initialize();
+  }
+
   InAppPurchaseController? inAppPurchaseController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
     inAppPurchaseController = InAppPurchaseController(InAppPurchase.instance)
@@ -68,7 +76,8 @@ Future<void> main() async {
         settingsPersistence: LocalStorageSettingsPersistence(),
         levelPersistence: LocalStorageLevelPersistence(),
         adsController: adsController,
-        inAppPurchaseController: inAppPurchaseController),
+        inAppPurchaseController: inAppPurchaseController,
+        gamesServicesController: gamesServicesController),
   );
 }
 
@@ -86,13 +95,15 @@ class MyApp extends StatelessWidget {
   final LevelPersistence levelPersistence;
   final AdsController? adsController;
   final InAppPurchaseController? inAppPurchaseController;
+  final GamesServicesController? gamesServicesController;
 
   const MyApp(
       {super.key,
       required this.settingsPersistence,
       required this.levelPersistence,
       required this.adsController,
-      required this.inAppPurchaseController});
+      required this.inAppPurchaseController,
+      required this.gamesServicesController});
 
   @override
   Widget build(BuildContext context) {
@@ -105,6 +116,8 @@ class MyApp extends StatelessWidget {
             persistence: settingsPersistence,
           )..loadStateFromPersistence(),
         ),
+        Provider<GamesServicesController?>.value(
+              value: gamesServicesController),
         ChangeNotifierProvider<AdsController?>.value(value: adsController),
         ChangeNotifierProvider<InAppPurchaseController?>.value(
             value: inAppPurchaseController),

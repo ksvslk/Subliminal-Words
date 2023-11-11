@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/game/letter_box.dart';
+import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:operation_hermes/menu/licenses_dialog.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
 import 'package:provider/provider.dart';
@@ -55,6 +56,7 @@ class _SettingsMenuState extends State<SettingsMenu> {
   @override
   Widget build(BuildContext context) {
     final settings = context.read<SettingsController>();
+    final gamesServices = context.read<GamesServicesController>();
 
     return MenuAnchor(
       builder:
@@ -75,7 +77,9 @@ class _SettingsMenuState extends State<SettingsMenu> {
         switch (item) {
           case MenuItem.achievements:
             return MenuItemButton(
-                onPressed: () {},
+                onPressed: () {
+                  gamesServices.showAchievements();
+                },
                 leadingIcon: const Icon(Icons.leaderboard_outlined),
                 child: Text(item.name));
           case MenuItem.theme:

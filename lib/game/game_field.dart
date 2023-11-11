@@ -8,6 +8,7 @@ import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/game/letter_box_data.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
+import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:provider/provider.dart';
 
 class GameField extends StatelessWidget {
@@ -18,6 +19,7 @@ class GameField extends StatelessWidget {
   Widget build(BuildContext context) {
     final audioController = context.read<AudioController>();
     final levelModel = context.watch<LevelModel>();
+    final gamesServices = context.read<GamesServicesController>();
 
     _log.log(Level.INFO, "Rebuilding whole GameField.");
 
@@ -95,6 +97,7 @@ class GameField extends StatelessWidget {
                                   if (result) {
                                     HapticFeedback.mediumImpact();
                                     audioController.playSfx(SfxType.win);
+                                    gamesServices.unlockAchievementForLevel(levelModel.levelNr);
                                   }
                                 }
                               },

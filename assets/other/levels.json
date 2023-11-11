@@ -32,7 +32,7 @@
         "story": "Tales of valor and heroism whispered in the air, sparking his dream.",
         "imagePath": "assets/levels/4.jpg",
         "svgPath": "assets/levels/4.svg",
-        "tooltipStart":"",
+        "tooltipStart":"Simply tap on the top text row to see the narrative you've crafted thus far.",
         "tooltipEnd":""
     },
     {
@@ -50,7 +50,7 @@
         "story": "Each day, he roamed the winding streets, eyes wide with wonder and curiosity.",
         "imagePath": "assets/levels/6.jpg",
         "svgPath": "assets/levels/6.svg",
-        "tooltipStart":"You’ll find a variety of color themes in the top left corner menu. Choose whichever resonates best with you.",
+        "tooltipStart":"",
         "tooltipEnd":""
     },
     {
@@ -194,7 +194,7 @@
         "story": "Max, undeterred, infiltrated the villain's lair, a forgotten factory.",
         "imagePath": "assets/levels/22.jpg",
         "svgPath": "assets/levels/22.svg",
-        "tooltipStart":"",
+        "tooltipStart":"You’ll find a variety of color themes in the top left corner menu. Choose whichever resonates best with you.",
         "tooltipEnd":""
     },
     {
