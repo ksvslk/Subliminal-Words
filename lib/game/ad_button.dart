@@ -54,7 +54,7 @@ class AdButton extends StatelessWidget {
           "Purchased (or all in ${allInPack?.status.name}) - $productId");
       return (
         getSuccessfulAction(audioController, levelModel),
-        (product.productName, const Icon(Icons.bolt))
+        (product.productName, const Icon(Icons.touch_app))
       );
     }
 
