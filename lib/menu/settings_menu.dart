@@ -4,6 +4,7 @@ import 'package:operation_hermes/menu/licenses_dialog.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
 
 enum MenuItem { achievements, theme, feedback, sound, music, about }
 
@@ -15,8 +16,12 @@ enum AboutSubMenuItem {
 
 enum ThemeSubMenuItem { red, yellow, green, blue, purple }
 
-final Uri _feedbackUri =
-    Uri.parse('https://play.google.com/store/apps/details?id=com.indest.hah');
+Uri _getFeedbackUri()
+{
+  return Platform.isAndroid ? Uri.parse('https://play.google.com/store/apps/details?id=com.indest.hah') :
+   Uri.parse('https://apps.apple.com/app/subliminal-words/id6468366578');
+}
+
 final Uri _followUri = Uri.parse('https://twitter.com/IndestGames');
 final Uri _privacyUri = Uri.parse('https://indest.ee/privacy-policy/');
 
@@ -104,7 +109,8 @@ class _SettingsMenuState extends State<SettingsMenu> {
           case MenuItem.feedback:
             return MenuItemButton(
                 onPressed: () {
-                  _launchUrl(_feedbackUri);
+                  final feedbackUri = _getFeedbackUri();
+                  _launchUrl(feedbackUri);
                 },
                 leadingIcon: const Icon(Icons.keyboard_outlined),
                 child: Text(item.name));
