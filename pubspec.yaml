@@ -55,6 +55,7 @@ dependencies:
   get: ^4.6.6
   animated_text_kit: ^4.2.2
   games_services: ^4.0.0
+  transparent_image: ^2.0.1
 
 
 dev_dependencies:

@@ -40,9 +40,11 @@ class StoryPages extends StatelessWidget {
                       : null,
                   borderRadius: const BorderRadius.all(Radius.circular(8.0))),
               child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
                   onTap: isWordLevel
                       ? () {
                           levelModel.loadLevel(levelNr);
+                          Navigator.of(context).pop();
                         }
                       : null,
                   child: Text(
@@ -101,18 +103,12 @@ class StoryPages extends StatelessWidget {
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  Padding(
+                   Padding(
                     padding: const EdgeInsets.all(16.0),
-                    child: ValueListenableBuilder<int>(
-                        builder:
-                            (BuildContext context, int value, Widget? child) {
-                          return LinearProgressIndicator(
-                            minHeight: 8.0,
-                              value: value / totalPages,
-                              borderRadius: BorderRadius.circular(8));
-                        },
-                        valueListenable: levelModel.currentStoryCardPageNr),
-                  ),
+                    child: FilledButton(
+                      onPressed: () => {Navigator.pop(context)},
+                      child: const Text('Back to game')),
+                   ),
                   Expanded(
                     flex: 20,
                     child: PageView(
@@ -125,9 +121,18 @@ class StoryPages extends StatelessWidget {
                       },
                     ),
                   ),
-                  FilledButton(
-                      onPressed: () => {Navigator.pop(context)},
-                      child: const Text('Back to game'))
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: ValueListenableBuilder<int>(
+                        builder:
+                            (BuildContext context, int value, Widget? child) {
+                          return LinearProgressIndicator(
+                            minHeight: 8.0,
+                              value: value / totalPages,
+                              borderRadius: BorderRadius.circular(8));
+                        },
+                        valueListenable: levelModel.currentStoryCardPageNr),
+                  ),
                 ],
               ));
         } else {

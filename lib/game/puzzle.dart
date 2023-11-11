@@ -61,9 +61,7 @@ class Puzzle extends StatelessWidget {
 
                     return RotatedBox(
                       quarterTurns: model.quarterTurn,
-                      child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          curve: Curves.easeIn,
+                      child: Container(
                           transformAlignment: Alignment.center,
                           transform: Matrix4.diagonal3(vec3.Vector3(
                               model.scale, model.scale, model.scale)),
@@ -73,9 +71,11 @@ class Puzzle extends StatelessWidget {
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(4),
-                                child: Image.asset(
+                                child:
+                                 Image.asset(
                                   model.picturePath,
                                   fit: BoxFit.contain,
+                                  gaplessPlayback: true,
                                 ),
                               ),
                               ...model.highlightLetters

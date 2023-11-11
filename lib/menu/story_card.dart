@@ -10,13 +10,12 @@ class StoryCard extends StatelessWidget {
     return Center(
       child: Card(
         child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
+          child:Padding(padding: const EdgeInsets.all(16),
             child: RichText(
               text: TextSpan(children: text),
               textAlign: TextAlign.justify,
             ),
-          ),
+            ),
         ),
       ),
     );

@@ -1,5 +1,4 @@
 import 'package:animated_text_kit/animated_text_kit.dart';
-import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
