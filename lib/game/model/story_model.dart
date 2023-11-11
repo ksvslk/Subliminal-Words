@@ -11,7 +11,7 @@ class StoryModel with ChangeNotifier {
   void addNextStory((String, String) story)
   {
     _log.log(Level.INFO, "setLevelCompleted");
-    storyToCreate.forEach((element) {_log.log(Level.INFO, element.$2);});
+    for (var element in storyToCreate) {_log.log(Level.INFO, element.$2);}
     storyToCreate.add(story);
     notifyListeners();
   }

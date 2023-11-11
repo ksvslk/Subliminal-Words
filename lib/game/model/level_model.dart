@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/model/field_model.dart';
@@ -24,6 +25,8 @@ class LevelModel with ChangeNotifier {
   bool remove3Available = false;
   bool manipulationEnabled = false;
 
+  ValueNotifier<int> currentStoryCardPageNr = ValueNotifier(1);
+
   LevelModel({required this.persistence});
 
   Future<void> initialize() async {
@@ -45,7 +48,8 @@ class LevelModel with ChangeNotifier {
     tooltipEnd = level.tooltipEnd;
 
     storyModel = StoryModel();
-    storyModel.previousWordAndStory = previousStory ?? ("", "And so it starts...");
+    storyModel.previousWordAndStory =
+        previousStory ?? ("", "And so it starts...");
     storyModel.currentWordAndStory = (level.word, level.story);
     storyModel.addNextStory(storyModel.previousWordAndStory);
 
@@ -55,7 +59,8 @@ class LevelModel with ChangeNotifier {
         scale: 1.0,
         quarterTurn: 0,
         picturePath: level.picturePath,
-        svgPath: level.svgPath)..initializePicture(level);
+        svgPath: level.svgPath)
+      ..initializePicture(level);
 
     fieldModel = FieldModel(level: level);
 
@@ -70,8 +75,7 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void hideTooltipStart()
-  {
+  void hideTooltipStart() {
     tooltipStart = "";
     notifyListeners();
   }
@@ -102,10 +106,11 @@ class LevelModel with ChangeNotifier {
     levelNr = level.nr;
     tooltipStart = level.tooltipStart;
     tooltipEnd = level.tooltipEnd;
-    
-    storyModel.previousWordAndStory = previousStory ?? ("", "And so it starts...");
+
+    storyModel.previousWordAndStory =
+        previousStory ?? ("", "And so it starts...");
     storyModel.currentWordAndStory = (level.word, level.story);
- 
+
     // PictureModel
     await pictureModel.initializePicture(level);
 
@@ -120,17 +125,20 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<(List<(String, String, int)>, int)> getAllLevelsWordAndStories() async
-  {
-      final levels = await persistence.getAllLevels();
-      var index = 0;
-      for (var level in levels) {
-        level.story.split(' ').forEach((storyWord) {
-          if (!level.unlocked) return;
-          index = index + 1;
-        });
-      }
-      return (levels.map((e) => (e.word.toLowerCase(), e.story, e.nr)).toList(), index);      
+  Future<(List<(String, String, int)>, int)>
+      getAllLevelsWordAndStories() async {
+    final levels = await persistence.getAllLevels();
+    var index = 0;
+    for (var level in levels) {
+      level.story.split(' ').forEach((storyWord) {
+        if (!level.unlocked) return;
+        index = index + 1;
+      });
+    }
+    return (
+      levels.map((e) => (e.word.toLowerCase(), e.story, e.nr)).toList(),
+      index
+    );
   }
 
   void _setLevelCompleted() {
@@ -181,8 +189,7 @@ class LevelModel with ChangeNotifier {
         manipulationEnabled,
         levelCompleted,
         fieldModel.disabledLettersCount,
-        unlocked
-        );
+        unlocked);
   }
 
   Future<void> _save() async {

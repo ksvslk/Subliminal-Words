@@ -20,7 +20,7 @@ class Puzzle extends StatelessWidget {
 
     return Consumer<LevelModel>(builder: (context, levelModel, child) {
       _log.info(() =>
-          'Build puzzle. Consumer of LevelModel. Level complete: ${levelModel.levelCompleted}');
+          'Build puzzle. Consumer of LevelModel. Level complete: ${levelModel.pictureModel.picturePath}');
       return GestureDetector(
         onTap: levelModel.levelCompleted
             ? () {

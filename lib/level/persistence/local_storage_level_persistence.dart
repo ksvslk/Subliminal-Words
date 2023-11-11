@@ -127,13 +127,9 @@ class LocalStorageLevelPersistence extends LevelPersistence {
         s.add(story.replaceFirst(word, "#$word"));
         assert(words.length == item["nr"], 'Repeating $word');
       }
-
-      _log.log(Level.INFO, s.toString());
-   
       // Assert if set length is not equal to 100
       assert(words.length == 100, 'The number of unique words is not 100.');
 
-      print('All words are unique and their count is 100.');
     });
   }
 }

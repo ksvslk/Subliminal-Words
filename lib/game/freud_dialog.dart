@@ -26,8 +26,7 @@ class FreudDialog extends StatelessWidget {
           showTooltip = (true, levelModel.tooltipEnd);
         }
         return showTooltip.$1
-            ? Expanded(
-                child: GestureDetector(
+            ? GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTap: () {
                     if (levelModel.levelCompleted) {
@@ -85,7 +84,7 @@ class FreudDialog extends StatelessWidget {
                                       fontFamily: DefaultTextStyle.of(context)
                                           .style
                                           .fontFamily),
-                                  child: AnimatedTextKit(
+                                  child: IgnorePointer(child: AnimatedTextKit(
                                     key: Key(showTooltip.$2),
                                     isRepeatingAnimation: false,
                                     displayFullTextOnTap: true,
@@ -99,7 +98,7 @@ class FreudDialog extends StatelessWidget {
                                 ),
                               ),
                             ),
-                          ),
+                          )),
                           Flexible(
                             flex: 1,
                             fit: FlexFit.tight,
@@ -113,7 +112,6 @@ class FreudDialog extends StatelessWidget {
                           ),
                         ]),
                   ),
-                ),
               )
             : const SizedBox.shrink();
       }),
