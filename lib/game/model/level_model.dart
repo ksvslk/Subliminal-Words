@@ -25,6 +25,10 @@ class LevelModel with ChangeNotifier {
   bool remove3Available = false;
   bool manipulationEnabled = false;
 
+  bool remove3NotificationSeen = false;
+  bool manipulatetNotificationSeen = false;
+  bool higlightNotificationSeen = false;
+
   ValueNotifier<int> currentStoryCardPageNr = ValueNotifier(1);
 
   LevelModel({required this.persistence});
@@ -38,6 +42,7 @@ class LevelModel with ChangeNotifier {
       return await persistence.getLastLevelWordAndStory(level.nr - 1);
     });
     await _createModels(level, previousStory);
+
     _log.log(Level.INFO, "initialize");
   }
 
@@ -91,7 +96,8 @@ class LevelModel with ChangeNotifier {
       persistence
           .getLastLevelWordAndStory(nr - 1)
           .then((prevLevelWordAndStory) {
-        assignInitialLevelValues(level, prevLevelWordAndStory, fromLevelSelect: fromLevelSelect);
+        assignInitialLevelValues(level, prevLevelWordAndStory,
+            fromLevelSelect: fromLevelSelect);
       }).onError((error, stackTrace) {
         _log.severe("Error getting the story for level ${nr - 1}", error);
       });
@@ -101,7 +107,8 @@ class LevelModel with ChangeNotifier {
   }
 
   Future<void> assignInitialLevelValues(
-      LevelData level, (String, String)? previousStory, {bool fromLevelSelect = false}) async {
+      LevelData level, (String, String)? previousStory,
+      {bool fromLevelSelect = false}) async {
     // LevelModel
     levelNr = level.nr;
     tooltipStart = level.tooltipStart;

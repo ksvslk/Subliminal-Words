@@ -11,9 +11,9 @@ import 'package:flutter/services.dart' show rootBundle;
 
 const latestLevel = "LATEST_LEVEL";
 
+
 class LocalStorageLevelPersistence extends LevelPersistence {
   static final _log = Logger('LocalStorageLevelPersistence');
-
 
   final Future<SharedPreferences> instanceFuture =
       SharedPreferences.getInstance();
@@ -138,4 +138,6 @@ class LocalStorageLevelPersistence extends LevelPersistence {
     final prefs = await instanceFuture;
     await prefs.setInt(latestLevel, levelNr);
   }
+  
+
 }
