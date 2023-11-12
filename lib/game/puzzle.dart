@@ -57,12 +57,13 @@ class Puzzle extends StatelessWidget {
                 value: levelModel.pictureModel,
                 child: Consumer<PictureModel>(
                   builder: (context, model, child) {
-                    _log.log(Level.INFO, "now with letters: ${model.highlightLetters.first.letter}");
+                    _log.log(Level.INFO,
+                        "now with letters: ${model.highlightLetters.first.letter}");
 
                     return RotatedBox(
                       quarterTurns: model.quarterTurn,
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
+                          duration: const Duration(milliseconds: 150),
                           transformAlignment: Alignment.center,
                           transform: Matrix4.diagonal3(vec3.Vector3(
                               model.scale, model.scale, model.scale)),
@@ -72,8 +73,7 @@ class Puzzle extends StatelessWidget {
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(4),
-                                child:
-                                 Image.asset(
+                                child: Image.asset(
                                   model.picturePath,
                                   fit: BoxFit.contain,
                                   gaplessPlayback: true,
@@ -83,13 +83,11 @@ class Puzzle extends StatelessWidget {
                                   .map(
                                     (svgLetter) => AnimatedOpacity(
                                       duration: Duration(
-                                          milliseconds: svgLetter.show ? 1750 : 0),
-                                      opacity: (svgLetter.show)
-                                          ? 1.0
-                                          : 0.0,
+                                          milliseconds:
+                                              svgLetter.show ? 1750 : 0),
+                                      opacity: (svgLetter.show) ? 1.0 : 0.0,
                                       curve: Curves.fastOutSlowIn,
                                       onEnd: () {
-                                      
                                         _log.info(() =>
                                             'Ending svg letter animation for - ${svgLetter.letter} with show - ${svgLetter.show}');
                                         if (svgLetter.show) {
@@ -147,8 +145,18 @@ class Puzzle extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              IconButton.filledTonal(
-                                icon: const Icon(Icons.zoom_out),
+                              IconButton.filled(
+                                visualDensity: VisualDensity.comfortable,
+                                style: IconButton.styleFrom(backgroundColor: Theme.of(context)
+                                      .colorScheme
+                                      .background.withOpacity(0.25)),
+                                icon: Icon(
+                                  Icons.zoom_out,
+                                  color: pictureModel.scale <= pictureModel.minZoom
+                                        ? null : Theme.of(context)
+                                      .colorScheme
+                                      .onBackground,
+                                ),
                                 onPressed:
                                     pictureModel.scale <= pictureModel.minZoom
                                         ? null
@@ -158,8 +166,19 @@ class Puzzle extends StatelessWidget {
                                                 .playSfx(SfxType.zoomOut);
                                           },
                               ),
-                              IconButton.filledTonal(
-                                icon: const Icon(Icons.zoom_in),
+                          IconButton.filled(
+                                visualDensity: VisualDensity.comfortable,
+                                style: IconButton.styleFrom(backgroundColor: Theme.of(context)
+                                      .colorScheme
+                                      .background.withOpacity(0.25)),
+                                icon: Icon(
+                                  Icons.zoom_in,
+                                  color: pictureModel.scale >=
+                                        pictureModel.maxZoom
+                                    ? null : Theme.of(context)
+                                      .colorScheme
+                                      .onBackground,
+                                ),
                                 onPressed: pictureModel.scale >=
                                         pictureModel.maxZoom
                                     ? null
@@ -168,8 +187,17 @@ class Puzzle extends StatelessWidget {
                                         audioController.playSfx(SfxType.zoomIn);
                                       },
                               ),
-                              IconButton.filledTonal(
-                                icon: const Icon(Icons.rotate_90_degrees_cw),
+                              IconButton.filled(
+                                visualDensity: VisualDensity.comfortable,
+                                style: IconButton.styleFrom(backgroundColor: Theme.of(context)
+                                      .colorScheme
+                                      .background.withOpacity(0.25)),
+                                icon: Icon(
+                                  Icons.rotate_90_degrees_cw,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onBackground,
+                                ),
                                 onPressed: () {
                                   audioController.playSfx(SfxType.rotate);
                                   pictureModel.setNextQuarterTurn();
