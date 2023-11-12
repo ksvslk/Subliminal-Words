@@ -58,9 +58,9 @@ Future<void> main() async {
 
   GamesServicesController? gamesServicesController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
-     gamesServicesController = GamesServicesController()
-       // Attempt to log the player in.
-       ..initialize();
+    gamesServicesController = GamesServicesController()
+      // Attempt to log the player in.
+      ..initialize();
   }
 
   InAppPurchaseController? inAppPurchaseController;
@@ -117,7 +117,7 @@ class MyApp extends StatelessWidget {
           )..loadStateFromPersistence(),
         ),
         Provider<GamesServicesController?>.value(
-              value: gamesServicesController),
+            value: gamesServicesController),
         ChangeNotifierProvider<AdsController?>.value(value: adsController),
         ChangeNotifierProvider<InAppPurchaseController?>.value(
             value: inAppPurchaseController),
@@ -156,6 +156,10 @@ class MyApp extends StatelessWidget {
         return ValueListenableBuilder(
           valueListenable: settingsController.seedColor,
           builder: (context, changingSeedColor, child) {
+            SystemChrome.setPreferredOrientations([
+              DeviceOrientation.portraitUp,
+              DeviceOrientation.portraitDown,
+            ]);
             return MaterialApp(
                 title: 'Subliminal Words',
                 theme: ThemeData(
