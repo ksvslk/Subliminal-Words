@@ -196,6 +196,7 @@ class LevelModel with ChangeNotifier {
     final level = getLevelData();
     final persistentData = level.getLevelDataBasic();
     persistence.setLevelData(persistentData);
+    persistence.setLatestLevel(levelNr);
   }
 
   void attachLifecycleNotifier(

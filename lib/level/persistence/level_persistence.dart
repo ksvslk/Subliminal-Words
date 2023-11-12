@@ -6,5 +6,6 @@ abstract class LevelPersistence {
   Future<(String, List<String>)> getLevelNr(int nr);
   Future<(String, String)?> getLastLevelWordAndStory(int lastLevelNr);
   Future<void> setLevelData((String, List<String>) level);
+  Future<void> setLatestLevel(int levelNr);
   Future<List<LevelData>> getAllLevels();
 }

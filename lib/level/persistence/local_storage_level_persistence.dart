@@ -132,4 +132,10 @@ class LocalStorageLevelPersistence extends LevelPersistence {
 
     });
   }
+  
+  @override
+  Future<void> setLatestLevel(int levelNr) async{
+    final prefs = await instanceFuture;
+    await prefs.setInt(latestLevel, levelNr);
+  }
 }
