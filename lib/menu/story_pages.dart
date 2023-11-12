@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/menu/story_card.dart';
 import 'package:provider/provider.dart';
@@ -8,21 +9,32 @@ class StoryPages extends StatelessWidget {
   const StoryPages({super.key});
 
   static RegExp punctuation = RegExp(r"[.,!?]");
+  static final _log = Logger('StoryPages');
 
   Future<List<WidgetSpan>> fff((List<(String, String, int)>, int) data,
       BuildContext context, LevelModel levelModel) async {
     final wordToLeveNr = {
-      for (var item in data!.$1) item.$1.replaceAll(punctuation, ''): item.$3
+      for (var item in data.$1) item.$1.replaceAll(punctuation, ''): item.$3
     };
-    final allTextWords = data.$1.fold(List<String>.empty(growable: true),
-        (previousValue, element) => previousValue + element.$2.split(' '));
+    final allTextWords = data.$1.fold(List<(String, int)>.empty(growable: true),
+        (previousValue, element) {
+          _log.log(Level.INFO, "Element: ${element.$3}");
+          return previousValue + element.$2.split(' ').map((e) => (e, element.$3)).toList();
+        } );
     final limit = data.$2;
 
     return allTextWords.mapIndexed((index, word) {
-      final wordWithoutPunctuation = word.replaceAll(punctuation, '');
-      final text = index < limit ? word : "_";
+      final wordWithoutPunctuation = word.$1.replaceAll(punctuation, '');
+      final text = index < limit ? word.$1 : "_";
       final isWordLevel = wordToLeveNr.containsKey(wordWithoutPunctuation);
+
       final levelNr = wordToLeveNr[wordWithoutPunctuation] ?? -1;
+      if (isWordLevel) {
+        _log.log(Level.INFO, "Index in map: $index");
+        _log.log(Level.INFO,
+            "Is word level. Level nr: $levelNr, word: $wordWithoutPunctuation");
+      }
+    var isReallyWordLevel = isWordLevel && levelNr == word.$2;
 
       return WidgetSpan(
           child: Container(
@@ -30,7 +42,7 @@ class StoryPages extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 6.0),
               decoration: BoxDecoration(
                   border: Border.all(color: Colors.transparent),
-                  color: isWordLevel
+                  color: isReallyWordLevel
                       ? (index < limit
                           ? Theme.of(context).colorScheme.primary
                           : Theme.of(context)
@@ -40,8 +52,8 @@ class StoryPages extends StatelessWidget {
                       : null,
                   borderRadius: const BorderRadius.all(Radius.circular(8.0))),
               child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                  onTap: isWordLevel
+                  behavior: HitTestBehavior.opaque,
+                  onTap: isReallyWordLevel
                       ? () {
                           levelModel.loadLevel(levelNr);
                           Navigator.of(context).pop();
@@ -49,7 +61,7 @@ class StoryPages extends StatelessWidget {
                       : null,
                   child: Text(
                     text,
-                    style: isWordLevel
+                    style: isReallyWordLevel
                         ? TextStyle(
                             fontFamily:
                                 DefaultTextStyle.of(context).style.fontFamily,
@@ -103,12 +115,12 @@ class StoryPages extends StatelessWidget {
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                   Padding(
+                  Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: FilledButton(
-                      onPressed: () => {Navigator.pop(context)},
-                      child: const Text('Back to game')),
-                   ),
+                        onPressed: () => {Navigator.pop(context)},
+                        child: const Text('Back to game')),
+                  ),
                   Expanded(
                     flex: 20,
                     child: PageView(
@@ -127,7 +139,7 @@ class StoryPages extends StatelessWidget {
                         builder:
                             (BuildContext context, int value, Widget? child) {
                           return LinearProgressIndicator(
-                            minHeight: 8.0,
+                              minHeight: 8.0,
                               value: value / totalPages,
                               borderRadius: BorderRadius.circular(8));
                         },
