@@ -45,9 +45,10 @@ class _StoryTabloState extends State<StoryTablo>
     );
   }
 
-  List<RichText> getStories(List<(String,String)> stories)
-  {
-    for (var element in stories) {_log.log(Level.INFO, "rich text: $element");}
+  List<RichText> getStories(List<(String, String)> stories) {
+    for (var element in stories) {
+      _log.log(Level.INFO, "rich text: $element");
+    }
     return List.of(stories.map((e) => getRichText(context, e)));
   }
 
@@ -57,9 +58,13 @@ class _StoryTabloState extends State<StoryTablo>
     _scrollController = ScrollController();
   }
 
-  void _scrollToEnd(StoryModel model) {
+  void _scrollToEnd() {
     _scrollController.animateTo(_scrollController.position.maxScrollExtent,
         duration: const Duration(seconds: 5), curve: Curves.linear);
+  }
+
+  void _scrollToEndWithoutAnimation() {
+    _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
   }
 
   @override
@@ -68,7 +73,13 @@ class _StoryTabloState extends State<StoryTablo>
     return ChangeNotifierProvider<StoryModel>.value(
         value: levelModel.storyModel,
         child: Consumer<StoryModel>(builder: (context, model, child) {
-          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToEnd(model));
+          if (model.storyToCreate.length > 1) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToEnd());
+          } else {
+            WidgetsBinding.instance
+                .addPostFrameCallback((_) => _scrollToEndWithoutAnimation());
+          }
+
           _log.info(
               "Rebuilding in consumer: Count of story row children: ${model.storyToCreate.length}");
           return SizedBox(
@@ -79,9 +90,7 @@ class _StoryTabloState extends State<StoryTablo>
               clipBehavior: Clip.hardEdge,
               physics:
                   const NeverScrollableScrollPhysics(), // Prevent manual scrolling
-              child: Row(
-                children: getStories(model.storyToCreate)
-              ),
+              child: Row(children: getStories(model.storyToCreate)),
             ),
           );
         }));

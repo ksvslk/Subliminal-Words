@@ -84,14 +84,14 @@ class LevelModel with ChangeNotifier {
     await loadLevel(levelNr + 1);
   }
 
-  Future<void> loadLevel(int nr) async {
+  Future<void> loadLevel(int nr, {bool fromLevelSelect = false}) async {
     _log.log(Level.INFO, "loadLevel");
     persistence.getLevelNr(nr).then((currentLevel) {
       final level = LevelData.from(currentLevel);
       persistence
           .getLastLevelWordAndStory(nr - 1)
           .then((prevLevelWordAndStory) {
-        assignInitialLevelValues(level, prevLevelWordAndStory);
+        assignInitialLevelValues(level, prevLevelWordAndStory, fromLevelSelect: fromLevelSelect);
       }).onError((error, stackTrace) {
         _log.severe("Error getting the story for level ${nr - 1}", error);
       });
@@ -101,7 +101,7 @@ class LevelModel with ChangeNotifier {
   }
 
   Future<void> assignInitialLevelValues(
-      LevelData level, (String, String)? previousStory) async {
+      LevelData level, (String, String)? previousStory, {bool fromLevelSelect = false}) async {
     // LevelModel
     levelNr = level.nr;
     tooltipStart = level.tooltipStart;
@@ -110,6 +110,7 @@ class LevelModel with ChangeNotifier {
     storyModel.previousWordAndStory =
         previousStory ?? ("", "And so it starts...");
     storyModel.currentWordAndStory = (level.word, level.story);
+    if (fromLevelSelect) storyModel.clearAndAddStory();
 
     // PictureModel
     await pictureModel.initializePicture(level);

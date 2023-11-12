@@ -53,7 +53,7 @@ class StoryPages extends StatelessWidget {
         limit: limit,
         onTap: () {
           if (isClickable) {
-            levelModel.loadLevel(levelNr);
+            levelModel.loadLevel(levelNr, fromLevelSelect: true);
             Navigator.of(context).pop();
           }
         },
