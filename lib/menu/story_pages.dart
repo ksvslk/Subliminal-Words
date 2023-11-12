@@ -11,93 +11,106 @@ class StoryPages extends StatelessWidget {
   static RegExp punctuation = RegExp(r"[.,!?]");
   static final _log = Logger('StoryPages');
 
-  Future<List<WidgetSpan>> fff((List<(String, String, int)>, int) data,
-      BuildContext context, LevelModel levelModel) async {
-    final wordToLeveNr = {
+  Future<List<WidgetSpan>> createWidgetSpans(
+    (List<(String, String, int)>, int) data,
+    BuildContext context,
+    LevelModel levelModel,
+  ) async {
+    // Mapping words to their respective level numbers
+    final Map<String, int> wordToLevelNumber = {
       for (var item in data.$1) item.$1.replaceAll(punctuation, ''): item.$3
     };
-    final allTextWords = data.$1.fold(List<(String, int)>.empty(growable: true),
-        (previousValue, element) {
-          _log.log(Level.INFO, "Element: ${element.$3}");
-          return previousValue + element.$2.split(' ').map((e) => (e, element.$3)).toList();
-        } );
-    final limit = data.$2;
 
-    return allTextWords.mapIndexed((index, word) {
-      final wordWithoutPunctuation = word.$1.replaceAll(punctuation, '');
-      final text = index < limit ? word.$1 : "_";
-      final isWordLevel = wordToLeveNr.containsKey(wordWithoutPunctuation);
+    // Flattening the list of words and pairing with their level numbers
+    final List<(String, int)> allWords = data.$1.fold(
+      List<(String, int)>.empty(growable: true),
+      (previousValue, element) {
+        return previousValue +
+            element.$2.split(' ').map((word) => (word, element.$3)).toList();
+      },
+    );
 
-      final levelNr = wordToLeveNr[wordWithoutPunctuation] ?? -1;
-      if (isWordLevel) {
-        _log.log(Level.INFO, "Index in map: $index");
-        _log.log(Level.INFO,
-            "Is word level. Level nr: $levelNr, word: $wordWithoutPunctuation");
-      }
-    var isReallyWordLevel = isWordLevel && levelNr == word.$2;
+    final int limit = data.$2;
 
-      return WidgetSpan(
-          child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 2.0),
-              padding: const EdgeInsets.symmetric(horizontal: 6.0),
-              decoration: BoxDecoration(
-                  border: Border.all(color: Colors.transparent),
-                  color: isReallyWordLevel
-                      ? (index < limit
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context)
-                              .colorScheme
-                              .secondaryContainer
-                              .withOpacity(0.5))
-                      : null,
-                  borderRadius: const BorderRadius.all(Radius.circular(8.0))),
-              child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: isReallyWordLevel
-                      ? () {
-                          levelModel.loadLevel(levelNr);
-                          Navigator.of(context).pop();
-                        }
-                      : null,
-                  child: Text(
-                    text,
-                    style: isReallyWordLevel
-                        ? TextStyle(
-                            fontFamily:
-                                DefaultTextStyle.of(context).style.fontFamily,
-                            color: index < limit
-                                ? Theme.of(context).colorScheme.onPrimary
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .onSecondaryContainer
-                                    .withOpacity(0.35),
-                            fontSize: Theme.of(context)
-                                .textTheme
-                                .titleLarge
-                                ?.fontSize,
-                          )
-                        : TextStyle(
-                            fontFamily:
-                                DefaultTextStyle.of(context).style.fontFamily,
-                            color: index < limit
-                                ? Theme.of(context).colorScheme.onSurfaceVariant
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .onBackground
-                                    .withOpacity(0.25),
-                            fontSize: Theme.of(context)
-                                .textTheme
-                                .titleLarge
-                                ?.fontSize,
-                          ),
-                  ))));
+    // Creating WidgetSpan for each word
+    return allWords.asMap().entries.map((entry) {
+      int index = entry.key;
+      var word = entry.value.$1;
+      int wordLevel = entry.value.$2;
+
+      String wordWithoutPunctuation = word.replaceAll(punctuation, '');
+      bool isWordLevel = wordToLevelNumber.containsKey(wordWithoutPunctuation);
+      int levelNr = wordToLevelNumber[wordWithoutPunctuation] ?? -1;
+
+      bool isWithinLimit = index < limit;
+      bool isClickable = isWordLevel && levelNr == wordLevel;
+
+      return _createWidgetSpan(
+        context,
+        word: isWithinLimit ? word : "_",
+        isClickable: isClickable,
+        index: index,
+        limit: limit,
+        onTap: () {
+          if (isClickable) {
+            levelModel.loadLevel(levelNr);
+            Navigator.of(context).pop();
+          }
+        },
+      );
     }).toList();
+  }
+
+  WidgetSpan _createWidgetSpan(
+    BuildContext context, {
+    required String word,
+    required bool isClickable,
+    required int index,
+    required int limit,
+    VoidCallback? onTap,
+  }) {
+    TextStyle baseStyle = DefaultTextStyle.of(context).style;
+    ColorScheme colorScheme = Theme.of(context).colorScheme;
+
+    return WidgetSpan(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 2.0),
+        padding: const EdgeInsets.symmetric(horizontal: 6.0),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.transparent),
+          color: isClickable
+              ? (index < limit
+                  ? colorScheme.primary
+                  : colorScheme.secondaryContainer.withOpacity(0.5))
+              : null,
+          borderRadius: const BorderRadius.all(Radius.circular(8.0)),
+        ),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Text(
+            word,
+            style: TextStyle(
+              fontFamily: baseStyle.fontFamily,
+              color: isClickable
+                  ? (index < limit
+                      ? colorScheme.onPrimary
+                      : colorScheme.onSecondaryContainer.withOpacity(0.35))
+                  : (index < limit
+                      ? colorScheme.onSurfaceVariant
+                      : colorScheme.onBackground.withOpacity(0.25)),
+              fontSize: Theme.of(context).textTheme.titleLarge?.fontSize,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<List<StoryCard>> combinedF(
       BuildContext context, LevelModel levelModel) async {
     var stuff = await levelModel.getAllLevelsWordAndStories();
-    var results = await fff(stuff, context, levelModel);
+    var results = await createWidgetSpans(stuff, context, levelModel);
     return results.slices(50).map((e) => StoryCard(text: e)).toList();
   }
 

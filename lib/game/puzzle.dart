@@ -61,7 +61,8 @@ class Puzzle extends StatelessWidget {
 
                     return RotatedBox(
                       quarterTurns: model.quarterTurn,
-                      child: Container(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
                           transformAlignment: Alignment.center,
                           transform: Matrix4.diagonal3(vec3.Vector3(
                               model.scale, model.scale, model.scale)),
