@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
@@ -140,20 +141,12 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<(List<(String, String, int)>, int)>
+  Future<(List<LevelData>, int)>
       getAllLevelsWordAndStories() async {
     final levels = await persistence.getAllLevels();
-    var index = 0;
-    for (var level in levels) {
-      level.story.split(' ').forEach((storyWord) {
-        if (!level.unlocked) return;
-        index = index + 1;
-      });
-    }
-    return (
-      levels.map((e) => (e.word.toLowerCase(), e.story, e.nr)).toList(),
-      index
-    );
+    final lastUnlockedLevelNr = (levels.lastWhereOrNull((element) => element.unlocked == true && element.nr < 100)?.nr);
+    final lastContinueLevelNr = lastUnlockedLevelNr == null ? -1 : lastUnlockedLevelNr+1;
+      return (levels, lastContinueLevelNr);
   }
 
   void _setLevelCompleted() {

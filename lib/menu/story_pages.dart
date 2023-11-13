@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/game/level_data.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/menu/story_card.dart';
 import 'package:provider/provider.dart';
@@ -12,93 +13,150 @@ class StoryPages extends StatelessWidget {
   static final _log = Logger('StoryPages');
 
   Future<List<WidgetSpan>> createWidgetSpans(
-    (List<(String, String, int)>, int) data,
+    (List<LevelData>,int) levelsAndContinueLevelNr,
     BuildContext context,
     LevelModel levelModel,
   ) async {
-    // Mapping words to their respective level numbers
-    final Map<String, int> wordToLevelNumber = {
-      for (var item in data.$1) item.$1.replaceAll(punctuation, ''): item.$3
-    };
+    final list =
+        levelsAndContinueLevelNr.$1.fold(List<WidgetSpan>.empty(growable: true), (previousLevel, currentLevel) {
+      return previousLevel +
+          currentLevel.story.split(' ').fold(List<WidgetSpan>.empty(growable: true), (previousWidgets, currentWord) {
+            previousWidgets.add(
+              _createWidgetSpan(
+              context,
+              word: currentLevel.word,
+              storyWord: currentWord,
+              isClickable: currentLevel.unlocked,
+              levelNr: currentLevel.nr,
+              continueLevelNr: levelsAndContinueLevelNr.$2,
+              onTap: () {
+                if (currentLevel.unlocked || currentLevel.nr == levelsAndContinueLevelNr.$2) {
+                  levelModel.loadLevel(currentLevel.nr, fromLevelSelect: true);
+                  Navigator.of(context).pop();
+                }
+              },
+            )
+            );
+            return previousWidgets;
+          }).toList();
+    });
+    return list;
+  }
 
-    // Flattening the list of words and pairing with their level numbers
-    final List<(String, int)> allWords = data.$1.fold(
-      List<(String, int)>.empty(growable: true),
-      (previousValue, element) {
-        return previousValue +
-            element.$2.split(' ').map((word) => (word, element.$3)).toList();
-      },
-    );
+  Color? getColorForBox(ColorScheme colorScheme, bool isMainWord, bool isLevelUnlocked, bool continueLevel)
+  {
+    if (isLevelUnlocked && !isMainWord)
+    {
+      return null;
+    }
+    else if (isLevelUnlocked && isMainWord)
+    {
+      return colorScheme.primary;
+    }
+    else if (!isLevelUnlocked && isMainWord && !continueLevel)
+    {
+      return colorScheme.secondaryContainer;
+    }
+      else if (!isLevelUnlocked && isMainWord && continueLevel)
+    { 
+      return colorScheme.tertiaryContainer;
+    }
+    else if (!isLevelUnlocked && !isMainWord)
+    {
+      return null;
+    }
+    else {
+      return colorScheme.error;
+    }
+  }
 
-    final int limit = data.$2;
+  Color getColorForText(ColorScheme colorScheme, bool isMainWord, bool isLevelUnlocked, bool continueLevel)
+  {
+     if (isLevelUnlocked && !isMainWord)
+    {
+      return colorScheme.onBackground;
+    }
+    else if (isLevelUnlocked && isMainWord)
+    {
+      return colorScheme.onPrimary;
+    }
+    else if (!isLevelUnlocked && isMainWord && !continueLevel)
+    {
+      return colorScheme.onSecondaryContainer;
+    }
+    else if (!isLevelUnlocked && isMainWord && continueLevel)
+    {
+      return colorScheme.onTertiaryContainer;
+    }
+    else if (!isLevelUnlocked && !isMainWord)
+    {
+      return colorScheme.onSurfaceVariant;
+    }
+    else {
+      return colorScheme.onError;
+    }
+  }
 
-    // Creating WidgetSpan for each word
-    return allWords.asMap().entries.map((entry) {
-      int index = entry.key;
-      var word = entry.value.$1;
-      int wordLevel = entry.value.$2;
-
-      String wordWithoutPunctuation = word.replaceAll(punctuation, '');
-      bool isWordLevel = wordToLevelNumber.containsKey(wordWithoutPunctuation);
-      int levelNr = wordToLevelNumber[wordWithoutPunctuation] ?? -1;
-
-      bool isWithinLimit = index < limit;
-      bool isClickable = isWordLevel && levelNr == wordLevel;
-
-      return _createWidgetSpan(
-        context,
-        word: isWithinLimit ? word : "_",
-        isClickable: isClickable,
-        index: index,
-        limit: limit,
-        onTap: () {
-          if (isClickable) {
-            levelModel.loadLevel(levelNr, fromLevelSelect: true);
-            Navigator.of(context).pop();
-          }
-        },
-      );
-    }).toList();
+  String getText(bool isMainWord, bool isLevelUnlocked, String word, bool continueLevelNr)
+  {
+    if (isLevelUnlocked && !isMainWord)
+    {
+      return word;
+    }
+    else if (isLevelUnlocked && isMainWord)
+    {
+      return word;
+    }
+    else if (!isLevelUnlocked && isMainWord && !continueLevelNr)
+    {
+      return "⚇";
+    }
+    else if (!isLevelUnlocked && isMainWord && continueLevelNr)
+    {
+      return "➥";
+    }
+    else if (!isLevelUnlocked && !isMainWord)
+    {
+      return "_";
+    }
+    else {
+      return "[ERROR]";
+    }
   }
 
   WidgetSpan _createWidgetSpan(
     BuildContext context, {
     required String word,
+    required String storyWord,
     required bool isClickable,
-    required int index,
-    required int limit,
+    required int levelNr,
+    required int continueLevelNr,
     VoidCallback? onTap,
   }) {
     TextStyle baseStyle = DefaultTextStyle.of(context).style;
     ColorScheme colorScheme = Theme.of(context).colorScheme;
+
+    final comparisonMainWord = word.replaceAll(punctuation, '').toLowerCase();
+    final comparisonStoryWord = storyWord.replaceAll(punctuation, '').toLowerCase();
+    final isMainWord = comparisonMainWord == comparisonStoryWord;
+    final continueLevel = levelNr == continueLevelNr;
 
     return WidgetSpan(
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 2.0),
         padding: const EdgeInsets.symmetric(horizontal: 6.0),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.transparent),
-          color: isClickable
-              ? (index < limit
-                  ? colorScheme.primary
-                  : colorScheme.secondaryContainer.withOpacity(0.5))
-              : null,
-          borderRadius: const BorderRadius.all(Radius.circular(8.0)),
-        ),
+            border: Border.all(color: Colors.transparent),
+            color: getColorForBox(colorScheme, isMainWord, isClickable, continueLevel),
+            borderRadius: const BorderRadius.all(Radius.circular(8.0))),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: onTap,
+          onTap: (isMainWord && isClickable) || (isMainWord && continueLevel) ? onTap : null,
           child: Text(
-            word,
-            style: TextStyle(
+            getText(isMainWord, isClickable, storyWord, continueLevel),
+             style: TextStyle(
               fontFamily: baseStyle.fontFamily,
-              color: isClickable
-                  ? (index < limit
-                      ? colorScheme.onPrimary
-                      : colorScheme.onSecondaryContainer.withOpacity(0.35))
-                  : (index < limit
-                      ? colorScheme.onSurfaceVariant
-                      : colorScheme.onBackground.withOpacity(0.25)),
+              color: getColorForText(colorScheme, isMainWord, isClickable, continueLevel),
               fontSize: Theme.of(context).textTheme.titleLarge?.fontSize,
             ),
           ),
@@ -109,8 +167,8 @@ class StoryPages extends StatelessWidget {
 
   Future<List<StoryCard>> combinedF(
       BuildContext context, LevelModel levelModel) async {
-    var stuff = await levelModel.getAllLevelsWordAndStories();
-    var results = await createWidgetSpans(stuff, context, levelModel);
+    var levels = await levelModel.getAllLevelsWordAndStories();
+    var results = await createWidgetSpans(levels, context, levelModel);
     return results.slices(50).map((e) => StoryCard(text: e)).toList();
   }
 
