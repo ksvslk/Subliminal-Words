@@ -73,15 +73,14 @@ class PictureModel with ChangeNotifier {
   }
 
   void highlightLetter() {
-    if (!highlightLetters.every((p0) => p0.show == false)) return;
-    var allHintsGiven =
-        highlightLetters.every((element) => element.hintGiven == true);
+
+    var allHintsGiven = highlightLetters.every((element) => element.hintGiven == true);
+    if (allHintsGiven) for (var element in highlightLetters) { element.hintGiven = false; }
+
     List<int> candidateIndices = highlightLetters
         .asMap()
         .entries
-        .where((entry) => allHintsGiven
-            ? entry.value.show == false
-            : (entry.value.hintGiven == false && entry.value.show == false))
+        .where((entry) => (entry.value.hintGiven == false && entry.value.show == false))
         .map((entry) => entry.key)
         .toList();
     var letterIndexToHighlight = candidateIndices.sample(1, Random());
