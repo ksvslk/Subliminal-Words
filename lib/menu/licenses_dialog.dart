@@ -1,5 +1,8 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:operation_hermes/menu/license_detail_page.dart';
+import 'package:operation_hermes/oss_licenses.dart';
 
 class LicensesDialog extends StatelessWidget {
   const LicensesDialog({super.key});
@@ -10,28 +13,48 @@ class LicensesDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      content: FutureBuilder(
-        future: _loadTextFromFile(),
-        builder: (BuildContext context, AsyncSnapshot<String> snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
-            if (snapshot.hasError) {
-              return Text('Error: ${snapshot.error}');
-            }
-            // Display the loaded text when available
-            return SingleChildScrollView(child: Text(
-              snapshot.data ?? 'No data found',
-              style: TextStyle(fontSize: Theme.of(context).textTheme.bodySmall?.fontSize)
-              ));
-          } else {
-            // Display a loading spinner while the text is loading
-            return const CircularProgressIndicator();
-          }
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        title: const Text("Licenses"),
+      ),
+      body: Dialog.fullscreen(
+      child: ListView.builder(
+        physics: const BouncingScrollPhysics(),
+        itemCount: ossLicenses.length,
+        itemBuilder: (_, index) {
+          return Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ListTile(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    CupertinoPageRoute(
+                      builder: (_) => LicenseDetailPage(
+                        title: ossLicenses[index].name[0].toUpperCase() +
+                            ossLicenses[index].name.substring(1),
+                        licence: ossLicenses[index].license!,
+                      ),
+                    ),
+                  );
+                },
+                //capitalize the first letter of the string
+                title: Text(
+                  ossLicenses[index].name[0].toUpperCase() +
+                      ossLicenses[index].name.substring(1),
+                ),
+                subtitle: Text(ossLicenses[index].description),
+              ),
+            ),
+          );
         },
       ),
-      actions: <Widget>[
-        TextButton(child: const Text('Close'), onPressed: () { Navigator.pop(context); }),
-      ],
+      ),
     ); 
   }
 }
