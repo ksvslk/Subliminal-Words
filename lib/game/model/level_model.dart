@@ -55,6 +55,7 @@ class LevelModel with ChangeNotifier {
     levelNr = level.nr;
     tooltipStart = level.tooltipStart;
     tooltipEnd = level.tooltipEnd;
+    if (tooltipStart.isEmpty) tooltipStart = "Welcome back, I hope you've been well since our last session.";
 
     storyModel = StoryModel();
     storyModel.previousWordAndStory =
