@@ -17,6 +17,7 @@ class PictureModel with ChangeNotifier {
 
   double scale;
   int quarterTurn;
+  int levelNr;
   String picturePath;
   String svgPath;
   List<SvgLetter> highlightLetters = [];
@@ -25,7 +26,8 @@ class PictureModel with ChangeNotifier {
       {required this.scale,
       required this.quarterTurn,
       required this.picturePath,
-      required this.svgPath}) {
+      required this.svgPath,
+      required this.levelNr}) {
     _loadSvgLetters(svgImage: svgPath).then((loadedLetters) {
       highlightLetters = loadedLetters;
       notifyListeners();
@@ -38,6 +40,7 @@ class PictureModel with ChangeNotifier {
     quarterTurn = 0;
     picturePath = level.picturePath;
     svgPath = level.svgPath;
+    levelNr = level.nr;
     await _loadSvgLetters(svgImage: svgPath).then((loadedLetters) {
       highlightLetters = loadedLetters;
       notifyListeners();
@@ -109,7 +112,7 @@ class PictureModel with ChangeNotifier {
     for (var element in allPaths) {
       String name = element.getAttribute('id').toString();
       String path = element.getAttribute('d').toString();
-      var svgLetter = SvgLetter(letterPath: path, letterName: name);
+      var svgLetter = SvgLetter(path:path, letter: name);
       if (name.length <= 3) maps.add(svgLetter);
     }
     return maps;
@@ -121,4 +124,6 @@ class PictureModel with ChangeNotifier {
     _log.log(Level.INFO, "Reseting PictureModel. PictureModel listeners - $hasListeners");
     notifyListeners();
   }
+
+ 
 }

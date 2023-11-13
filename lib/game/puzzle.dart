@@ -5,6 +5,7 @@ import 'package:operation_hermes/audio/sounds.dart';
 import 'package:operation_hermes/game/filled_letter_painter.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/game/model/picture_model.dart';
+import 'package:operation_hermes/game/svg_letter.dart';
 import 'package:path_drawing/path_drawing.dart';
 import 'package:provider/provider.dart';
 import 'package:vector_math/vector_math_64.dart' as vec3;
@@ -17,14 +18,10 @@ class Puzzle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final audioController = context.read<AudioController>();
-
     return Consumer<LevelModel>(builder: (context, levelModel, child) {
-      _log.info(() =>
-          'Build puzzle. Consumer of LevelModel. Level complete: ${levelModel.pictureModel.picturePath}');
       return GestureDetector(
         onTap: levelModel.levelCompleted
             ? () {
-                _log.info(Level.INFO, "TER!!");
                 levelModel.nextLevel();
               }
             : null,
@@ -57,9 +54,25 @@ class Puzzle extends StatelessWidget {
                 value: levelModel.pictureModel,
                 child: Consumer<PictureModel>(
                   builder: (context, model, child) {
-                    _log.log(Level.INFO,
-                        "now with letters: ${model.highlightLetters.first.letter}");
+                    int getDurationAndSetLettersInitialized(
+                        SvgLetter svgLetter) {
+                      if (svgLetter.initialLoad) {
+                        svgLetter.initialLoad = false;
+                        return 0;
+                      } else {
+                        return 2000;
+                      }
+                    }
 
+                    final isDarkMode =
+                        MediaQuery.of(context).platformBrightness ==
+                            Brightness.dark;
+                    final firstColor = isDarkMode
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.inversePrimary;
+                    final secondColor = isDarkMode
+                        ? Theme.of(context).colorScheme.inverseSurface
+                        : Theme.of(context).colorScheme.surface;
                     return RotatedBox(
                       quarterTurns: model.quarterTurn,
                       child: AnimatedContainer(
@@ -79,42 +92,31 @@ class Puzzle extends StatelessWidget {
                                   gaplessPlayback: true,
                                 ),
                               ),
-                              ...model.highlightLetters
-                                  .map(
-                                    (svgLetter) => AnimatedOpacity(
-                                      duration: Duration(
-                                          milliseconds:
-                                              svgLetter.show ? 1750 : 0),
-                                      opacity: (svgLetter.show) ? 1.0 : 0.0,
-                                      curve: Curves.fastOutSlowIn,
-                                      onEnd: () {
-                                        _log.info(() =>
-                                            'Ending svg letter animation for - ${svgLetter.letter} with show - ${svgLetter.show}');
-                                        if (svgLetter.show) {
-                                          model.hideLetter(svgLetter.letter);
-                                          _log.info(() =>
-                                              'hideLetter - ${svgLetter.letter}}');
-                                        }
-                                      },
-                                      child: CustomPaint(
-                                        painter: FilledLetterPainter(
-                                            path: parseSvgPathData(
-                                                svgLetter.path),
-                                            letterOutlineColor:
-                                                Theme.of(context)
-                                                    .colorScheme
-                                                    .primary),
-                                        child: AspectRatio(
-                                          aspectRatio: 1 / 1,
-                                          child: Container(
-                                            color: Colors
-                                                .transparent, // Or any other color to visualize it
-                                          ),
-                                        ),
-                                      ),
+                              ...model.highlightLetters.map((svgLetter) {
+                                return AnimatedOpacity(
+                                  duration: Duration(
+                                      milliseconds:
+                                          getDurationAndSetLettersInitialized(
+                                              svgLetter)),
+                                  opacity: (svgLetter.show) ? 1.0 : 0.0,
+                                  curve: Curves.fastOutSlowIn,
+                                  onEnd: () {
+                                    if (svgLetter.show &&
+                                        !levelModel.levelCompleted) {
+                                      model.hideLetter(svgLetter.letter);
+                                    }
+                                  },
+                                  child: CustomPaint(
+                                    painter: FilledLetterPainter(
+                                        path: parseSvgPathData(svgLetter.path),
+                                        firstColor: firstColor,
+                                        secondColor: secondColor),
+                                    child: const AspectRatio(
+                                      aspectRatio: 1 / 1,
                                     ),
-                                  )
-                                  .toList(),
+                                  ),
+                                );
+                              }).toList(),
                             ],
                           )
                           // PROBLEM CHILD ABOVE
@@ -147,15 +149,19 @@ class Puzzle extends StatelessWidget {
                             children: [
                               IconButton.filled(
                                 visualDensity: VisualDensity.comfortable,
-                                style: IconButton.styleFrom(backgroundColor: Theme.of(context)
-                                      .colorScheme
-                                      .background.withOpacity(0.25)),
+                                style: IconButton.styleFrom(
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .background
+                                        .withOpacity(0.25)),
                                 icon: Icon(
                                   Icons.zoom_out,
-                                  color: pictureModel.scale <= pictureModel.minZoom
-                                        ? null : Theme.of(context)
-                                      .colorScheme
-                                      .onBackground,
+                                  color:
+                                      pictureModel.scale <= pictureModel.minZoom
+                                          ? null
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .onBackground,
                                 ),
                                 onPressed:
                                     pictureModel.scale <= pictureModel.minZoom
@@ -166,18 +172,21 @@ class Puzzle extends StatelessWidget {
                                                 .playSfx(SfxType.zoomOut);
                                           },
                               ),
-                          IconButton.filled(
+                              IconButton.filled(
                                 visualDensity: VisualDensity.comfortable,
-                                style: IconButton.styleFrom(backgroundColor: Theme.of(context)
-                                      .colorScheme
-                                      .background.withOpacity(0.25)),
+                                style: IconButton.styleFrom(
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .background
+                                        .withOpacity(0.25)),
                                 icon: Icon(
                                   Icons.zoom_in,
-                                  color: pictureModel.scale >=
-                                        pictureModel.maxZoom
-                                    ? null : Theme.of(context)
-                                      .colorScheme
-                                      .onBackground,
+                                  color:
+                                      pictureModel.scale >= pictureModel.maxZoom
+                                          ? null
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .onBackground,
                                 ),
                                 onPressed: pictureModel.scale >=
                                         pictureModel.maxZoom
@@ -189,9 +198,11 @@ class Puzzle extends StatelessWidget {
                               ),
                               IconButton.filled(
                                 visualDensity: VisualDensity.comfortable,
-                                style: IconButton.styleFrom(backgroundColor: Theme.of(context)
-                                      .colorScheme
-                                      .background.withOpacity(0.25)),
+                                style: IconButton.styleFrom(
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .background
+                                        .withOpacity(0.25)),
                                 icon: Icon(
                                   Icons.rotate_90_degrees_cw,
                                   color: Theme.of(context)

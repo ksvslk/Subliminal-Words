@@ -29,6 +29,9 @@ class LevelModel with ChangeNotifier {
   bool manipulatetNotificationSeen = false;
   bool higlightNotificationSeen = false;
 
+  final lettersAnimationFadeInDuration = 1750;
+  var lettersAnimationFadeOutDuration = 1750;
+
   ValueNotifier<int> currentStoryCardPageNr = ValueNotifier(1);
 
   LevelModel({required this.persistence});
@@ -64,7 +67,8 @@ class LevelModel with ChangeNotifier {
         scale: 1.0,
         quarterTurn: 0,
         picturePath: level.picturePath,
-        svgPath: level.svgPath)
+        svgPath: level.svgPath,
+        levelNr: level.nr)
       ..initializePicture(level);
 
     fieldModel = FieldModel(level: level);
@@ -86,6 +90,8 @@ class LevelModel with ChangeNotifier {
   }
 
   Future<void> nextLevel() async {
+    lettersAnimationFadeOutDuration = 0;
+    notifyListeners();
     await loadLevel(levelNr + 1);
   }
 
@@ -129,7 +135,8 @@ class LevelModel with ChangeNotifier {
     setLettersCanBeRemoved(canLettersBeRemovedMore);
     levelCompleted = false;
     unlocked = level.unlocked;
-
+    lettersAnimationFadeOutDuration = 1750;
+    
     notifyListeners();
   }
 
