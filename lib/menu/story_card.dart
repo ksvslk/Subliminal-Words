@@ -12,6 +12,7 @@ class StoryCard extends StatelessWidget {
         child: Center(
           child:Padding(padding: const EdgeInsets.all(16),
             child: RichText(
+              textScaleFactor: MediaQuery.sizeOf(context).height / 900,
               text: TextSpan(children: text),
               textAlign: TextAlign.justify,
             ),

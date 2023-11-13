@@ -1,3 +1,4 @@
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
@@ -19,7 +20,7 @@ class AdButton extends StatelessWidget {
 
   (
     Function()?,
-    (String, Icon),
+    (String, Icon, bool),
   ) getCallbackAndText(
       BuildContext context,
       InAppPurchaseController iapController,
@@ -34,7 +35,7 @@ class AdButton extends StatelessWidget {
     if ((productId == C.MANIPULATE && manipulationExhausted) ||
         (productId == C.REMOVE_3 && !remove3Available)) {
       _log.log(Level.INFO, "Applied - $productId");
-      return (null, ('Applied', const Icon(Icons.done_rounded)));
+      return (null, ('Applied', const Icon(Icons.done_rounded), false));
     }
 
     // ✔︎ Kui pole products nimekirjas - Disabled, loading.
@@ -42,7 +43,10 @@ class AdButton extends StatelessWidget {
         .firstWhereOrNull((element) => element.id == productId);
     if (product == null) {
       _log.log(Level.INFO, "Loading (empty products) - $productId");
-      return (null, ('Loading', const Icon(Icons.hourglass_top_outlined)));
+      return (
+        null,
+        ('Loading', const Icon(Icons.hourglass_top_outlined), false)
+      );
     }
 
     // ✔︎ Kui on ostetud või on ALL IN ostetud - ENABLED, Product name ✪
@@ -54,7 +58,7 @@ class AdButton extends StatelessWidget {
           "Purchased (or all in ${allInPack?.status.name}) - $productId");
       return (
         getSuccessfulAction(audioController, levelModel),
-        (product.productName, const Icon(Icons.touch_app))
+        (product.productName, const Icon(Icons.touch_app), false)
       );
     }
 
@@ -64,7 +68,7 @@ class AdButton extends StatelessWidget {
       _log.log(Level.INFO, "No purchase, no ads - $productId");
       return (
         null,
-        (product.productName, const Icon(Icons.hourglass_top_outlined))
+        (product.productName, const Icon(Icons.hourglass_top_outlined), false)
       );
     }
 
@@ -79,7 +83,7 @@ class AdButton extends StatelessWidget {
           };
       return (
         callback,
-        (product.productName, const Icon(Icons.slideshow_rounded))
+        (product.productName, const Icon(Icons.slideshow_rounded), true)
       );
     }
 
@@ -119,6 +123,7 @@ class AdButton extends StatelessWidget {
           builder: (context, iapController, _) {
         _log.log(Level.INFO, "Building InAppPurchaseController");
         return Consumer<LevelModel>(builder: (context, levelModel, _) {
+          const minFontSize = 2.0;
           _log.log(Level.INFO, "Building LevelModel");
           final callbackAndText = getCallbackAndText(
               context,
@@ -128,40 +133,31 @@ class AdButton extends StatelessWidget {
               levelModel.remove3Available,
               audioController,
               levelModel);
-          return Padding(
-              padding: const EdgeInsets.all(1.0),
-              child: FilledButton(
-                style: ButtonStyle(
-                    shape: MaterialStateProperty.all<RoundedRectangleBorder>(
-                        RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10.0),
-                ))),
+          return Padding(padding: const EdgeInsets.symmetric(horizontal: 2.0), child: OutlinedButton(
                 onPressed:
                     !levelModel.levelCompleted ? callbackAndText.$1 : null,
                 child: Padding(
-                  padding: const EdgeInsets.all(2.0),
+                  padding: const EdgeInsets.all(1.0),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Flexible(flex: 5, child: callbackAndText.$2.$2),
-                      const Spacer(flex: 1),
-                      Flexible(
-                          flex: 8,
-                          child: Column(
-                            children: [
-                              const Flexible(
-                                  child: FittedBox(
-                                      child: Text("Watch ad to", maxLines: 1))),
-                              Flexible(
-                                child: FittedBox(
-                                    child: Text(callbackAndText.$2.$1,
-                                        maxLines: 1)),
-                              ),
-                            ],
-                          )),
+                      callbackAndText.$2.$3
+                          ? const Flexible(child: AutoSizeText("Watch ad ▸",
+                              maxLines: 1, textAlign: TextAlign.center, minFontSize: minFontSize))
+                          : const SizedBox.shrink(),
+                      callbackAndText.$2.$3 ? const SizedBox.shrink() : Flexible(
+                        child: SizedBox.expand(
+                          child: FittedBox(
+                            child: callbackAndText.$2.$2,
+                          ),
+                        ),
+                      ),
+                      Flexible(child: AutoSizeText(callbackAndText.$2.$1,
+                          maxLines: 1, textAlign: TextAlign.center, minFontSize: minFontSize)),
                     ],
                   ),
-                ),
+                  ),
               ));
         });
       });
