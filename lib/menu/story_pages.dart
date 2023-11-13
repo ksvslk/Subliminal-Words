@@ -59,7 +59,7 @@ class StoryPages extends StatelessWidget {
     }
       else if (!isLevelUnlocked && isMainWord && continueLevel)
     { 
-      return colorScheme.tertiaryContainer;
+      return colorScheme.primaryContainer;
     }
     else if (!isLevelUnlocked && !isMainWord)
     {
@@ -86,7 +86,7 @@ class StoryPages extends StatelessWidget {
     }
     else if (!isLevelUnlocked && isMainWord && continueLevel)
     {
-      return colorScheme.onTertiaryContainer;
+      return colorScheme.onPrimaryContainer;
     }
     else if (!isLevelUnlocked && !isMainWord)
     {
