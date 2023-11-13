@@ -109,11 +109,11 @@ class StoryPages extends StatelessWidget {
     }
     else if (!isLevelUnlocked && isMainWord && !continueLevelNr)
     {
-      return "⚇";
+      return "🔒";
     }
     else if (!isLevelUnlocked && isMainWord && continueLevelNr)
     {
-      return "➥";
+      return "🔅";
     }
     else if (!isLevelUnlocked && !isMainWord)
     {
