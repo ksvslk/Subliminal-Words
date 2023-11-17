@@ -76,6 +76,8 @@ class InAppPurchaseController extends ChangeNotifier {
   /// Asks the underlying platform to list purchases that have been already
   /// made (for example, in a previous session of the game).
   Future<void> restorePurchases() async {
+    _reportError('Trying to restore purchases!');
+
     if (!await inAppPurchaseInstance.isAvailable()) {
       _reportError('InAppPurchase.instance not available');
       return;

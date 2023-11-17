@@ -48,59 +48,88 @@ class InAppPurchaseMenuDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<InAppPurchaseController>(
       builder: (context, inAppPurchaseController, _) {
-        var products = inAppPurchaseController.products.sortedBy((element) => element.productName);
-        final allInPack = inAppPurchaseController.products
-            .firstWhereOrNull((element) => element.id == C.ALL_IN_PACK || element.id == C.ALL_IN_PACK_IOS);
+        var products = inAppPurchaseController.products
+            .sortedBy((element) => element.productName);
+        final allInPack = inAppPurchaseController.products.firstWhereOrNull(
+            (element) =>
+                element.id == C.ALL_IN_PACK || element.id == C.ALL_IN_PACK_IOS);
         final purchasesCount = inAppPurchaseController.products
             .where((element) => element.status == ProductStatus.purchased)
             .length;
-        if (allInPack?.status != ProductStatus.purchased && purchasesCount >= 2)
-        {
-          products.removeWhere((element) => element.id == C.ALL_IN_PACK || element.id == C.ALL_IN_PACK_IOS);
+        if (allInPack?.status != ProductStatus.purchased &&
+            purchasesCount >= 2) {
+          products.removeWhere((element) =>
+              element.id == C.ALL_IN_PACK || element.id == C.ALL_IN_PACK_IOS);
         }
-      
+
         return Dialog(
-            child: ListView.separated(
-          padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
-          shrinkWrap: true,
-          itemCount: products.length,
-          itemBuilder: (context, index) {
-            final product = products[index];
-            return ListTile(
-              leading: product.status == ProductStatus.pending
-                  ? const Icon(Icons.change_circle_outlined)
-                  : Icon(_getIconForPurchase(product.id)),
-              title: Text(product.productName),
-              subtitle: (product.status == ProductStatus.purchased ||
-                      allInPack?.status == ProductStatus.purchased) ? null : Text(_getShortSubtitle(product.id)),
-              trailing: (product.status == ProductStatus.purchased ||
-                      allInPack?.status == ProductStatus.purchased)
-                  ? Icon(
-                      Icons.done_outline_rounded,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.38),
-                    )
-                  : Text(product.price),
-              enabled: (product.status == ProductStatus.pending ||
-                      product.status == ProductStatus.purchased ||
-                      allInPack?.status == ProductStatus.purchased)
-                  ? false
-                  : true,
-              onTap:
-               () async {
-                inAppPurchaseController.buy(product.id);
-                //Navigator.of(context).pop(); // Close the dialog
-              },
-            );
-          },
-          separatorBuilder: (context, index) {
-            // Add a Divider between items
-            if (products[index].id == C.ALL_IN_PACK || products[index].id == C.ALL_IN_PACK_IOS) {
-              return Divider(color: Theme.of(context).colorScheme.primary);
-            } else {
-              return const Divider();
-            }
-          },
-        ));
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: products.length,
+                  itemBuilder: (context, index) {
+                    final product = products[index];
+                    return ListTile(
+                      leading: product.status == ProductStatus.pending
+                          ? const Icon(Icons.change_circle_outlined)
+                          : Icon(_getIconForPurchase(product.id)),
+                      title: Text(product.productName),
+                      subtitle: (product.status == ProductStatus.purchased ||
+                              allInPack?.status == ProductStatus.purchased)
+                          ? null
+                          : Text(_getShortSubtitle(product.id)),
+                      trailing: (product.status == ProductStatus.purchased ||
+                              allInPack?.status == ProductStatus.purchased)
+                          ? Icon(
+                              Icons.done_outline_rounded,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withOpacity(0.38),
+                            )
+                          : Text(product.price),
+                      enabled: (product.status == ProductStatus.pending ||
+                              product.status == ProductStatus.purchased ||
+                              allInPack?.status == ProductStatus.purchased)
+                          ? false
+                          : true,
+                      onTap: () async {
+                        inAppPurchaseController.buy(product.id);
+                        //Navigator.of(context).pop(); // Close the dialog
+                      },
+                    );
+                  },
+                  separatorBuilder: (context, index) {
+                    // Add a Divider between items
+                    if (products[index].id == C.ALL_IN_PACK ||
+                        products[index].id == C.ALL_IN_PACK_IOS) {
+                      return Divider(
+                          color: Theme.of(context).colorScheme.primary);
+                    } else {
+                      return const Divider();
+                    }
+                  },
+                ),
+                if (Platform.isIOS)
+                  const Divider(),
+                if (Platform.isIOS)
+                  TextButton(
+                      onPressed: () {
+                        inAppPurchaseController.restorePurchases();
+                      },
+                      child: const Text(
+                        "Restore purchases",
+                        textAlign: TextAlign.center,
+                      ))
+              ],
+            ),
+          ),
+        );
       },
     );
   }
