@@ -4,9 +4,9 @@
 
 import 'dart:ui';
 
+import 'package:operation_hermes/C.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'settings_persistence.dart';
-import 'package:operation_hermes/C.dart' as C;
 
 
 /// An implementation of [SettingsPersistence] that uses

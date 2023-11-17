@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/ads/ads_controller.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
 import 'package:operation_hermes/audio/sounds.dart';
 import 'package:operation_hermes/game/model/field_model.dart';
@@ -9,6 +10,7 @@ import 'package:operation_hermes/game/letter_box_data.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
+import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart';
 import 'package:provider/provider.dart';
 
 class GameField extends StatelessWidget {
@@ -20,8 +22,18 @@ class GameField extends StatelessWidget {
     final audioController = context.read<AudioController>();
     final levelModel = context.watch<LevelModel>();
     final gamesServices = context.read<GamesServicesController>();
+    final purchaseController = context.read<InAppPurchaseController>();
+    final adsController = context.read<AdsController>();
 
     _log.log(Level.INFO, "Rebuilding whole GameField.");
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (levelModel.levelCompleted && purchaseController.isNoAdsPurchased() &&
+          levelModel.levelNr >= 20 &&
+          levelModel.levelNr % 5 == 0) {
+        adsController.loadInterstitialAd(null);
+      }
+    });
 
     return Column(
       children: [
@@ -97,7 +109,8 @@ class GameField extends StatelessWidget {
                                   if (result) {
                                     HapticFeedback.mediumImpact();
                                     audioController.playSfx(SfxType.win);
-                                    gamesServices.unlockAchievementForLevel(levelModel.levelNr);
+                                    gamesServices.unlockAchievementForLevel(
+                                        levelModel.levelNr);
                                   }
                                 }
                               },

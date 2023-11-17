@@ -172,7 +172,7 @@ class AudioController {
 
   Future<void> _playFirstSongInPlaylist() async {
     _log.info(() => 'Playing ${_playlist.first} now.');
-    await _musicPlayer.play(AssetSource('music/${_playlist.first.filename}'), volume: 0.2);
+    await _musicPlayer.play(AssetSource('music/${_playlist.first.filename}'), volume: 0.1);
   }
 
   Future<void> _resumeMusic() async {

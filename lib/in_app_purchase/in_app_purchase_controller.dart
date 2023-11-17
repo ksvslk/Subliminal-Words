@@ -3,14 +3,14 @@
 // BSD-style license that can be found in the LICENSE file.
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/C.dart';
 import 'package:operation_hermes/in_app_purchase/purchases/purchasable_product.dart';
-
-import '../C.dart' as C;
 
 /// Allows buying in-app. Facade of `package:in_app_purchase`.
 class InAppPurchaseController extends ChangeNotifier {
@@ -91,6 +91,8 @@ class InAppPurchaseController extends ChangeNotifier {
 
   /// Subscribes to the [inAppPurchaseInstance.purchaseStream].
 void subscribe() {
+ /*  _test_unlock_purchases();
+  return; */
     _subscription?.cancel();
     _subscription =
         inAppPurchaseInstance.purchaseStream.listen((purchaseDetailsList) {
@@ -103,17 +105,40 @@ void subscribe() {
     _loadPurchases();
   }
 
+    void _test_unlock_purchases()
+  {
+        products.add(
+      PurchasableProduct(ProductDetails(id: "com.indest.subliminalwords.remove_3", title: "Remove 3", description: "", price: "price", rawPrice: 2.0, currencyCode: "currencyCode"))
+    );
+      products.add(
+      PurchasableProduct(ProductDetails(id: "com.indest.subliminalwords.highlight", title: "Highlight", description: "", price: "price", rawPrice: 2.0, currencyCode: "currencyCode"))
+    );
+    products.add(
+      PurchasableProduct(ProductDetails(id: "com.indest.subliminalwords.manipulate", title: "Manipulate", description: "", price: "price", rawPrice: 2.0, currencyCode: "currencyCode"))
+    );
+    products.forEach((element) {
+      if (element.id == C.HIGHLIGHT_IOS || element.id == C.MANIPULATE_IOS || element.id == C.REMOVE_3_IOS)
+      {
+        setProductStatus(ProductStatus.purchased, element.id);
+      }
+      
+    });
+    notifyListeners();
+  }
+
   Future<void> _loadPurchases() async {
     if (!await inAppPurchaseInstance.isAvailable()) {
       _reportError('InAppPurchase.instance not available');
+      _test_unlock_purchases();
       return;
     }
-    const ids = <String>{
-      C.ALL_IN_PACK,
-      C.HIGHLIGHT,
-      C.MANIPULATE,
-      C.REMOVE_3,
-      C.NO_AD_BREAKS,
+    
+    final ids = <String>{
+      Platform.isAndroid ? C.ALL_IN_PACK : C.ALL_IN_PACK_IOS,
+      Platform.isAndroid ? C.HIGHLIGHT : C.HIGHLIGHT_IOS,
+      Platform.isAndroid ? C.MANIPULATE : C.MANIPULATE_IOS,
+      Platform.isAndroid ? C.REMOVE_3 : C.REMOVE_3_IOS,
+      Platform.isAndroid ? C.NO_AD_BREAKS : C.NO_AD_BREAKS_IOS,
     };
 
     final response = await inAppPurchaseInstance.queryProductDetails(ids);
@@ -129,6 +154,7 @@ void subscribe() {
     restorePurchases();
     notifyListeners();
   }
+
 
   Future<void> _listenToPurchaseUpdated(
       List<PurchaseDetails> purchaseDetailsList) async {
@@ -217,4 +243,16 @@ void subscribe() {
     // https://codelabs.developers.google.com/codelabs/flutter-in-app-purchases#9
     return true;
   }
+
+
+  bool isNoAdsPurchased()
+  {
+    return products.where((element) => 
+      (element.id == C.NO_AD_BREAKS ||
+      element.id == C.NO_AD_BREAKS_IOS ||
+      element.id == C.ALL_IN_PACK ||
+      element.id == C.ALL_IN_PACK_IOS) && element.status == ProductStatus.purchased
+      ).isNotEmpty;
+  }
+
 }

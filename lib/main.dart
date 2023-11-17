@@ -44,7 +44,7 @@ Future<void> main() async {
 
   _log.info('Going full screen');
   SystemChrome.setEnabledSystemUIMode(
-    SystemUiMode.edgeToEdge,
+    SystemUiMode.leanBack
   );
 
   AdsController? adsController;
@@ -162,6 +162,7 @@ class MyApp extends StatelessWidget {
             ]);
             return MaterialApp(
                 title: 'Subliminal Words',
+                debugShowCheckedModeBanner: false,
                 theme: ThemeData(
                     scaffoldBackgroundColor: Colors.white,
                     useMaterial3: true,

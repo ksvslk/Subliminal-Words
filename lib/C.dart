@@ -2,10 +2,20 @@
 
 import 'dart:ui';
 
-const String ALL_IN_PACK="all_in_pack";
-const String HIGHLIGHT="highlight";
-const String MANIPULATE="manipulate";
-const String NO_AD_BREAKS="no_ad_breaks";
-const String REMOVE_3="remove_3";
+class C {
+  static const String ALL_IN_PACK = "all_in_pack";
+  static const String HIGHLIGHT = "highlight";
+  static const String MANIPULATE = "manipulate";
+  static const String NO_AD_BREAKS = "no_ad_breaks";
+  static const String REMOVE_3 = "remove_3";
 
-const Color DEFAULT_THEME_COLOR = Color.fromARGB(255, 0, 255, 0);
+  static const String ALL_IN_PACK_IOS = "com.indest.subliminalwords.all_in_pack";
+  static const String HIGHLIGHT_IOS = "com.indest.subliminalwords.highlight";
+  static const String MANIPULATE_IOS = "com.indest.subliminalwords.manipulate";
+  static const String NO_AD_BREAKS_IOS = "com.indest.subliminalwords.no_ad_breaks";
+  static const String REMOVE_3_IOS = "com.indest.subliminalwords.remove_3";
+
+  static const Color DEFAULT_THEME_COLOR = Color.fromARGB(255, 0, 255, 0);
+
+
+}

@@ -3,9 +3,9 @@
 // BSD-style license that can be found in the LICENSE file.
 
 import 'package:flutter/widgets.dart';
+import 'package:operation_hermes/C.dart';
 
 import 'persistence/settings_persistence.dart';
-import 'package:operation_hermes/C.dart' as C;
 
 /// An class that holds settings like [playerName] or [musicOn],
 /// and saves them to an injected persistence store.

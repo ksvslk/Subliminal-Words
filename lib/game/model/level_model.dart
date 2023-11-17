@@ -59,7 +59,7 @@ class LevelModel with ChangeNotifier {
 
     storyModel = StoryModel();
     storyModel.previousWordAndStory =
-        previousStory ?? ("", "And so it starts...");
+        previousStory ?? ("", "Let the story unfold...");
     storyModel.currentWordAndStory = (level.word, level.story);
     storyModel.addNextStory(storyModel.previousWordAndStory);
 
@@ -123,7 +123,7 @@ class LevelModel with ChangeNotifier {
     tooltipEnd = level.tooltipEnd;
 
     storyModel.previousWordAndStory =
-        previousStory ?? ("", "And so it starts...");
+        previousStory ?? ("", "Let the story unfold...");
     storyModel.currentWordAndStory = (level.word, level.story);
     if (fromLevelSelect) storyModel.clearAndAddStory();
 
@@ -146,7 +146,7 @@ class LevelModel with ChangeNotifier {
       getAllLevelsWordAndStories() async {
     final levels = await persistence.getAllLevels();
     final lastUnlockedLevelNr = (levels.lastWhereOrNull((element) => element.unlocked == true && element.nr < 100)?.nr);
-    final lastContinueLevelNr = lastUnlockedLevelNr == null ? -1 : lastUnlockedLevelNr+1;
+    final lastContinueLevelNr = lastUnlockedLevelNr == null ? 1 : lastUnlockedLevelNr+1;
       return (levels, lastContinueLevelNr);
   }
 
@@ -203,6 +203,7 @@ class LevelModel with ChangeNotifier {
 
   Future<void> _save() async {
     final level = getLevelData();
+    if (level.levelCompleted) level.disabledLettersCount = 0;
     final persistentData = level.getLevelDataBasic();
     persistence.setLevelData(persistentData);
     persistence.setLatestLevel(levelNr);

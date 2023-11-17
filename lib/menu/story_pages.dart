@@ -12,11 +12,11 @@ class StoryPages extends StatelessWidget {
   static RegExp punctuation = RegExp(r"[.,!?]");
   static final _log = Logger('StoryPages');
 
-  Future<List<WidgetSpan>> createWidgetSpans(
+  List<WidgetSpan> createWidgetSpans(
     (List<LevelData>,int) levelsAndContinueLevelNr,
     BuildContext context,
     LevelModel levelModel,
-  ) async {
+  ) {
     final list =
         levelsAndContinueLevelNr.$1.fold(List<WidgetSpan>.empty(growable: true), (previousLevel, currentLevel) {
       return previousLevel +
@@ -165,10 +165,9 @@ class StoryPages extends StatelessWidget {
     );
   }
 
-  Future<List<StoryCard>> combinedF(
-      BuildContext context, LevelModel levelModel) async {
-    var levels = await levelModel.getAllLevelsWordAndStories();
-    var results = await createWidgetSpans(levels, context, levelModel);
+  List<StoryCard> combinedF(
+      BuildContext context, (List<LevelData>, int) levels, LevelModel levelModel) {
+    var results = createWidgetSpans(levels, context, levelModel);
     return results.slices(50).map((e) => StoryCard(text: e)).toList();
   }
 
@@ -178,10 +177,11 @@ class StoryPages extends StatelessWidget {
     final PageController controller = PageController(
         initialPage: levelModel.currentStoryCardPageNr.value - 1);
     return FutureBuilder(
-      future: combinedF(context, levelModel),
+      future: levelModel.getAllLevelsWordAndStories(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.done) {
-          final totalPages = snapshot.data!.length;
+          final storyCards = combinedF(context, snapshot.data!, levelModel);
+          final totalPages = storyCards.length;
           return Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -198,7 +198,7 @@ class StoryPages extends StatelessWidget {
                       clipBehavior: Clip.hardEdge,
                       scrollDirection: Axis.vertical,
                       controller: controller,
-                      children: snapshot.data!,
+                      children: storyCards,
                       onPageChanged: (value) {
                         levelModel.currentStoryCardPageNr.value = value + 1;
                       },

@@ -2,6 +2,7 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/C.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
 import 'package:operation_hermes/audio/sounds.dart';
@@ -9,7 +10,6 @@ import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart';
 import 'package:operation_hermes/in_app_purchase/purchases/purchasable_product.dart';
 import 'package:provider/provider.dart';
-import '../C.dart' as C;
 
 class AdButton extends StatelessWidget {
   static final _log = Logger('AdButton');
@@ -32,8 +32,10 @@ class AdButton extends StatelessWidget {
     // ✔︎ Erandid:
     // MANIPULATION - Kui zoom juba avatud - DISABLED, Exhausted
     // REMOVE_3 - Kui rohkem tähti enam ei saa eemaldada - DISABLED, Exhausted
-    if ((productId == C.MANIPULATE && manipulationExhausted) ||
-        (productId == C.REMOVE_3 && !remove3Available)) {
+    if (((productId == C.MANIPULATE || productId == C.MANIPULATE_IOS) &&
+            manipulationExhausted) ||
+        ((productId == C.REMOVE_3 || productId == C.REMOVE_3) &&
+            !remove3Available)) {
       _log.log(Level.INFO, "Applied - $productId");
       return (null, ('Applied', const Icon(Icons.done_rounded), false));
     }
@@ -50,8 +52,8 @@ class AdButton extends StatelessWidget {
     }
 
     // ✔︎ Kui on ostetud või on ALL IN ostetud - ENABLED, Product name ✪
-    final allInPack = iapController.products
-        .firstWhereOrNull((element) => element.id == C.ALL_IN_PACK);
+    final allInPack = iapController.products.firstWhereOrNull((element) =>
+        element.id == C.ALL_IN_PACK || element.id == C.ALL_IN_PACK_IOS);
     if (product.status == ProductStatus.purchased ||
         allInPack?.status == ProductStatus.purchased) {
       _log.log(Level.INFO,
@@ -86,25 +88,23 @@ class AdButton extends StatelessWidget {
         (product.productName, const Icon(Icons.slideshow_rounded), true)
       );
     }
-
-    throw StateError(
-        "'¯\_(ツ)_/¯' -> Product: $productId, ${product.status.name}, Ad: ${adsController.isAdAvailable()}, Iap controller: ${iapController.products.map((e) => e.id)}");
+    return (() {}, ("¯\_(ツ)_/¯", const Icon(Icons.error), true));
   }
 
   Function()? getSuccessfulAction(
       AudioController audioController, LevelModel levelModel) {
     switch (productId) {
-      case C.REMOVE_3:
+      case C.REMOVE_3 || C.REMOVE_3_IOS:
         return () {
           audioController.playSfx(SfxType.wrong);
           levelModel.remove3Action();
         };
-      case C.MANIPULATE:
+      case C.MANIPULATE || C.MANIPULATE_IOS:
         return () {
           audioController.playSfx(SfxType.rewardGiven);
           levelModel.manipulationAction();
         };
-      case C.HIGHLIGHT:
+      case C.HIGHLIGHT || C.HIGHLIGHT_IOS:
         return () {
           audioController.playSfx(SfxType.rewardGiven);
           levelModel.highlightAction();
@@ -133,7 +133,9 @@ class AdButton extends StatelessWidget {
               levelModel.remove3Available,
               audioController,
               levelModel);
-          return Padding(padding: const EdgeInsets.symmetric(horizontal: 2.0), child: OutlinedButton(
+          return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2.0),
+              child: OutlinedButton(
                 onPressed:
                     !levelModel.levelCompleted ? callbackAndText.$1 : null,
                 child: Padding(
@@ -143,21 +145,29 @@ class AdButton extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       callbackAndText.$2.$3
-                          ? const Flexible(child: AutoSizeText("Watch ad ▸",
-                              maxLines: 1, textAlign: TextAlign.center, minFontSize: minFontSize))
+                          ? const Flexible(
+                              child: AutoSizeText("Watch ad ▸",
+                                  maxLines: 1,
+                                  textAlign: TextAlign.center,
+                                  minFontSize: minFontSize))
                           : const SizedBox.shrink(),
-                      callbackAndText.$2.$3 ? const SizedBox.shrink() : Flexible(
-                        child: SizedBox.expand(
-                          child: FittedBox(
-                            child: callbackAndText.$2.$2,
-                          ),
-                        ),
-                      ),
-                      Flexible(child: AutoSizeText(callbackAndText.$2.$1,
-                          maxLines: 1, textAlign: TextAlign.center, minFontSize: minFontSize)),
+                      callbackAndText.$2.$3
+                          ? const SizedBox.shrink()
+                          : Flexible(
+                              child: SizedBox.expand(
+                                child: FittedBox(
+                                  child: callbackAndText.$2.$2,
+                                ),
+                              ),
+                            ),
+                      Flexible(
+                          child: AutoSizeText(callbackAndText.$2.$1,
+                              maxLines: 1,
+                              textAlign: TextAlign.center,
+                              minFontSize: minFontSize)),
                     ],
                   ),
-                  ),
+                ),
               ));
         });
       });
