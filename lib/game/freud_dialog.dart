@@ -26,8 +26,7 @@ class FreudDialog extends StatelessWidget {
           showTooltip = (true, levelModel.tooltipEnd);
         }
         return showTooltip.$1
-            ? Expanded(
-                child: GestureDetector(
+            ? GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTap: () {
                     if (levelModel.levelCompleted) {
@@ -113,7 +112,6 @@ class FreudDialog extends StatelessWidget {
                           ),
                         ]),
                   ),
-                ),
               )
             : const SizedBox.shrink();
       }),
