@@ -6,10 +6,12 @@ import 'package:operation_hermes/game/model/field_model.dart';
 import 'package:operation_hermes/game/level_data.dart';
 import 'package:operation_hermes/game/model/picture_model.dart';
 import 'package:operation_hermes/game/model/story_model.dart';
+import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
 
 class LevelModel with ChangeNotifier {
   final LevelPersistence persistence;
+  final GamesServicesController? gamesServicesController;
   ValueNotifier<AppLifecycleState>? _lifecycleNotifier;
 
   static final _log = Logger('LevelModel');
@@ -17,6 +19,7 @@ class LevelModel with ChangeNotifier {
   int levelNr = -1;
   String tooltipStart = "";
   String tooltipEnd = "";
+  String variousTooltip = "";
   bool levelCompleted = false;
   bool unlocked = false;
   late PictureModel pictureModel;
@@ -35,7 +38,7 @@ class LevelModel with ChangeNotifier {
 
   ValueNotifier<int> currentStoryCardPageNr = ValueNotifier(1);
 
-  LevelModel({required this.persistence});
+  LevelModel({required this.gamesServicesController, required this.persistence});
 
   Future<void> initialize() async {
     final latestLevelData = await persistence.initialize().then((value) async {
@@ -46,8 +49,23 @@ class LevelModel with ChangeNotifier {
       return await persistence.getLastLevelWordAndStory(level.nr - 1);
     });
     await _createModels(level, previousStory);
-
+    gamesServicesController?.signedIn.then((value) => updateProgressFromCloud());
     _log.log(Level.INFO, "initialize");
+  }
+
+  Future<void> updateProgressFromCloud() async
+  {
+    final cloudGameData = await gamesServicesController?.loadGame();
+    final localMaxLevelNr = await persistence.getMaxLevelNr();
+
+    // When cloud progress is higher then save
+    if (cloudGameData?.progress.compareTo(localMaxLevelNr) == 1)
+    {
+      _log.log(Level.INFO, 'Cloud is more powerful, unlock levels until: ${cloudGameData?.progress}');
+      await persistence.unlockLevelsUntil(cloudGameData!.progress);
+      variousTooltip = "Restored from cloud. Latest progress accessible through story bar.";
+      notifyListeners();
+    }
   }
 
   Future<void> _createModels(
@@ -88,6 +106,11 @@ class LevelModel with ChangeNotifier {
 
   void hideTooltipStart() {
     tooltipStart = "";
+    notifyListeners();
+  }
+
+   void hideTooltipVarious() {
+    variousTooltip = "";
     notifyListeners();
   }
 
@@ -202,11 +225,16 @@ class LevelModel with ChangeNotifier {
   }
 
   Future<void> _save() async {
+    // Local save
     final level = getLevelData();
     if (level.levelCompleted) level.disabledLettersCount = 0;
     final persistentData = level.getLevelDataBasic();
     persistence.setLevelData(persistentData);
     persistence.setLatestLevel(levelNr);
+
+    // Possible cloud save
+    final localMaxLevelNr = await persistence.getMaxLevelNr();
+    gamesServicesController?.saveGame(localMaxLevelNr);
   }
 
   void attachLifecycleNotifier(

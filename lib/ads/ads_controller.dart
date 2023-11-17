@@ -18,6 +18,7 @@ class AdsController extends ChangeNotifier {
 
   int _rewardedRetryCount = 0;
   int _intersitialRetryCount = 0;
+  int _consentRetryCount = 0;
   final Duration _initialDelay = const Duration(seconds: 1); // Initial delay
 
   RewardedAd? _rewardedAd;
@@ -167,15 +168,14 @@ class AdsController extends ChangeNotifier {
       // Called when the ad dismissed full screen content.
       onAdDismissedFullScreenContent: (ad) {
         // Dispose the ad here to free resources.
-         _log.info('$ad onAdDismissedFullScreenContent.');
-         _interstitialAd?.dispose();
-         _interstitialAd = null;
+        _log.info('$ad onAdDismissedFullScreenContent.');
+        _interstitialAd?.dispose();
+        _interstitialAd = null;
       },
     );
     if (Platform.isAndroid) _interstitialAd!.setImmersiveMode(true);
     _interstitialAd!.show();
   }
-
 
   Future<void> showRewardedAd(Function giveRewardCallback) async {
     if (_rewardedAd == null) {
@@ -204,4 +204,80 @@ class AdsController extends ChangeNotifier {
           '$ad with reward $RewardItem(${reward.amount}, ${reward.type})');
     });
   }
+
+  Future<void> requestTheLatestConsentInformation() async {
+    ConsentInformation.instance.reset();
+    final params = ConsentRequestParameters(tagForUnderAgeOfConsent: false);
+    ConsentInformation.instance.requestConsentInfoUpdate(
+      params,
+      () async {
+        _consentRetryCount = 0; // Reset retry count on success
+        var status = await ConsentInformation.instance.getConsentStatus();
+        if (status == ConsentStatus.obtained ||
+            status == ConsentStatus.notRequired) {
+          _log.log(Level.INFO,
+              'Consent status: $status, initializing ads - no need to load form.');
+          initialize();
+          return;
+        }
+        if (await ConsentInformation.instance.isConsentFormAvailable()) {
+          _log.log(Level.INFO, 'Consent form available, loading form.');
+          loadForm();
+        }
+      },
+      (FormError error) async {
+        _log.log(Level.SEVERE, 'Could request consent info update: $error');
+        if (_consentRetryCount < _maxRetryCount) {
+          _consentRetryCount++;
+          final delay = _initialDelay * pow(2, _consentRetryCount - 1);
+          _log.info(
+              'Retrying consent information update in ${delay.inSeconds} seconds...');
+          await Future.delayed(delay);
+          requestTheLatestConsentInformation();
+        } else {
+          _log.info(
+              'Max retries reached for consent information update. Not retrying.');
+        }
+      },
+    );
+  }
+
+  Future<void> loadForm() async {
+    ConsentForm.loadConsentForm(
+      (ConsentForm consentForm) async {
+        _consentRetryCount = 0; // Reset retry count on success
+        var status = await ConsentInformation.instance.getConsentStatus();
+        if (status == ConsentStatus.required) {
+          consentForm.show(
+            (FormError? formError) {
+              // Handle dismissal by reloading form
+              _log.log(Level.SEVERE,
+                  'Consent form dismissed, reloading. $formError');
+              loadForm();
+            },
+          );
+        } else if (status == ConsentStatus.obtained ||
+            status == ConsentStatus.notRequired) {
+          _log.log(
+              Level.INFO, 'Consent status: $status. Initializing mobile ads.');
+          initialize();
+        }
+      },
+      (formError) async {
+        _log.log(Level.SEVERE, 'Could not load consent form: $formError');
+        if (_consentRetryCount < _maxRetryCount) {
+          _consentRetryCount++;
+          final delay = _initialDelay * pow(2, _consentRetryCount - 1);
+          _log.info(
+              'Retrying loading consent form in ${delay.inSeconds} seconds...');
+          await Future.delayed(delay);
+          loadForm();
+        } else {
+          _log.info(
+              'Max retries reached for loading consent form. Not retrying.');
+        }
+      },
+    );
+  }
+
 }

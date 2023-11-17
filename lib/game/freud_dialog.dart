@@ -19,12 +19,18 @@ class FreudDialog extends StatelessWidget {
         _log.log(Level.INFO,
             "Building: tooltip start: ${levelModel.tooltipStart}, ${levelModel.tooltipEnd}");
         var showTooltip = (false, "");
-        if (!levelModel.levelCompleted && levelModel.tooltipStart.isNotEmpty) {
+
+        if (levelModel.variousTooltip.isNotEmpty)
+        {
+          showTooltip = (true, levelModel.variousTooltip);
+        }
+        else if (!levelModel.levelCompleted && levelModel.tooltipStart.isNotEmpty) {
           showTooltip = (true, levelModel.tooltipStart);
         } else if (levelModel.levelCompleted &&
             levelModel.tooltipEnd.isNotEmpty) {
           showTooltip = (true, levelModel.tooltipEnd);
         }
+      
         return showTooltip.$1
             ? GestureDetector(
                   behavior: HitTestBehavior.translucent,
@@ -33,6 +39,7 @@ class FreudDialog extends StatelessWidget {
                       levelModel.nextLevel();
                     } else {
                       levelModel.hideTooltipStart();
+                      levelModel.hideTooltipVarious();
                     }
                   },
                   child: Container(

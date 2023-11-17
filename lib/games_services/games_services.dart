@@ -3,9 +3,12 @@
 // BSD-style license that can be found in the LICENSE file.
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:games_services/games_services.dart' as gs;
+import 'package:games_services/games_services.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/game/model/game_data.dart';
 
 /// Allows awarding achievements and leaderboard scores,
 /// and also showing the platforms' UI overlays for achievements
@@ -14,11 +17,13 @@ import 'package:logging/logging.dart';
 /// A facade of `package:games_services`.
 class GamesServicesController {
   final achievementheSparkIgnites = "CgkI1_aOyv4PEAIQAA";
-  final achievementTheRavensFall= "CgkI1_aOyv4PEAIQAQ";
-  final achievementDisruptCriminalNetwork= "CgkI1_aOyv4PEAIQAg";
-  final achievementVipersNestCleared= "CgkI1_aOyv4PEAIQAw";
-  final achievementSerpentsEnd= "CgkI1_aOyv4PEAIQBA";
-  final achievementTheLegendLivesOn= "CgkI1_aOyv4PEAIQBQ";
+  final achievementTheRavensFall = "CgkI1_aOyv4PEAIQAQ";
+  final achievementDisruptCriminalNetwork = "CgkI1_aOyv4PEAIQAg";
+  final achievementVipersNestCleared = "CgkI1_aOyv4PEAIQAw";
+  final achievementSerpentsEnd = "CgkI1_aOyv4PEAIQBA";
+  final achievementTheLegendLivesOn = "CgkI1_aOyv4PEAIQBQ";
+
+  final saveGameName = "savegame1337";
 
   static final Logger _log = Logger('GamesServicesController');
   final Completer<bool> _signedInCompleter = Completer();
@@ -59,10 +64,9 @@ class GamesServicesController {
       // as to whether every non-error result means we're safely signed in.
       final signedIn = await gs.GamesServices.isSignedIn;
       _signedInCompleter.complete(signedIn);
-      
+
       //final savedGame = await gs.GamesServices.loadGame(name: "a");
       //final saveGameJson = savedGame.jsify();
-
     } catch (e) {
       _log.severe('Cannot log into GamesServices: $e');
       _signedInCompleter.complete(false);
@@ -83,27 +87,60 @@ class GamesServicesController {
     }
   }
 
-
-  Future<void> unlockAchievementForLevel(int nr) async
-  {
+  Future<void> unlockAchievementForLevel(int nr) async {
     switch (nr) {
       case 11:
-        awardAchievement(iOS: achievementheSparkIgnites, android: achievementheSparkIgnites);
+        awardAchievement(
+            iOS: achievementheSparkIgnites, android: achievementheSparkIgnites);
       case 25:
-        awardAchievement(iOS: achievementTheRavensFall, android: achievementTheRavensFall);
+        awardAchievement(
+            iOS: achievementTheRavensFall, android: achievementTheRavensFall);
       case 40:
-        awardAchievement(iOS: achievementDisruptCriminalNetwork, android: achievementDisruptCriminalNetwork);
+        awardAchievement(
+            iOS: achievementDisruptCriminalNetwork,
+            android: achievementDisruptCriminalNetwork);
       case 55:
-        awardAchievement(iOS: achievementVipersNestCleared, android: achievementVipersNestCleared);
+        awardAchievement(
+            iOS: achievementVipersNestCleared,
+            android: achievementVipersNestCleared);
       case 85:
-        awardAchievement(iOS: achievementSerpentsEnd, android: achievementSerpentsEnd);
+        awardAchievement(
+            iOS: achievementSerpentsEnd, android: achievementSerpentsEnd);
       case 100:
-        awardAchievement(iOS: achievementTheLegendLivesOn, android: achievementTheLegendLivesOn);
+        awardAchievement(
+            iOS: achievementTheLegendLivesOn,
+            android: achievementTheLegendLivesOn);
     }
   }
 
+  Future<void> saveGame(int progress) async {
+    try {
+      final gameData = await loadGame();
+      _log.log(Level.INFO, "Cloud progress: ${gameData?.progress}, local progress: $progress");
+      if (gameData?.progress.compareTo(progress) == 1) return;
+      final data = jsonEncode(GameData(progress).toJson());
+      final result = await gs.SaveGame.saveGame(data: data, name: saveGameName);
+      _log.log(Level.INFO, "Save game result: $result");
+    } catch (e) {
+      _log.severe('Could not save game: $e');
+    }
+  }
 
+  Future<GameData?> loadGame() async {
+    try {
+      final result = await gs.SaveGame.loadGame(name: saveGameName);
+      if (result != null) {
+        final Map json = jsonDecode(result);
+        final gameData = GameData.fromJson(json);
+        _log.log(Level.INFO, "Player progress: ${gameData.progress}");
+        return gameData;
+      }
+      _log.log(Level.INFO, "Could not load game.");
+      return null;
+    } catch (e) {
+      _log.severe('Could not load game: $e');
+      return null;
+    }
 
-
-
+  }
 }

@@ -2,13 +2,11 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
-import 'package:operation_hermes/game/game_field.dart';
 import 'package:operation_hermes/game/game_field_wrapper.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
@@ -53,7 +51,7 @@ Future<void> main() async {
     /// faster. This can be done later or with a delay if startup
     /// experience suffers.
     adsController = AdsController(MobileAds.instance);
-    adsController.initialize();
+    adsController.requestTheLatestConsentInformation();
   }
 
   GamesServicesController? gamesServicesController;
@@ -125,6 +123,7 @@ class MyApp extends StatelessWidget {
             LevelModel>(
           lazy: false,
           create: (context) => LevelModel(
+            gamesServicesController: gamesServicesController,
             persistence: levelPersistence,
           )..initialize(),
           update: (BuildContext context,

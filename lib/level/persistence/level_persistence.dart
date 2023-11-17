@@ -5,7 +5,9 @@ abstract class LevelPersistence {
   Future<(String, List<String>)> getLatestLevelData();
   Future<(String, List<String>)> getLevelNr(int nr);
   Future<(String, String)?> getLastLevelWordAndStory(int lastLevelNr);
+  Future<int> getMaxLevelNr();
   Future<void> setLevelData((String, List<String>) level);
   Future<void> setLatestLevel(int levelNr);
   Future<List<LevelData>> getAllLevels();
+  Future<void> unlockLevelsUntil(int levelNr);
 }

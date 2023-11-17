@@ -68,7 +68,7 @@ class LocalStorageLevelPersistence extends LevelPersistence {
   Future<List<LevelData>> getAllLevels() async {
     final prefs = await instanceFuture;
     List<LevelData> levels = List.empty(growable: true);
-    for (var i = 0; i < 100; i++) {
+    for (var i = 1; i <= 100; i++) {
       final levelStrings = prefs.getStringList(i.toString());
       if (levelStrings != null) {
         final levelData = LevelData.from((i.toString(), levelStrings));
@@ -139,5 +139,32 @@ class LocalStorageLevelPersistence extends LevelPersistence {
     await prefs.setInt(latestLevel, levelNr);
   }
   
+  @override
+  Future<int> getMaxLevelNr() async {
+    final prefs = await instanceFuture;
+    List<LevelData> levels = List.empty(growable: true);
+    for (var i = 1; i <= 100; i++) {
+      final levelStrings = prefs.getStringList(i.toString());
+      if (levelStrings != null) {
+        final levelData = LevelData.from((i.toString(), levelStrings));
+        levels.add(levelData);
+      }
+    }
+    return levels.lastWhereOrNull((element) => element.unlocked == true)?.nr ?? 1;
+  }
+  
+  @override
+  Future<void> unlockLevelsUntil(int levelNr) async{
+    final prefs = await instanceFuture;
+    for (var i = 1; i <= levelNr; i++) {
+      final levelStrings = prefs.getStringList(i.toString());
+      if (levelStrings != null) {
+        var levelData = LevelData.from((i.toString(), levelStrings));
+        levelData.unlocked = true;
+        final basicData = levelData.getLevelDataBasic();
+        await setLevelData(basicData);
+      }
+    }
+  }
 
 }
