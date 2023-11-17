@@ -1,5 +1,7 @@
+import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/game/confetti.dart';
 import 'package:operation_hermes/game/freud_dialog.dart';
 import 'package:operation_hermes/game/game_field.dart';
 import 'package:operation_hermes/game/hint_bar.dart';
@@ -11,6 +13,8 @@ import 'package:provider/provider.dart';
 class GameFieldWrapper extends StatelessWidget {
   const GameFieldWrapper({super.key});
   static final _log = Logger('GameFieldWrapper');
+  static final ConfettiController _confettiController =
+      ConfettiController(duration: const Duration(seconds: 10));
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +42,7 @@ class GameFieldWrapper extends StatelessWidget {
                   ),
                 ),
               ),
-               FreudDialog(),
+              FreudDialog(),
             ],
           ));
         } else if (snapshot.hasError) {

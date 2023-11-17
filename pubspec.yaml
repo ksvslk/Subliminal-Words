@@ -47,6 +47,7 @@ dependencies:
   animated_text_kit: ^4.2.2
   games_services: ^4.0.0
   flutter_oss_licenses: ^2.0.1
+  confetti: ^0.7.0
 
 
 dev_dependencies:

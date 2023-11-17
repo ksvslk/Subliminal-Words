@@ -59,6 +59,10 @@ class GamesServicesController {
       // as to whether every non-error result means we're safely signed in.
       final signedIn = await gs.GamesServices.isSignedIn;
       _signedInCompleter.complete(signedIn);
+      
+      //final savedGame = await gs.GamesServices.loadGame(name: "a");
+      //final saveGameJson = savedGame.jsify();
+
     } catch (e) {
       _log.severe('Cannot log into GamesServices: $e');
       _signedInCompleter.complete(false);
