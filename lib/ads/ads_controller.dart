@@ -206,8 +206,8 @@ class AdsController extends ChangeNotifier {
   }
 
   Future<void> requestTheLatestConsentInformation() async {
-    ConsentInformation.instance.reset();
-    final params = ConsentRequestParameters(tagForUnderAgeOfConsent: false);
+   
+    final params = ConsentRequestParameters();
     ConsentInformation.instance.requestConsentInfoUpdate(
       params,
       () async {
