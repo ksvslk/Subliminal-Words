@@ -138,7 +138,7 @@ class GameField extends StatelessWidget {
             }),
           ],
         ),
-        Confetti(startConfetti: levelModel.levelNr == 1 && levelModel.levelCompleted),
+        Confetti(startConfetti: levelModel.levelNr == 3 && levelModel.levelCompleted),
       ],
     );
   }

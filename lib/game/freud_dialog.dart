@@ -35,8 +35,11 @@ class FreudDialog extends StatelessWidget {
             ? GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTap: () {
-                    if (levelModel.levelCompleted) {
+                    if (levelModel.levelCompleted && levelModel.levelNr < 100) {
                       levelModel.nextLevel();
+                    }
+                    else if (levelModel.levelCompleted && levelModel.levelNr == 100) {
+                       levelModel.hideTooltipEnd();
                     } else {
                       levelModel.hideTooltipStart();
                       levelModel.hideTooltipVarious();

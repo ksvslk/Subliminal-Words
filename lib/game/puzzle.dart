@@ -22,7 +22,7 @@ class Puzzle extends StatelessWidget {
       return GestureDetector(
         onTap: levelModel.levelCompleted
             ? () {
-                levelModel.nextLevel();
+                levelModel.levelNr == 100 ? levelModel.loadLevel(1) : levelModel.nextLevel();
               }
             : null,
         child: AspectRatio(

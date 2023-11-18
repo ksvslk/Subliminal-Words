@@ -6,7 +6,7 @@
         "imagePath": "assets/levels/1.jpg",
         "svgPath": "assets/levels/1.svg",
         "tooltipStart":"I'm glad you're here, please take a seat on the sofa. What word do you see?",
-        "tooltipEnd":"That’s correct. Tap to continue."
+        "tooltipEnd":"That’s correct. Tap picture to continue."
     },
     {
         "nr": 2,
@@ -15,7 +15,7 @@
         "imagePath": "assets/levels/2.jpg",
         "svgPath": "assets/levels/2.svg",
         "tooltipStart":"What might this be?",
-        "tooltipEnd":" Good work. Tap to continue."
+        "tooltipEnd":" Good work. Tap picture to continue."
     },
     {
         "nr": 3,
