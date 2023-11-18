@@ -153,7 +153,6 @@ void subscribe() {
     for (var element in products) {
       _log.info('${element.id} - ${element.status.name}');
     }
-    restorePurchases();
     notifyListeners();
   }
 

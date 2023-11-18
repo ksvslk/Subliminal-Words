@@ -13,8 +13,6 @@ import 'package:provider/provider.dart';
 class GameFieldWrapper extends StatelessWidget {
   const GameFieldWrapper({super.key});
   static final _log = Logger('GameFieldWrapper');
-  static final ConfettiController _confettiController =
-      ConfettiController(duration: const Duration(seconds: 10));
 
   @override
   Widget build(BuildContext context) {

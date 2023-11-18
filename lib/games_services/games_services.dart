@@ -128,6 +128,7 @@ class GamesServicesController {
 
   Future<GameData?> loadGame() async {
     try {
+      _log.log(Level.INFO, 'Is user logged in:${await gs.GameAuth.isSignedIn}, ${await gs.GamesServices.isSignedIn}');
       final result = await gs.SaveGame.loadGame(name: saveGameName);
       if (result != null) {
         final Map json = jsonDecode(result);

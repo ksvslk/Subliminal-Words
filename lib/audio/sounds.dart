@@ -17,7 +17,7 @@ List<String> soundTypeToFilename(SfxType type) {
     case SfxType.zoomOut:
       return const ['zoomOut.wav'];
       case SfxType.rewardGiven:
-      return const ['rewardGiven.ogg'];
+      return const ['rewardGiven.wav'];
   }
 }
 
@@ -41,7 +41,7 @@ double soundTypeToVolume(SfxType type) {
     case SfxType.zoomOut:
       return 0.1;
     case SfxType.rewardGiven:
-      return 0.4;
+      return 0.1;
   }
 }
 
