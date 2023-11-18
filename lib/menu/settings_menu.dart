@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
+import 'package:operation_hermes/menu/credits_dialog.dart';
 import 'package:operation_hermes/menu/licenses_dialog.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,7 @@ enum MenuItem { achievements, theme, feedback, sound, music, about }
 enum AboutSubMenuItem {
   follow,
   licenses,
+  credits,
   privacy,
 }
 
@@ -165,6 +167,17 @@ class _SettingsMenuState extends State<SettingsMenu> {
                             context: context,
                             builder: (BuildContext context) {
                               return const LicensesDialog();
+                            },
+                          );
+                        },
+                        child: Text(item.name));
+                case AboutSubMenuItem.credits:
+                    return MenuItemButton(
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return const CreditsDialog();
                             },
                           );
                         },

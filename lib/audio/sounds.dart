@@ -33,7 +33,7 @@ double soundTypeToVolume(SfxType type) {
     case SfxType.wrong:
       return 0.2;
     case SfxType.win:
-      return 0.4;
+      return 0.2;
     case SfxType.rotate:
       return 0.2;
     case SfxType.zoomIn:

@@ -1,15 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:operation_hermes/menu/license_detail_page.dart';
 import 'package:operation_hermes/oss_licenses.dart';
 
 class LicensesDialog extends StatelessWidget {
   const LicensesDialog({super.key});
-
-  Future<String> _loadTextFromFile() async {
-    return await rootBundle.loadString('assets/licenses.txt');
-  }
 
   @override
   Widget build(BuildContext context) {
