@@ -155,7 +155,7 @@ class AudioController {
           _resumeMusic();
         }
       case AppLifecycleState.inactive:
-        // No need to react to this state change.
+         _stopAllSound();
         break;
     }
   }

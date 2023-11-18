@@ -63,7 +63,7 @@ class LevelModel with ChangeNotifier {
     {
       _log.log(Level.INFO, 'Cloud is more powerful, unlock levels until: ${cloudGameData?.progress}');
       await persistence.unlockLevelsUntil(cloudGameData!.progress);
-      variousTooltip = "Restored from cloud. Latest progress accessible through story bar.";
+      variousTooltip = "Restored from cloud. Latest level accessible through story bar.";
       notifyListeners();
     }
   }
