@@ -125,6 +125,8 @@ class MyApp extends StatelessWidget {
           create: (context) => LevelModel(
             gamesServicesController: gamesServicesController,
             persistence: levelPersistence,
+            inAppPurchaseController: inAppPurchaseController,
+            adsController: adsController
           )..initialize(),
           update: (BuildContext context,
               ValueNotifier<AppLifecycleState> lifecycleNotifier,

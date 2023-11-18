@@ -92,8 +92,8 @@ class InAppPurchaseController extends ChangeNotifier {
   }
 
   /// Subscribes to the [inAppPurchaseInstance.purchaseStream].
-void subscribe() {
- /*  _test_unlock_purchases();
+  void subscribe() {
+    /*  _test_unlock_purchases();
   return; */
     _subscription?.cancel();
     _subscription =
@@ -107,7 +107,8 @@ void subscribe() {
     _loadPurchases();
   }
 
-    void _test_unlock_purchases()
+/*
+  void _test_unlock_purchases()
   {
         products.add(
       PurchasableProduct(ProductDetails(id: "com.indest.subliminalwords.remove_3", title: "Remove 3", description: "", price: "price", rawPrice: 2.0, currencyCode: "currencyCode"))
@@ -127,14 +128,15 @@ void subscribe() {
     });
     notifyListeners();
   }
+  */
 
   Future<void> _loadPurchases() async {
     if (!await inAppPurchaseInstance.isAvailable()) {
       _reportError('InAppPurchase.instance not available');
-      _test_unlock_purchases();
+      //_test_unlock_purchases();
       return;
     }
-    
+
     final ids = <String>{
       Platform.isAndroid ? C.ALL_IN_PACK : C.ALL_IN_PACK_IOS,
       Platform.isAndroid ? C.HIGHLIGHT : C.HIGHLIGHT_IOS,
@@ -155,7 +157,6 @@ void subscribe() {
     }
     notifyListeners();
   }
-
 
   Future<void> _listenToPurchaseUpdated(
       List<PurchaseDetails> purchaseDetailsList) async {
@@ -245,15 +246,14 @@ void subscribe() {
     return true;
   }
 
-
-  bool isNoAdsPurchased()
-  {
-    return products.where((element) => 
-      (element.id == C.NO_AD_BREAKS ||
-      element.id == C.NO_AD_BREAKS_IOS ||
-      element.id == C.ALL_IN_PACK ||
-      element.id == C.ALL_IN_PACK_IOS) && element.status == ProductStatus.purchased
-      ).isNotEmpty;
+  bool isNoAdsPurchased() {
+    return products
+        .where((element) =>
+            (element.id == C.NO_AD_BREAKS ||
+                element.id == C.NO_AD_BREAKS_IOS ||
+                element.id == C.ALL_IN_PACK ||
+                element.id == C.ALL_IN_PACK_IOS) &&
+            element.status == ProductStatus.purchased)
+        .isNotEmpty;
   }
-
 }

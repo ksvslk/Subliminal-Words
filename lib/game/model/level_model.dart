@@ -1,17 +1,20 @@
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/ads/ads_controller.dart';
 import 'package:operation_hermes/game/model/field_model.dart';
 import 'package:operation_hermes/game/level_data.dart';
 import 'package:operation_hermes/game/model/picture_model.dart';
 import 'package:operation_hermes/game/model/story_model.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
+import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
 
 class LevelModel with ChangeNotifier {
   final LevelPersistence persistence;
   final GamesServicesController? gamesServicesController;
+  final AdsController? adsController;
+  final InAppPurchaseController? inAppPurchaseController;
   ValueNotifier<AppLifecycleState>? _lifecycleNotifier;
 
   static final _log = Logger('LevelModel');
@@ -38,7 +41,11 @@ class LevelModel with ChangeNotifier {
 
   ValueNotifier<int> currentStoryCardPageNr = ValueNotifier(1);
 
-  LevelModel({required this.gamesServicesController, required this.persistence});
+  LevelModel(
+      {required this.adsController,
+      required this.inAppPurchaseController,
+      required this.gamesServicesController,
+      required this.persistence});
 
   Future<void> initialize() async {
     final latestLevelData = await persistence.initialize().then((value) async {
@@ -49,21 +56,22 @@ class LevelModel with ChangeNotifier {
       return await persistence.getLastLevelWordAndStory(level.nr - 1);
     });
     await _createModels(level, previousStory);
-    gamesServicesController?.signedIn.then((value) => updateProgressFromCloud());
+    gamesServicesController?.signedIn
+        .then((value) => updateProgressFromCloud());
     _log.log(Level.INFO, "initialize");
   }
 
-  Future<void> updateProgressFromCloud() async
-  {
+  Future<void> updateProgressFromCloud() async {
     final cloudGameData = await gamesServicesController?.loadGame();
     final localMaxLevelNr = await persistence.getMaxLevelNr();
 
     // When cloud progress is higher then save
-    if (cloudGameData?.progress.compareTo(localMaxLevelNr) == 1)
-    {
-      _log.log(Level.INFO, 'Cloud is more powerful, unlock levels until: ${cloudGameData?.progress}');
+    if (cloudGameData?.progress.compareTo(localMaxLevelNr) == 1) {
+      _log.log(Level.INFO,
+          'Cloud is more powerful, unlock levels until: ${cloudGameData?.progress}');
       await persistence.unlockLevelsUntil(cloudGameData!.progress);
-      variousTooltip = "Restored from cloud. Latest level accessible through story bar.";
+      variousTooltip =
+          "Restored from cloud. Latest level accessible through story bar.";
       notifyListeners();
     }
   }
@@ -73,7 +81,10 @@ class LevelModel with ChangeNotifier {
     levelNr = level.nr;
     tooltipStart = level.tooltipStart;
     tooltipEnd = level.tooltipEnd;
-    if (tooltipStart.isEmpty) tooltipStart = "Welcome back, I hope you've been well since our last session.";
+    if (tooltipStart.isEmpty) {
+      tooltipStart =
+          "Welcome back, I hope you've been well since our last session.";
+    }
 
     storyModel = StoryModel();
     storyModel.previousWordAndStory =
@@ -104,8 +115,7 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void hideAllPossibleTooltips()
-  {
+  void hideAllPossibleTooltips() {
     tooltipEnd = "";
     tooltipStart = "";
     variousTooltip = "";
@@ -159,16 +169,37 @@ class LevelModel with ChangeNotifier {
     levelCompleted = false;
     unlocked = level.unlocked;
     lettersAnimationFadeOutDuration = 1750;
-    
     notifyListeners();
+    if (levelNr >= 19)
+    {
+      loadAds(levelNr + 1); // should execute be always 1 level before showing ads
+      showAds(levelNr);
+    }
   }
 
-  Future<(List<LevelData>, int)>
-      getAllLevelsWordAndStories() async {
+  void loadAds(int levelBeforeShowing) {
+    if (levelBeforeShowing % 5 == 0 &&
+        inAppPurchaseController?.isNoAdsPurchased() == false) {
+      adsController?.loadInterstitialAd(null);
+    }
+  }
+
+  void showAds(int levelWhereToShow) {
+    if (levelWhereToShow % 5 == 0 &&
+        inAppPurchaseController?.isNoAdsPurchased() == false) {
+      adsController?.showInterstitialAd();
+    }
+  }
+
+  Future<(List<LevelData>, int)> getAllLevelsWordAndStories() async {
     final levels = await persistence.getAllLevels();
-    final lastUnlockedLevelNr = (levels.lastWhereOrNull((element) => element.unlocked == true && element.nr < 100)?.nr);
-    final lastContinueLevelNr = lastUnlockedLevelNr == null ? 1 : lastUnlockedLevelNr+1;
-      return (levels, lastContinueLevelNr);
+    final lastUnlockedLevelNr = (levels
+        .lastWhereOrNull(
+            (element) => element.unlocked == true && element.nr < 100)
+        ?.nr);
+    final lastContinueLevelNr =
+        lastUnlockedLevelNr == null ? 1 : lastUnlockedLevelNr + 1;
+    return (levels, lastContinueLevelNr);
   }
 
   void _setLevelCompleted() {
