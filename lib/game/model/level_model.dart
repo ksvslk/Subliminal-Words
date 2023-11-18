@@ -104,17 +104,10 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void hideTooltipEnd() {
+  void hideAllPossibleTooltips()
+  {
     tooltipEnd = "";
-    notifyListeners();
-  }
-
-  void hideTooltipStart() {
     tooltipStart = "";
-    notifyListeners();
-  }
-
-   void hideTooltipVarious() {
     variousTooltip = "";
     notifyListeners();
   }

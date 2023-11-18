@@ -20,54 +20,51 @@ class FreudDialog extends StatelessWidget {
             "Building: tooltip start: ${levelModel.tooltipStart}, ${levelModel.tooltipEnd}");
         var showTooltip = (false, "");
 
-        if (levelModel.variousTooltip.isNotEmpty)
-        {
+        if (levelModel.variousTooltip.isNotEmpty) {
           showTooltip = (true, levelModel.variousTooltip);
-        }
-        else if (!levelModel.levelCompleted && levelModel.tooltipStart.isNotEmpty) {
+        } else if (!levelModel.levelCompleted &&
+            levelModel.tooltipStart.isNotEmpty) {
           showTooltip = (true, levelModel.tooltipStart);
         } else if (levelModel.levelCompleted &&
             levelModel.tooltipEnd.isNotEmpty) {
           showTooltip = (true, levelModel.tooltipEnd);
         }
-      
+
         return showTooltip.$1
             ? GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: () {
-                    if (levelModel.levelCompleted && levelModel.levelNr < 100) {
-                      levelModel.nextLevel();
-                    }
-                    else if (levelModel.levelCompleted && levelModel.levelNr == 100) {
-                       levelModel.hideTooltipEnd();
-                    } else {
-                      levelModel.hideTooltipStart();
-                      levelModel.hideTooltipVarious();
-                    }
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin:
-                            Alignment.center, // Start the gradient from the top
-                        end: Alignment
-                            .bottomCenter, // End the gradient at the bottom
-                        colors: [
-                          Theme.of(context).colorScheme.background.withOpacity(
-                              0.0), // The top color of the gradientf
-                          Theme.of(context)
-                              .colorScheme
-                              .background, // The bottom color of the gradient
-                        ],
-                      ),
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  if (levelModel.levelCompleted && levelModel.levelNr < 100) {
+                    levelModel.nextLevel();
+                  } else {
+                    levelModel.hideAllPossibleTooltips();
+                  }
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin:
+                          Alignment.center, // Start the gradient from the top
+                      end: Alignment
+                          .bottomCenter, // End the gradient at the bottom
+                      colors: [
+                        Theme.of(context)
+                            .colorScheme
+                            .background
+                            .withOpacity(0.0), // The top color of the gradientf
+                        Theme.of(context)
+                            .colorScheme
+                            .background, // The bottom color of the gradient
+                      ],
                     ),
-                    alignment: Alignment.bottomCenter,
-                    width: double.infinity,
-                    height: double.infinity,
-                    child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Flexible(
+                  ),
+                  alignment: Alignment.bottomCenter,
+                  width: double.infinity,
+                  height: double.infinity,
+                  child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
                             flex: 2,
                             fit: FlexFit.tight,
                             child: Container(
@@ -94,34 +91,35 @@ class FreudDialog extends StatelessWidget {
                                       fontFamily: DefaultTextStyle.of(context)
                                           .style
                                           .fontFamily),
-                                  child: IgnorePointer(child: AnimatedTextKit(
-                                    key: Key(showTooltip.$2),
-                                    isRepeatingAnimation: false,
-                                    displayFullTextOnTap: true,
-                                    animatedTexts: [
-                                      TypewriterAnimatedText(showTooltip.$2,
-                                          speed:
-                                              const Duration(milliseconds: 80),
-                                          cursor: "🀫"),
-                                    ],
+                                  child: IgnorePointer(
+                                    child: AnimatedTextKit(
+                                      key: Key(showTooltip.$2),
+                                      isRepeatingAnimation: false,
+                                      displayFullTextOnTap: true,
+                                      animatedTexts: [
+                                        TypewriterAnimatedText(showTooltip.$2,
+                                            speed: const Duration(
+                                                milliseconds: 80),
+                                            cursor: "🀫"),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          )),
-                          Flexible(
-                            flex: 1,
-                            fit: FlexFit.tight,
-                            child: Container(
-                              margin: const EdgeInsets.all(8.0),
-                              child: Image.asset(
-                                'assets/other/freud200_winter.png',
-                                fit: BoxFit.scaleDown,
-                              ),
+                            )),
+                        Flexible(
+                          flex: 1,
+                          fit: FlexFit.tight,
+                          child: Container(
+                            margin: const EdgeInsets.all(8.0),
+                            child: Image.asset(
+                              'assets/other/freud200_winter.png',
+                              fit: BoxFit.scaleDown,
                             ),
                           ),
-                        ]),
-                  ),
+                        ),
+                      ]),
+                ),
               )
             : const SizedBox.shrink();
       }),
