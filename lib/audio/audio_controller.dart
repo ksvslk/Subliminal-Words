@@ -147,6 +147,7 @@ class AudioController {
   void _handleAppLifecycle() {
     switch (_lifecycleNotifier!.value) {
       case AppLifecycleState.paused:
+        _stopAllSound();
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
         _stopAllSound();
