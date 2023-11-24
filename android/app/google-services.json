@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "676549157694",
+    "project_id": "subliminal-words-1337",
+    "storage_bucket": "subliminal-words-1337.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:676549157694:android:4f3a491444ed62abe8c26f",
+        "android_client_info": {
+          "package_name": "com.indest.subliminalwords"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBBHEFULe4FmLI142G61nZqpBPlwRm_8tc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      },
+      "admob_app_id": "ca-app-pub-5386053272091445~2689403245"
+    }
+  ],
+  "configuration_version": "1"
+}

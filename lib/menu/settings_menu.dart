@@ -21,7 +21,7 @@ enum ThemeSubMenuItem { red, yellow, green, blue, purple }
 
 Uri _getFeedbackUri()
 {
-  return Platform.isAndroid ? Uri.parse('https://play.google.com/store/apps/details?id=com.indest.hah') :
+  return Platform.isAndroid ? Uri.parse('https://play.google.com/store/apps/details?id=com.indest.subliminalwords') :
    Uri.parse('https://apps.apple.com/app/subliminal-words/id6468366578');
 }
 

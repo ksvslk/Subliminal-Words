@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
@@ -28,6 +29,7 @@ class LevelModel with ChangeNotifier {
   late PictureModel pictureModel;
   late FieldModel fieldModel;
   late StoryModel storyModel;
+  FirebaseAnalytics analytics = FirebaseAnalytics.instance;
 
   bool remove3Available = false;
   bool manipulationEnabled = false;
@@ -44,7 +46,7 @@ class LevelModel with ChangeNotifier {
   LevelModel(
       {required this.adsController,
       required this.inAppPurchaseController,
-      required this.gamesServicesController,
+      required this.gamesServicesController, 
       required this.persistence});
 
   Future<void> initialize() async {
@@ -170,9 +172,9 @@ class LevelModel with ChangeNotifier {
     unlocked = level.unlocked;
     lettersAnimationFadeOutDuration = 1750;
     notifyListeners();
-    if (levelNr >= 19)
-    {
-      loadAds(levelNr + 1); // should execute be always 1 level before showing ads
+    if (levelNr >= 19) {
+      loadAds(
+          levelNr + 1); // should execute be always 1 level before showing ads
       showAds(levelNr);
     }
   }
@@ -233,9 +235,18 @@ class LevelModel with ChangeNotifier {
       _save();
       storyModel.addNextStory(storyModel.currentWordAndStory);
       pictureModel.setLevelComplete();
+      logLevelEnd();
     }
     notifyListeners();
     return win;
+  }
+
+  Future<void> logLevelEnd() async {
+    if ([1, 3, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].contains(levelNr)) {
+      await analytics.logLevelEnd(
+        levelName: levelNr.toString(),
+      );
+    }
   }
 
   LevelData getLevelData() {

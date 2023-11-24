@@ -1,4 +1,5 @@
 import 'package:confetti/confetti.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/confetti.dart';
@@ -17,6 +18,7 @@ class GameFieldWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     _log.log(Level.INFO, "Building GameFieldWrapper");
+  
     return FutureBuilder(
       future: Provider.of<LevelModel>(context, listen: false).initialize(),
       builder: (context, snapshot) {

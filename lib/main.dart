@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +21,8 @@ import 'app_lifecycle/app_lifecycle.dart';
 import 'package:provider/provider.dart';
 import 'settings/settings_controller.dart';
 import 'audio/audio_controller.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 Future<void> main() async {
   //debugPaintSizeEnabled = true;
@@ -40,10 +43,12 @@ Future<void> main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
 
-  _log.info('Going full screen');
-  SystemChrome.setEnabledSystemUIMode(
-    SystemUiMode.leanBack
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  _log.info('Going full screen');
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.leanBack);
 
   AdsController? adsController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
@@ -123,11 +128,11 @@ class MyApp extends StatelessWidget {
             LevelModel>(
           lazy: false,
           create: (context) => LevelModel(
-            gamesServicesController: gamesServicesController,
-            persistence: levelPersistence,
-            inAppPurchaseController: inAppPurchaseController,
-            adsController: adsController
-          )..initialize(),
+              gamesServicesController: gamesServicesController,
+              persistence: levelPersistence,
+              inAppPurchaseController: inAppPurchaseController,
+              adsController: adsController)
+            ..initialize(),
           update: (BuildContext context,
               ValueNotifier<AppLifecycleState> lifecycleNotifier,
               LevelModel? levelModel) {
@@ -154,6 +159,7 @@ class MyApp extends StatelessWidget {
       ],
       builder: (context, child) {
         final settingsController = context.read<SettingsController>();
+
         return ValueListenableBuilder(
           valueListenable: settingsController.seedColor,
           builder: (context, changingSeedColor, child) {
