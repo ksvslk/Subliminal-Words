@@ -114,34 +114,41 @@ class GamesServicesController {
   }
 
   Future<void> saveGame(int progress) async {
-    try {
-      final gameData = await loadGame();
-      _log.log(Level.INFO, "Cloud progress: ${gameData?.progress}, local progress: $progress");
-      if (gameData?.progress.compareTo(progress) == 1) return;
-      final data = jsonEncode(GameData(progress).toJson());
-      final result = await gs.SaveGame.saveGame(data: data, name: saveGameName);
-      _log.log(Level.INFO, "Save game result: $result");
-    } catch (e) {
-      _log.severe('Could not save game: $e');
+    if (await signedIn) {
+      try {
+        final gameData = await loadGame();
+        _log.log(Level.INFO,
+            "Cloud progress: ${gameData?.progress}, local progress: $progress");
+        if (gameData?.progress.compareTo(progress) == 1) return;
+        final data = jsonEncode(GameData(progress).toJson());
+        final result =
+            await gs.SaveGame.saveGame(data: data, name: saveGameName);
+        _log.log(Level.INFO, "Save game result: $result");
+      } catch (e) {
+        _log.severe('Could not save game: $e');
+      }
     }
   }
 
   Future<GameData?> loadGame() async {
-    try {
-      _log.log(Level.INFO, 'Is user logged in:${await gs.GameAuth.isSignedIn}, ${await gs.GamesServices.isSignedIn}');
-      final result = await gs.SaveGame.loadGame(name: saveGameName);
-      if (result != null) {
-        final Map json = jsonDecode(result);
-        final gameData = GameData.fromJson(json);
-        _log.log(Level.INFO, "Player progress: ${gameData.progress}");
-        return gameData;
+    if (await signedIn) {
+      try {
+        _log.log(Level.INFO,
+            'Is user logged in:${await gs.GameAuth.isSignedIn}, ${await gs.GamesServices.isSignedIn}');
+        final result = await gs.SaveGame.loadGame(name: saveGameName);
+        if (result != null) {
+          final Map json = jsonDecode(result);
+          final gameData = GameData.fromJson(json);
+          _log.log(Level.INFO, "Player progress: ${gameData.progress}");
+          return gameData;
+        }
+        _log.log(Level.INFO, "Could not load game.");
+        return null;
+      } catch (e) {
+        _log.severe('Could not load game: $e');
+        return null;
       }
-      _log.log(Level.INFO, "Could not load game.");
-      return null;
-    } catch (e) {
-      _log.severe('Could not load game: $e');
-      return null;
     }
-
+     return null;
   }
 }

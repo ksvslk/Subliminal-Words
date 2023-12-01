@@ -49,7 +49,7 @@ dependencies:
   flutter_oss_licenses: ^2.0.1
   confetti: ^0.7.0
   firebase_core: ^2.23.0
-  firebase_analytics: ^10.7.1
+  firebase_analytics: ^10.7.2
 
 
 dev_dependencies:
