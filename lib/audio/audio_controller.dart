@@ -82,6 +82,7 @@ class AudioController {
   }
 
   void dispose() {
+    _log.info("dispose");
     _lifecycleNotifier?.removeListener(_handleAppLifecycle);
     _stopAllSound();
     _musicPlayer.dispose();
@@ -125,16 +126,15 @@ class AudioController {
   void _handleAppLifecycle() {
     switch (_lifecycleNotifier!.value) {
       case AppLifecycleState.paused:
-        _stopAllSound();
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
         _stopAllSound();
       case AppLifecycleState.resumed:
         if (_settings!.musicOn.value) {
-          _resumeMusic();
+          _startOrResumeMusic();
         }
       case AppLifecycleState.inactive:
-         _stopAllSound();
+        _stopAllSound();
         break;
     }
   }
@@ -145,30 +145,6 @@ class AudioController {
     } else {
       // Music got turned off.
       _musicPlayer.pause();
-    }
-  }
-
-  Future<void> _resumeMusic() async {
-    _log.info('Resuming music');
-    switch (_musicPlayer.state) {
-      case PlayerState.paused:
-        _log.info('Calling _musicPlayer.resume()');
-          _startOrResumeMusic();
-      case PlayerState.stopped:
-        _log.info("resumeMusic() called when music is stopped. "
-            "This probably means we haven't yet started the music. "
-            "For example, the game was started with sound off.");
-        await _musicPlayer.resume();
-      case PlayerState.playing:
-        _log.warning('resumeMusic() called when music is playing. '
-            'Nothing to do.');
-      case PlayerState.completed:
-        _log.warning('resumeMusic() called when music is completed. '
-            "Music should never be 'completed' as it's either not playing "
-            "or looping forever.");
-        await _musicPlayer.resume();
-      default:
-        _log.warning('Unhandled PlayerState: ${_musicPlayer.state}');
     }
   }
 
@@ -220,7 +196,6 @@ class AudioController {
       // Sometimes, resuming fails with an "Unexpected" error.
       _log.severe("Error resuming music", e);
       // Try starting the song from scratch.
-      
       _playCurrentSongInPlaylist();
     }
     }

@@ -1,6 +1,7 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/C.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
@@ -41,41 +42,51 @@ class AdButton extends StatelessWidget {
     }
 
     // ✔︎ Kui pole products nimekirjas - Disabled, loading.
-    final product = iapController.products
+    var product = iapController.products
         .firstWhereOrNull((element) => element.id == productId);
     if (product == null) {
       _log.log(Level.INFO, "Loading (empty products) - $productId");
-      return (
-        null,
-        ('Loading', const Icon(Icons.hourglass_top_outlined), false)
-      );
+      
+      if (productId == C.REMOVE_3 || productId == C.REMOVE_3_IOS) {
+        product = PurchasableProduct(ProductDetails(id: productId, title: "Remove 3", description: "", price: "", rawPrice: -1, currencyCode: ""));
+        product.status = ProductStatus.pending;
+      }
+      else if (productId == C.MANIPULATE || productId == C.MANIPULATE_IOS) {
+        product = PurchasableProduct(ProductDetails(id: productId, title: "Manipulate", description: "", price: "", rawPrice: -1, currencyCode: ""));
+        product.status = ProductStatus.pending;
+
+      }
+      else if (productId == C.HIGHLIGHT || productId == C.HIGHLIGHT_IOS) {
+        product = PurchasableProduct(ProductDetails(id: productId, title: "Highlight", description: "", price: "", rawPrice: -1, currencyCode: ""));
+        product.status = ProductStatus.pending;
+      }
     }
 
     // ✔︎ Kui on ostetud või on ALL IN ostetud - ENABLED, Product name ✪
     final allInPack = iapController.products.firstWhereOrNull((element) =>
         element.id == C.ALL_IN_PACK || element.id == C.ALL_IN_PACK_IOS);
-    if (product.status == ProductStatus.purchased ||
+    if (product?.status == ProductStatus.purchased ||
         allInPack?.status == ProductStatus.purchased) {
       _log.log(Level.INFO,
           "Purchased (or all in ${allInPack?.status.name}) - $productId");
       return (
         getSuccessfulAction(audioController, levelModel),
-        (product.productName, const Icon(Icons.touch_app), false)
+        (product?.productName ?? "",  const Icon(Icons.touch_app), false)
       );
     }
 
     // ✔︎ Kui pole ostetud ja kui pole reklaami näidata - DISABLED, product name
-    if (product.status != ProductStatus.purchased &&
+    if (product?.status != ProductStatus.purchased &&
         !adsController.isAdAvailable()) {
       _log.log(Level.INFO, "No purchase, no ads - $productId");
       return (
         null,
-        (product.productName, const Icon(Icons.hourglass_top_outlined), false)
+        (product?.productName ?? "", const Icon(Icons.hourglass_top_outlined), false)
       );
     }
 
     // ✔︎ Kui pole ostetud ja ON reklaami näidata - ENABLED, Product name ▷
-    if (product.status != ProductStatus.purchased &&
+    if (product?.status != ProductStatus.purchased &&
         adsController.isAdAvailable()) {
       _log.log(Level.INFO, "No purchase, ADS available! - $productId");
       callback() => {
@@ -85,7 +96,7 @@ class AdButton extends StatelessWidget {
           };
       return (
         callback,
-        (product.productName, const Icon(Icons.slideshow_rounded), true)
+        (product?.productName ?? "", const Icon(Icons.slideshow_rounded), true)
       );
     }
     return (() {}, ("¯\_(ツ)_/¯", const Icon(Icons.error), true));

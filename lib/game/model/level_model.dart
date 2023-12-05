@@ -287,7 +287,6 @@ class LevelModel with ChangeNotifier {
   void _handleAppLifecycle() {
     switch (_lifecycleNotifier!.value) {
       case AppLifecycleState.paused:
-        _save();
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
       case AppLifecycleState.resumed:
