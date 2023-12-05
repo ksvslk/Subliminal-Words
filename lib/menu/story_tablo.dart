@@ -46,9 +46,6 @@ class _StoryTabloState extends State<StoryTablo>
   }
 
   List<RichText> getStories(List<(String, String)> stories) {
-    for (var element in stories) {
-      _log.log(Level.INFO, "rich text: $element");
-    }
     return List.of(stories.map((e) => getRichText(context, e)));
   }
 

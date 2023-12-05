@@ -33,7 +33,6 @@ class GameField extends StatelessWidget {
                 value: levelModel.fieldModel,
                 child:
                     Consumer<FieldModel>(builder: (context, fieldModel, child) {
-                  _log.log(Level.INFO, "Rebuilding GameField SOLUTION field.");
 
                   return Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -44,8 +43,7 @@ class GameField extends StatelessWidget {
                               value: fieldModel.solution[i],
                               child: Consumer<LetterBoxData>(
                                 builder: (context, data, child) {
-                                  _log.log(Level.INFO,
-                                      "Rebuilding Letter in GameField");
+               
                                   return GestureDetector(
                                     onTap: () {
                                       if (data.state ==

@@ -16,8 +16,7 @@ class FreudDialog extends StatelessWidget {
     return ChangeNotifierProvider<LevelModel>.value(
       value: levelModel,
       child: Consumer<LevelModel>(builder: (context, levelModel, child) {
-        _log.log(Level.INFO,
-            "Building: tooltip start: ${levelModel.tooltipStart}, ${levelModel.tooltipEnd}");
+
         var showTooltip = (false, "");
 
         if (levelModel.variousTooltip.isNotEmpty) {

@@ -120,7 +120,6 @@ class PictureModel with ChangeNotifier {
   void reset() {
     scale = 1.0;
     quarterTurn = 0;
-    _log.log(Level.INFO, "Reseting PictureModel. PictureModel listeners - $hasListeners");
     notifyListeners();
   }
 

@@ -185,7 +185,6 @@ class FieldModel with ChangeNotifier {
     field = getFieldLetters(solutionPick: word, disabledLettersCount: 0);
     for (var element in field) { element.state = LetterBoxState.fieldPick; }
     disabledLettersCount = 0;
-    _log.log(Level.INFO, "Reseting FieldModel to ${word}. FieldModel listeners - $hasListeners");
     notifyListeners();
   }
 

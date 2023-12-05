@@ -60,12 +60,16 @@ class LevelModel with ChangeNotifier {
     await _createModels(level, previousStory);
     gamesServicesController?.signedIn
         .then((value) => updateProgressFromCloud());
-    _log.log(Level.INFO, "initialize");
   }
 
   Future<void> updateProgressFromCloud() async {
     final cloudGameData = await gamesServicesController?.loadGame();
     final localMaxLevelNr = await persistence.getMaxLevelNr();
+
+    if (cloudGameData?.progress.compareTo(levelNr) == 1 || cloudGameData?.progress.compareTo(levelNr) == 0)
+    {
+      unlocked = true;
+    }
 
     // When cloud progress is higher then save
     if (cloudGameData?.progress.compareTo(localMaxLevelNr) == 1) {
@@ -195,12 +199,8 @@ class LevelModel with ChangeNotifier {
 
   Future<(List<LevelData>, int)> getAllLevelsWordAndStories() async {
     final levels = await persistence.getAllLevels();
-    final lastUnlockedLevelNr = (levels
-        .lastWhereOrNull(
-            (element) => element.unlocked == true && element.nr < 100)
-        ?.nr);
-    final lastContinueLevelNr =
-        lastUnlockedLevelNr == null ? 1 : lastUnlockedLevelNr + 1;
+    final lastUnlockedLevelNr = (levels.lastWhereOrNull((element) => element.unlocked == true && element.nr < 100)?.nr);
+    final lastContinueLevelNr = lastUnlockedLevelNr == null ? 1 : lastUnlockedLevelNr + 1;
     return (levels, lastContinueLevelNr);
   }
 

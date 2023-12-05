@@ -17,13 +17,11 @@ class GameFieldWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    _log.log(Level.INFO, "Building GameFieldWrapper");
   
     return FutureBuilder(
       future: Provider.of<LevelModel>(context, listen: false).initialize(),
       builder: (context, snapshot) {
-        _log.log(Level.INFO,
-            "font family: ${DefaultTextStyle.of(context).style.fontFamily}");
+
         if (snapshot.connectionState == ConnectionState.done) {
           return const SafeArea(
               child: Stack(
