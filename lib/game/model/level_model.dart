@@ -82,6 +82,12 @@ class LevelModel with ChangeNotifier {
     }
   }
 
+  void showMessageFromMascot(String message)
+  {
+    variousTooltip = message;
+    notifyListeners();
+  }
+
   Future<void> _createModels(
       LevelData level, (String, String)? previousStory) async {
     levelNr = level.nr;

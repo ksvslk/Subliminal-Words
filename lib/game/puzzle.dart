@@ -119,7 +119,6 @@ class Puzzle extends StatelessWidget {
                               }).toList(),
                             ],
                           )
-                          // PROBLEM CHILD ABOVE
                           ),
                     );
                   },

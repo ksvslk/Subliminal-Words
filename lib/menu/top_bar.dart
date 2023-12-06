@@ -1,11 +1,38 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:operation_hermes/C.dart';
+import 'package:operation_hermes/game/model/level_model.dart';
+import 'package:operation_hermes/game/model/picture_model.dart';
 import 'package:operation_hermes/menu/in_app_purchase_menu.dart';
 import 'package:operation_hermes/menu/settings_menu.dart';
 import 'package:operation_hermes/menu/story_pages.dart';
 import 'package:operation_hermes/menu/story_tablo.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 class TopBar extends StatelessWidget {
   const TopBar({super.key});
+
+  Future<ShareResult?> shareAndAskHelp(String imagePathInAssets, RenderBox? box) async {
+    try {
+      final bytes = await rootBundle.load(imagePathInAssets);
+      final list = bytes.buffer.asUint8List();
+      final tempDir = await getTemporaryDirectory();
+      final file = await File('${tempDir.path}/SW.jpg').create();
+      file.writeAsBytesSync(list);
+      final result = await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Can you find the word? The game is: ${Platform.isAndroid ? C.GOOGLE_PLAY_LINK : C.APPSTORE_LINK}',
+        sharePositionOrigin: box != null ? box.localToGlobal(Offset.zero) & box.size : Rect.fromPoints(Offset.zero, Offset.zero)
+        );
+      return result;
+    } catch (e) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,17 +41,39 @@ class TopBar extends StatelessWidget {
       children: [
         const Flexible(flex: 1, child: SettingsMenu()),
         Flexible(
-            flex: 1,
-            child: IconButton(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (BuildContext context) {
-                      return const InAppPurchaseMenuDialog();
-                    },
-                  );
+          flex: 1,
+          child: IconButton(
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (BuildContext context) {
+                  return const InAppPurchaseMenuDialog();
                 },
-                icon: const Icon(Icons.add_shopping_cart_outlined))),
+              );
+            },
+            icon: const Icon(Icons.add_shopping_cart_outlined),
+          ),
+        ),
+        Flexible(
+          flex: 1,
+          child: LayoutBuilder(builder: (currentContext, constraints) {
+            return IconButton(
+            onPressed: () {
+              final model = context.read<LevelModel>();
+              final box = currentContext.findRenderObject() as RenderBox?;
+              shareAndAskHelp(model.pictureModel.picturePath, box).then((value) => {
+                if (value?.status == ShareResultStatus.success)
+                {
+                  model.showMessageFromMascot("Thank you for spreading the 'word'.")
+                }
+              });
+            },
+            icon: Platform.isAndroid
+                ? const Icon(Icons.share_outlined)
+                : const Icon(Icons.ios_share_outlined),
+          );
+          },) 
+        ),
         Flexible(
           flex: 6,
           child: Container(
@@ -40,9 +89,12 @@ class TopBar extends StatelessWidget {
               child: GestureDetector(
                 child: const StoryTablo(),
                 onTap: () {
-                  showDialog(context: context, builder: (context) {
-                    return const StoryPages();
-                  },);
+                  showDialog(
+                    context: context,
+                    builder: (context) {
+                      return const StoryPages();
+                    },
+                  );
                 },
               )),
         ),
