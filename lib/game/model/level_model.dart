@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/material.dart';
+import 'package:in_app_review/in_app_review.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
 import 'package:operation_hermes/game/model/field_model.dart';
@@ -41,7 +42,9 @@ class LevelModel with ChangeNotifier {
   final lettersAnimationFadeInDuration = 1750;
   var lettersAnimationFadeOutDuration = 1750;
 
-  ValueNotifier<int> currentStoryCardPageNr = ValueNotifier(1);
+  ValueNotifier<int> currentStoryCardPageNr1 = ValueNotifier(1);
+  ValueNotifier<int> currentStoryCardPageNr2 = ValueNotifier(1);
+  int currentStoryCardPack = 1;
 
   LevelModel(
       {required this.adsController,
@@ -91,6 +94,7 @@ class LevelModel with ChangeNotifier {
   Future<void> _createModels(
       LevelData level, (String, String)? previousStory) async {
     levelNr = level.nr;
+    currentStoryCardPack = levelNr > 100 ? 2 : 1;
     tooltipStart = level.tooltipStart;
     tooltipEnd = level.tooltipEnd;
     if (tooltipStart.isEmpty) {
@@ -136,8 +140,21 @@ class LevelModel with ChangeNotifier {
 
   Future<void> nextLevel() async {
     lettersAnimationFadeOutDuration = 0;
+    currentStoryCardPack = levelNr + 1 > 100 ? 2 : 1;
     notifyListeners();
     await loadLevel(levelNr + 1);
+    askForReview(levelNr + 1);
+  }
+
+  void askForReview(int levelNr) async
+  {
+    if (levelNr == 26 || levelNr == 124)
+    {
+      final InAppReview inAppReview = InAppReview.instance;
+      if (await inAppReview.isAvailable()) {
+          inAppReview.requestReview();
+      }
+    }
   }
 
   Future<void> loadLevel(int nr, {bool fromLevelSelect = false}) async {
@@ -164,6 +181,7 @@ class LevelModel with ChangeNotifier {
     levelNr = level.nr;
     tooltipStart = level.tooltipStart;
     tooltipEnd = level.tooltipEnd;
+    manipulationEnabled = level.manipulationEnabled;
 
     storyModel.previousWordAndStory =
         previousStory ?? ("", "Let the story unfold...");
@@ -204,10 +222,17 @@ class LevelModel with ChangeNotifier {
   }
 
   Future<(List<LevelData>, int)> getAllLevelsWordAndStories() async {
-    final levels = await persistence.getAllLevels();
-    final lastUnlockedLevelNr = (levels.lastWhereOrNull((element) => element.unlocked == true && element.nr < 100)?.nr);
+    final levels = await persistence.getAllLevelsForPack(currentStoryCardPack);
+    int lastLevelNr = currentStoryCardPack == 1 ? 100 : 200;
+    final lastUnlockedLevelNr = (levels.lastWhereOrNull((element) => element.unlocked == true && element.nr < lastLevelNr)?.nr);
     final lastContinueLevelNr = lastUnlockedLevelNr == null ? 1 : lastUnlockedLevelNr + 1;
     return (levels, lastContinueLevelNr);
+  }
+
+  void changeStoryPackNr(int newPackNr)
+  {
+    currentStoryCardPack = newPackNr;
+    notifyListeners();
   }
 
   void _setLevelCompleted() {
@@ -248,7 +273,7 @@ class LevelModel with ChangeNotifier {
   }
 
   Future<void> logLevelEnd() async {
-    if ([1, 3, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].contains(levelNr)) {
+    if ([1, 3, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 175, 200].contains(levelNr)) {
       await analytics.logLevelEnd(
         levelName: levelNr.toString(),
       );
@@ -273,7 +298,10 @@ class LevelModel with ChangeNotifier {
   Future<void> _save() async {
     // Local save
     final level = getLevelData();
-    if (level.levelCompleted) level.disabledLettersCount = 0;
+    if (level.levelCompleted) {
+      level.disabledLettersCount = 0;
+      level.manipulationEnabled = false;
+    }
     final persistentData = level.getLevelDataBasic();
     persistence.setLevelData(persistentData);
     persistence.setLatestLevel(levelNr);

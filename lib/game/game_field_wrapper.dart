@@ -1,8 +1,5 @@
-import 'package:confetti/confetti.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import 'package:operation_hermes/game/confetti.dart';
 import 'package:operation_hermes/game/freud_dialog.dart';
 import 'package:operation_hermes/game/game_field.dart';
 import 'package:operation_hermes/game/hint_bar.dart';

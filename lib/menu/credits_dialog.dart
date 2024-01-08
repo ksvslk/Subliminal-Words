@@ -8,14 +8,14 @@ class CreditsDialog extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        title: const Text("Music and sounds"),
+        title: const Text("Credits"),
       ),
       body: const Dialog.fullscreen(
           child: Column(
         children: [
           ListTile(
              title: Text("Kenney"),
-            subtitle: Text("Sound -                                                                                                                                                                             https://www.patreon.com/kenney"),
+            subtitle: Text("Sound - https://www.patreon.com/kenney"),
           ),
           ListTile(
             title: Text("symphony"),
@@ -28,6 +28,10 @@ class CreditsDialog extends StatelessWidget {
           ListTile(
              title: Text("ccr_fs"),
             subtitle: Text("Sound - https://freesound.org/people/ccr_fs"),
+          ),
+          ListTile(
+             title: Text("Gaspard Tertrais"),
+            subtitle: Text("Co-founder and CTO at Tomorrow Theory"),
           ),
         ],
       )),

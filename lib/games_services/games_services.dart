@@ -23,6 +23,15 @@ class GamesServicesController {
   final achievementSerpentsEnd = "CgkI1_aOyv4PEAIQBA";
   final achievementTheLegendLivesOn = "CgkI1_aOyv4PEAIQBQ";
 
+
+  final achievementCityInChaos = "CgkI1_aOyv4PEAIQCA";
+  final achievementFirstStrike = "CgkI1_aOyv4PEAIQCQ";
+  final achievementHighrankOfficer = "CgkI1_aOyv4PEAIQCg";
+  final achievementChildsDrawing = "CgkI1_aOyv4PEAIQCw";
+  final achievementVirusRelease = "CgkI1_aOyv4PEAIQDA";
+  final achievementEndOfConflict = "CgkI1_aOyv4PEAIQDQ";
+
+
   final saveGameName = "savegame1337";
 
   static final Logger _log = Logger('GamesServicesController');
@@ -110,6 +119,30 @@ class GamesServicesController {
         awardAchievement(
             iOS: achievementTheLegendLivesOn,
             android: achievementTheLegendLivesOn);
+      case 112:
+        awardAchievement(
+            iOS: achievementCityInChaos,
+            android: achievementCityInChaos);
+      case 125:
+         awardAchievement(
+            iOS: achievementFirstStrike,
+            android: achievementFirstStrike);
+      case 154:
+         awardAchievement(
+            iOS: achievementHighrankOfficer,
+            android: achievementHighrankOfficer);
+      case 168:
+        awardAchievement(
+            iOS: achievementChildsDrawing,
+            android: achievementChildsDrawing);
+      case 184:
+        awardAchievement(
+            iOS: achievementVirusRelease,
+            android: achievementVirusRelease);
+      case 200:
+          awardAchievement(
+            iOS: achievementEndOfConflict,
+            android: achievementEndOfConflict);
     }
   }
 

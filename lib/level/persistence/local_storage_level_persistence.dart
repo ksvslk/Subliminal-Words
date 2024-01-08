@@ -1,8 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/level_data.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
@@ -20,13 +18,24 @@ class LocalStorageLevelPersistence extends LevelPersistence {
 
   @override
   Future<void> initialize() async {
-    _assertUniqueWordsInLevels();
+     //_assertLevelsCorrectness('assets/other/levels.json');
+     //_assertLevelsCorrectness('assets/other/levels2.json');
     final prefs = await instanceFuture;
     if (!prefs.containsKey('initialized')) {
       // Prepopulate
-      await _addInitialLevels();
+      await addInitialLevelsForPack('assets/other/levels.json', 1);
       // Mark the prefs as initialized
       await prefs.setBool('initialized', true);
+    }
+
+    if (!prefs.containsKey("initialized2")) {
+      await addInitialLevelsForPack('assets/other/levels2.json', 2);
+      await prefs.setBool('initialized2', true);
+      final latestLevelNr = await getMaxLevelNr();
+      if (latestLevelNr == 100)
+      {
+        setLatestLevel(101);
+      }
     }
   }
 
@@ -65,10 +74,16 @@ class LocalStorageLevelPersistence extends LevelPersistence {
   }
 
   @override
-  Future<List<LevelData>> getAllLevels() async {
+  Future<List<LevelData>> getAllLevelsForPack(int packNr) async {
     final prefs = await instanceFuture;
+    int startNr = 1;
+    int endNr = 100;
+    if (packNr == 2) {
+        startNr = 101;
+        endNr = 200;
+    }
     List<LevelData> levels = List.empty(growable: true);
-    for (var i = 1; i <= 100; i++) {
+    for (var i = startNr; i <= endNr; i++) {
       final levelStrings = prefs.getStringList(i.toString());
       if (levelStrings != null) {
         final levelData = LevelData.from((i.toString(), levelStrings));
@@ -78,8 +93,9 @@ class LocalStorageLevelPersistence extends LevelPersistence {
     return levels;
   }
 
-  Future<void> _addInitialLevels() async {
-    var filePath = 'assets/other/levels.json';
+
+  @override
+  Future<void> addInitialLevelsForPack(String filePath, int packNr) async {
     rootBundle.loadString(filePath).then((String jsonString) {
       List<dynamic> jsonArray = jsonDecode(jsonString);
       for (var level in jsonArray) {
@@ -87,8 +103,8 @@ class LocalStorageLevelPersistence extends LevelPersistence {
           level['nr'],
           level['word'].toString().toUpperCase(),
           level['story'],
-          "assets/levels/${level['nr']}.jpg",
-          "assets/levels/${level['nr']}.svg",
+          "assets/levels${packNr == 2 ? 2 : ''}/${level['nr']}.jpg",
+          "assets/levels${packNr == 2 ? 2 : ''}/${level['nr']}.svg",
           level['tooltipStart'],
           level['tooltipEnd'],
           false,
@@ -98,11 +114,10 @@ class LocalStorageLevelPersistence extends LevelPersistence {
           setLevelData(levelData.getLevelDataBasic());
       }
     });
-  }
+   }
 
-  void _assertUniqueWordsInLevels() async {
+  void _assertLevelsCorrectness(String filePath) async {
     // Path to your JSON file
-    var filePath = 'assets/other/levels.json';
     final RegExp punctuation = RegExp(r"[.,!?]");
     rootBundle.loadString(filePath).then((String jsonString) {
       // Decode the JSON string to a list of objects
@@ -125,7 +140,9 @@ class LocalStorageLevelPersistence extends LevelPersistence {
         // Add 'word' to the set
         words.add(word);
         s.add(story.replaceFirst(word, "#$word"));
-        assert(words.length == item["nr"], 'Repeating $word');
+        _log.log(Level.INFO, words);
+        int levelNr = item["nr"] > 100 ? item["nr"] - 100 : item["nr"];
+        assert(words.length == levelNr, 'Repeating $word');
       }
       // Assert if set length is not equal to 100
       assert(words.length == 100, 'The number of unique words is not 100.');
@@ -143,7 +160,7 @@ class LocalStorageLevelPersistence extends LevelPersistence {
   Future<int> getMaxLevelNr() async {
     final prefs = await instanceFuture;
     List<LevelData> levels = List.empty(growable: true);
-    for (var i = 1; i <= 100; i++) {
+    for (var i = 1; i <= 200; i++) {
       final levelStrings = prefs.getStringList(i.toString());
       if (levelStrings != null) {
         final levelData = LevelData.from((i.toString(), levelStrings));

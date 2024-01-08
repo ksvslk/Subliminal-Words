@@ -13,16 +13,18 @@ class StoryPages extends StatelessWidget {
   static final _log = Logger('StoryPages');
 
   List<WidgetSpan> createWidgetSpans(
-    (List<LevelData>,int) levelsAndContinueLevelNr,
+    (List<LevelData>, int) levelsAndContinueLevelNr,
     BuildContext context,
     LevelModel levelModel,
   ) {
-    final list =
-        levelsAndContinueLevelNr.$1.fold(List<WidgetSpan>.empty(growable: true), (previousLevel, currentLevel) {
+    final list = levelsAndContinueLevelNr.$1.fold(
+        List<WidgetSpan>.empty(growable: true), (previousLevel, currentLevel) {
       return previousLevel +
-          currentLevel.story.split(' ').fold(List<WidgetSpan>.empty(growable: true), (previousWidgets, currentWord) {
-            previousWidgets.add(
-              _createWidgetSpan(
+          currentLevel.story
+              .split(' ')
+              .fold(List<WidgetSpan>.empty(growable: true),
+                  (previousWidgets, currentWord) {
+            previousWidgets.add(_createWidgetSpan(
               context,
               word: currentLevel.word,
               storyWord: currentWord,
@@ -30,96 +32,66 @@ class StoryPages extends StatelessWidget {
               levelNr: currentLevel.nr,
               continueLevelNr: levelsAndContinueLevelNr.$2,
               onTap: () {
-                if (currentLevel.unlocked || currentLevel.nr == levelsAndContinueLevelNr.$2) {
+                if (currentLevel.unlocked ||
+                    currentLevel.nr == levelsAndContinueLevelNr.$2) {
                   levelModel.loadLevel(currentLevel.nr, fromLevelSelect: true);
                   Navigator.of(context).pop();
                 }
               },
-            )
-            );
+            ));
             return previousWidgets;
           }).toList();
     });
     return list;
   }
 
-  Color? getColorForBox(ColorScheme colorScheme, bool isMainWord, bool isLevelUnlocked, bool continueLevel)
-  {
-    if (isLevelUnlocked && !isMainWord)
-    {
+  Color? getColorForBox(ColorScheme colorScheme, bool isMainWord,
+      bool isLevelUnlocked, bool continueLevel) {
+    if (isLevelUnlocked && !isMainWord) {
       return null;
-    }
-    else if (isLevelUnlocked && isMainWord)
-    {
+    } else if (isLevelUnlocked && isMainWord) {
       return colorScheme.primary;
-    }
-    else if (!isLevelUnlocked && isMainWord && !continueLevel)
-    {
+    } else if (!isLevelUnlocked && isMainWord && !continueLevel) {
       return colorScheme.secondaryContainer;
-    }
-      else if (!isLevelUnlocked && isMainWord && continueLevel)
-    { 
+    } else if (!isLevelUnlocked && isMainWord && continueLevel) {
       return colorScheme.primaryContainer;
-    }
-    else if (!isLevelUnlocked && !isMainWord)
-    {
+    } else if (!isLevelUnlocked && !isMainWord) {
       return null;
-    }
-    else {
+    } else {
       return colorScheme.error;
     }
   }
 
-  Color getColorForText(ColorScheme colorScheme, bool isMainWord, bool isLevelUnlocked, bool continueLevel)
-  {
-     if (isLevelUnlocked && !isMainWord)
-    {
+  Color getColorForText(ColorScheme colorScheme, bool isMainWord,
+      bool isLevelUnlocked, bool continueLevel) {
+    if (isLevelUnlocked && !isMainWord) {
       return colorScheme.onBackground;
-    }
-    else if (isLevelUnlocked && isMainWord)
-    {
+    } else if (isLevelUnlocked && isMainWord) {
       return colorScheme.onPrimary;
-    }
-    else if (!isLevelUnlocked && isMainWord && !continueLevel)
-    {
+    } else if (!isLevelUnlocked && isMainWord && !continueLevel) {
       return colorScheme.onSecondaryContainer;
-    }
-    else if (!isLevelUnlocked && isMainWord && continueLevel)
-    {
+    } else if (!isLevelUnlocked && isMainWord && continueLevel) {
       return colorScheme.onPrimaryContainer;
-    }
-    else if (!isLevelUnlocked && !isMainWord)
-    {
+    } else if (!isLevelUnlocked && !isMainWord) {
       return colorScheme.onSurfaceVariant;
-    }
-    else {
+    } else {
       return colorScheme.onError;
     }
   }
 
-  String getText(bool isMainWord, bool isLevelUnlocked, String word, bool continueLevelNr)
-  {
-    if (isLevelUnlocked && !isMainWord)
-    {
+  String getText(bool isMainWord, bool isLevelUnlocked, String word,
+      bool continueLevelNr) {
+    if (isLevelUnlocked && !isMainWord) {
       return word;
-    }
-    else if (isLevelUnlocked && isMainWord)
-    {
+    } else if (isLevelUnlocked && isMainWord) {
       return word;
-    }
-    else if (!isLevelUnlocked && isMainWord && !continueLevelNr)
-    {
+    } else if (!isLevelUnlocked && isMainWord && !continueLevelNr) {
       return "🔒";
-    }
-    else if (!isLevelUnlocked && isMainWord && continueLevelNr)
-    {
+    } else if (!isLevelUnlocked && isMainWord && continueLevelNr) {
       return "🔅";
-    }
-    else if (!isLevelUnlocked && !isMainWord)
-    {
+    } else if (!isLevelUnlocked && !isMainWord) {
       return "_";
-    }
-    else {
+    } else {
       return "[ERROR]";
     }
   }
@@ -137,7 +109,8 @@ class StoryPages extends StatelessWidget {
     ColorScheme colorScheme = Theme.of(context).colorScheme;
 
     final comparisonMainWord = word.replaceAll(punctuation, '').toLowerCase();
-    final comparisonStoryWord = storyWord.replaceAll(punctuation, '').toLowerCase();
+    final comparisonStoryWord =
+        storyWord.replaceAll(punctuation, '').toLowerCase();
     final isMainWord = comparisonMainWord == comparisonStoryWord;
     final continueLevel = levelNr == continueLevelNr;
 
@@ -154,7 +127,7 @@ class StoryPages extends StatelessWidget {
           onTap: (isMainWord && isClickable) || (isMainWord && continueLevel) ? onTap : null,
           child: Text(
             getText(isMainWord, isClickable, storyWord, continueLevel),
-             style: TextStyle(
+            style: TextStyle(
               fontFamily: baseStyle.fontFamily,
               color: getColorForText(colorScheme, isMainWord, isClickable, continueLevel),
               fontSize: Theme.of(context).textTheme.titleLarge?.fontSize,
@@ -175,7 +148,7 @@ class StoryPages extends StatelessWidget {
   Widget build(BuildContext context) {
     final levelModel = context.watch<LevelModel>();
     final PageController controller = PageController(
-        initialPage: levelModel.currentStoryCardPageNr.value - 1);
+        initialPage: levelModel.currentStoryCardPack == 1 ? levelModel.currentStoryCardPageNr1.value - 1 : levelModel.currentStoryCardPageNr2.value - 1);
     return FutureBuilder(
       future: levelModel.getAllLevelsWordAndStories(),
       builder: (context, snapshot) {
@@ -192,6 +165,20 @@ class StoryPages extends StatelessWidget {
                         onPressed: () => {Navigator.pop(context)},
                         child: const Text('Back to game')),
                   ),
+                  Padding(
+                      padding: const EdgeInsets.all(0.0),
+                      child: SegmentedButton<int>(
+                        segments: const <ButtonSegment<int>>[
+                          ButtonSegment<int>(
+                              value: 1, label: Text('Chapter 1')),
+                          ButtonSegment<int>(
+                              value: 2, label: Text('Chapter 2')),
+                        ],
+                        selected: { levelModel.currentStoryCardPack },
+                        onSelectionChanged: (chapter) {
+                          levelModel.changeStoryPackNr(chapter.first);
+                        },
+                      )),
                   Expanded(
                     flex: 20,
                     child: PageView(
@@ -200,7 +187,14 @@ class StoryPages extends StatelessWidget {
                       controller: controller,
                       children: storyCards,
                       onPageChanged: (value) {
-                        levelModel.currentStoryCardPageNr.value = value + 1;
+                        if (levelModel.currentStoryCardPack == 1)
+                        {
+                          levelModel.currentStoryCardPageNr1.value = value + 1;
+                        }
+                        else if (levelModel.currentStoryCardPack == 2)
+                        {
+                          levelModel.currentStoryCardPageNr2.value = value + 1;
+                        }
                       },
                     ),
                   ),
@@ -214,7 +208,7 @@ class StoryPages extends StatelessWidget {
                               value: value / totalPages,
                               borderRadius: BorderRadius.circular(8));
                         },
-                        valueListenable: levelModel.currentStoryCardPageNr),
+                        valueListenable: levelModel.currentStoryCardPack == 1 ? levelModel.currentStoryCardPageNr1 : levelModel.currentStoryCardPageNr2),
                   ),
                 ],
               ));

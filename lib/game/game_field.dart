@@ -18,6 +18,7 @@ class GameField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
     final audioController = context.read<AudioController>();
     final levelModel = context.watch<LevelModel>();
     final gamesServices = context.read<GamesServicesController>();
@@ -121,8 +122,9 @@ class GameField extends StatelessWidget {
             }),
           ],
         ),
-        Confetti(startConfetti: levelModel.levelNr == 100 && levelModel.levelCompleted),
+        Confetti(startConfetti: levelModel.levelNr == 200 && levelModel.levelCompleted),
       ],
     );
+ 
   }
 }

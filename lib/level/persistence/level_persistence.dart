@@ -8,6 +8,7 @@ abstract class LevelPersistence {
   Future<int> getMaxLevelNr();
   Future<void> setLevelData((String, List<String>) level);
   Future<void> setLatestLevel(int levelNr);
-  Future<List<LevelData>> getAllLevels();
+  Future<List<LevelData>> getAllLevelsForPack(int packNr);
   Future<void> unlockLevelsUntil(int levelNr);
+  Future<void> addInitialLevelsForPack(String filePath, int packNr);
 }
