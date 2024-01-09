@@ -5,8 +5,8 @@
         "story": "Time had passed since Max's last great battle, and the city had transformed once more.",
         "imagePath": "assets/levels2/101.jpg",
         "svgPath": "assets/levels2/101.svg",
-        "tooltipStart": "I've met people like you - people who think they have it all figured out. We must work on it - this is going to be extra challenging.",
-        "tooltipEnd": ""
+        "tooltipStart": "",
+        "tooltipEnd": "You're in the upper echelon of players now. Good luck!"
     },
     {
         "nr": 102,
@@ -87,7 +87,7 @@
         "imagePath": "assets/levels2/110.jpg",
         "svgPath": "assets/levels2/110.svg",
         "tooltipStart": "",
-        "tooltipEnd": ""
+        "tooltipEnd": "You're off to a strong start!"
     },
     {
         "nr": 111,
@@ -294,7 +294,7 @@
         "imagePath": "assets/levels2/133.jpg",
         "svgPath": "assets/levels2/133.svg",
         "tooltipStart": "",
-        "tooltipEnd": ""
+        "tooltipEnd": "Your growth is evident. Keep pushing your limits."
     },
     {
         "nr": 134,
@@ -419,7 +419,7 @@
         "story": "'Remember why you fight,' the mentor urged, 'for the people, for their future.'",
         "imagePath": "assets/levels2/147.jpg",
         "svgPath": "assets/levels2/147.svg",
-        "tooltipStart": "",
+        "tooltipStart": "I've seen many enthusiastic people, but most quit along the way. You seem different.",
         "tooltipEnd": ""
     },
     {
@@ -536,7 +536,7 @@
         "story": "The team's morale sank, the seemingly endless cycle of fight and failure overwhelming.",
         "imagePath": "assets/levels2/160.jpg",
         "svgPath": "assets/levels2/160.svg",
-        "tooltipStart": "",
+        "tooltipStart": "You're strongly deviating from the average. Excellent job.",
         "tooltipEnd": ""
     },
     {
@@ -716,7 +716,7 @@
         "story": "Max's team located the central hub of Cipher's operation, a fortress of technology and terror.",
         "imagePath": "assets/levels2/180.jpg",
         "svgPath": "assets/levels2/180.svg",
-        "tooltipStart": "",
+        "tooltipStart": "This is the final stretch. Your endurance is admirable.",
         "tooltipEnd": ""
     },
     {
@@ -897,6 +897,6 @@
         "imagePath": "assets/levels2/200.jpg",
         "svgPath": "assets/levels2/200.svg",
         "tooltipStart": "",
-        "tooltipEnd": ""
+        "tooltipEnd": "This is it. To be honest, I did not believe you would make it. You belong to an exceptional class."
     }
 ]

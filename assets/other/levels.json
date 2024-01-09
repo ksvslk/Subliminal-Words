@@ -293,7 +293,7 @@
         "story": "Information was key; it flowed like a river through the dense urban jungle.",
         "imagePath": "assets/levels/33.jpg",
         "svgPath": "assets/levels/33.svg",
-        "tooltipStart":"Feel free to leave feedback on the game whenever you're ready; your input is invaluable to me.",
+        "tooltipStart":"",
         "tooltipEnd":""
     },
     {
@@ -753,7 +753,7 @@
         "imagePath": "assets/levels/84.jpg",
         "svgPath": "assets/levels/84.svg",
         "tooltipStart":"",
-        "tooltipEnd":"I invite you to share your thoughts. When you feel ready, you can find the 'Feedback' option in the menu. Your perspective is greatly valued."
+        "tooltipEnd":""
     },
     {
         "nr": 85,
