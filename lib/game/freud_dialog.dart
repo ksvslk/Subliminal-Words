@@ -12,6 +12,8 @@ class FreudDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final levelModel = context.watch<LevelModel>();
+    final currentTime = DateTime.now();
+    final isChristmas = (currentTime.month == 12 && currentTime.day >= 1) || (currentTime.month == 1 && currentTime.day <= 6);
 
     return ChangeNotifierProvider<LevelModel>.value(
       value: levelModel,
@@ -112,7 +114,7 @@ class FreudDialog extends StatelessWidget {
                           child: Container(
                             margin: const EdgeInsets.all(8.0),
                             child: Image.asset(
-                              'assets/other/freud200_winter.png',
+                              isChristmas ? 'assets/other/freud200_winter.png' : 'assets/other/freud200.png',
                               fit: BoxFit.scaleDown,
                             ),
                           ),

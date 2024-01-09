@@ -46,8 +46,7 @@ Future<void> main() async {
   await Firebase.initializeApp();
 
   _log.info('Going full screen');
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.leanBack);
-
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   AdsController? adsController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
     /// Prepare the google_mobile_ads plugin so that the first ad loads

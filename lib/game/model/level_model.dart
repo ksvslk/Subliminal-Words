@@ -49,7 +49,7 @@ class LevelModel with ChangeNotifier {
   LevelModel(
       {required this.adsController,
       required this.inAppPurchaseController,
-      required this.gamesServicesController, 
+      required this.gamesServicesController,
       required this.persistence});
 
   Future<void> initialize() async {
@@ -69,8 +69,8 @@ class LevelModel with ChangeNotifier {
     final cloudGameData = await gamesServicesController?.loadGame();
     final localMaxLevelNr = await persistence.getMaxLevelNr();
 
-    if (cloudGameData?.progress.compareTo(levelNr) == 1 || cloudGameData?.progress.compareTo(levelNr) == 0)
-    {
+    if (cloudGameData?.progress.compareTo(levelNr) == 1 ||
+        cloudGameData?.progress.compareTo(levelNr) == 0) {
       unlocked = true;
     }
 
@@ -85,8 +85,7 @@ class LevelModel with ChangeNotifier {
     }
   }
 
-  void showMessageFromMascot(String message)
-  {
+  void showMessageFromMascot(String message) {
     variousTooltip = message;
     notifyListeners();
   }
@@ -146,13 +145,16 @@ class LevelModel with ChangeNotifier {
     askForReview(levelNr + 1);
   }
 
-  void askForReview(int levelNr) async
-  {
-    if (levelNr == 26 || levelNr == 124)
-    {
+  void askForReview(int levelNr) async {
+    if (levelNr == 26 || levelNr == 124) {
       final InAppReview inAppReview = InAppReview.instance;
       if (await inAppReview.isAvailable()) {
+        try {
           inAppReview.requestReview();
+        } on Exception catch (e) {
+          _log.log(Level.SEVERE,
+              "Something went wrong when trying to request review.", e);
+        }
       }
     }
   }
@@ -224,13 +226,16 @@ class LevelModel with ChangeNotifier {
   Future<(List<LevelData>, int)> getAllLevelsWordAndStories() async {
     final levels = await persistence.getAllLevelsForPack(currentStoryCardPack);
     int lastLevelNr = currentStoryCardPack == 1 ? 100 : 200;
-    final lastUnlockedLevelNr = (levels.lastWhereOrNull((element) => element.unlocked == true && element.nr < lastLevelNr)?.nr);
-    final lastContinueLevelNr = lastUnlockedLevelNr == null ? 1 : lastUnlockedLevelNr + 1;
+    final lastUnlockedLevelNr = (levels
+        .lastWhereOrNull(
+            (element) => element.unlocked == true && element.nr < lastLevelNr)
+        ?.nr);
+    final lastContinueLevelNr =
+        lastUnlockedLevelNr == null ? 1 : lastUnlockedLevelNr + 1;
     return (levels, lastContinueLevelNr);
   }
 
-  void changeStoryPackNr(int newPackNr)
-  {
+  void changeStoryPackNr(int newPackNr) {
     currentStoryCardPack = newPackNr;
     notifyListeners();
   }
@@ -273,7 +278,27 @@ class LevelModel with ChangeNotifier {
   }
 
   Future<void> logLevelEnd() async {
-    if ([1, 3, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 175, 200].contains(levelNr)) {
+    if ([
+      1,
+      3,
+      10,
+      20,
+      30,
+      40,
+      50,
+      60,
+      70,
+      80,
+      90,
+      100,
+      110,
+      120,
+      130,
+      140,
+      150,
+      175,
+      200
+    ].contains(levelNr)) {
       await analytics.logLevelEnd(
         levelName: levelNr.toString(),
       );
