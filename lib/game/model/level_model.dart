@@ -83,6 +83,14 @@ class LevelModel with ChangeNotifier {
           "Restored from cloud. Latest level accessible through story bar.";
       notifyListeners();
     }
+    else {
+      final lastLevelData = await persistence.getLatestLevelData();
+      final lastLevelNr = int.tryParse(lastLevelData.$1);
+      if (lastLevelNr != null && levelNr != lastLevelNr)
+      {
+        loadLevel(lastLevelNr);
+      }
+    }
   }
 
   void showMessageFromMascot(String message) {
@@ -225,13 +233,20 @@ class LevelModel with ChangeNotifier {
 
   Future<(List<LevelData>, int)> getAllLevelsWordAndStories() async {
     final levels = await persistence.getAllLevelsForPack(currentStoryCardPack);
+    final maxLevelNr = await persistence.getMaxLevelNr();
     int lastLevelNr = currentStoryCardPack == 1 ? 100 : 200;
     final lastUnlockedLevelNr = (levels
         .lastWhereOrNull(
             (element) => element.unlocked == true && element.nr < lastLevelNr)
         ?.nr);
-    final lastContinueLevelNr =
+    int lastContinueLevelNr =
         lastUnlockedLevelNr == null ? 1 : lastUnlockedLevelNr + 1;
+    
+    if (currentStoryCardPack == 2 && maxLevelNr >= 100)
+    {
+      lastContinueLevelNr = lastUnlockedLevelNr == null ? 101 : lastUnlockedLevelNr + 1;
+    }
+
     return (levels, lastContinueLevelNr);
   }
 

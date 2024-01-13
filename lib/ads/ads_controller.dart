@@ -23,7 +23,7 @@ class AdsController extends ChangeNotifier {
 
   RewardedAd? _rewardedAd;
   InterstitialAd? _interstitialAd;
- /*
+
   final rewardedAdUnitId = defaultTargetPlatform == TargetPlatform.android
       ? 'ca-app-pub-5386053272091445/7489159540'
       // iOS
@@ -33,7 +33,7 @@ class AdsController extends ChangeNotifier {
       ? 'ca-app-pub-5386053272091445/6030939346'
       // iOS
       : 'ca-app-pub-5386053272091445/4526285981';
- */
+ /*
  //FAKE
   final rewardedAdUnitId = defaultTargetPlatform == TargetPlatform.android
       ? 'ca-app-pub-3940256099942544/5224354917'
@@ -44,7 +44,7 @@ class AdsController extends ChangeNotifier {
       ? 'ca-app-pub-3940256099942544/1033173712'
       // iOS
       : 'ca-app-pub-3940256099942544/4411468910';
-
+ */
 
   /// Creates an [AdsController] that wraps around a [MobileAds] [instance].
   ///

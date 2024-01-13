@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 
-enum MenuItem { achievements, theme, feedback, sound, music, about }
+enum MenuItem { achievements, theme, palindrome, sound, music, about }
 
 enum AboutSubMenuItem {
   follow,
@@ -21,8 +21,8 @@ enum ThemeSubMenuItem { red, yellow, green, blue, purple }
 
 Uri _getFeedbackUri()
 {
-  return Platform.isAndroid ? Uri.parse('https://play.google.com/store/apps/details?id=com.indest.subliminalwords') :
-   Uri.parse('https://apps.apple.com/app/subliminal-words/id6468366578');
+  return Platform.isAndroid ? Uri.parse('https://play.google.com/store/apps/details?id=com.indest.hah') :
+   Uri.parse('https://apps.apple.com/app/palindrome/id1673006365');
 }
 
 final Uri _followUri = Uri.parse('https://twitter.com/IndestGames');
@@ -112,13 +112,13 @@ class _SettingsMenuState extends State<SettingsMenu> {
                     child: Text(item.name),
                   );
                 });
-          case MenuItem.feedback:
+          case MenuItem.palindrome:
             return MenuItemButton(
                 onPressed: () {
                   final feedbackUri = _getFeedbackUri();
                   _launchUrl(feedbackUri);
                 },
-                leadingIcon: const Icon(Icons.keyboard_outlined),
+                leadingIcon: const Icon(Icons.games_outlined),
                 child: Text(item.name));
           case MenuItem.sound:
             return ValueListenableBuilder(

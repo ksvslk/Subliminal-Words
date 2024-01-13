@@ -43,7 +43,7 @@ class GameFieldWrapper extends StatelessWidget {
         } else if (snapshot.hasError) {
           return ErrorWidget(snapshot.error!);
         } else {
-          return const CircularProgressIndicator(); // Loading indicator
+          return const Center(child: CircularProgressIndicator());
         }
       },
     );

@@ -6,7 +6,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:games_services/games_services.dart' as gs;
-import 'package:games_services/games_services.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/model/game_data.dart';
 
@@ -23,14 +22,12 @@ class GamesServicesController {
   final achievementSerpentsEnd = "CgkI1_aOyv4PEAIQBA";
   final achievementTheLegendLivesOn = "CgkI1_aOyv4PEAIQBQ";
 
-
   final achievementCityInChaos = "CgkI1_aOyv4PEAIQCA";
   final achievementFirstStrike = "CgkI1_aOyv4PEAIQCQ";
   final achievementHighrankOfficer = "CgkI1_aOyv4PEAIQCg";
   final achievementChildsDrawing = "CgkI1_aOyv4PEAIQCw";
   final achievementVirusRelease = "CgkI1_aOyv4PEAIQDA";
   final achievementEndOfConflict = "CgkI1_aOyv4PEAIQDQ";
-
 
   final saveGameName = "savegame1337";
 
@@ -119,30 +116,25 @@ class GamesServicesController {
         awardAchievement(
             iOS: achievementTheLegendLivesOn,
             android: achievementTheLegendLivesOn);
-      case 112:
+      case 112: // City In Chaos x 50 - Chaos is unraveling the fabric of the city.
         awardAchievement(
-            iOS: achievementCityInChaos,
-            android: achievementCityInChaos);
+            iOS: achievementCityInChaos, android: achievementCityInChaos);
       case 125:
-         awardAchievement(
-            iOS: achievementFirstStrike,
-            android: achievementFirstStrike);
+        awardAchievement(
+            iOS: achievementFirstStrike, android: achievementFirstStrike);
       case 154:
-         awardAchievement(
+        awardAchievement(
             iOS: achievementHighrankOfficer,
             android: achievementHighrankOfficer);
       case 168:
         awardAchievement(
-            iOS: achievementChildsDrawing,
-            android: achievementChildsDrawing);
+            iOS: achievementChildsDrawing, android: achievementChildsDrawing);
       case 184:
         awardAchievement(
-            iOS: achievementVirusRelease,
-            android: achievementVirusRelease);
+            iOS: achievementVirusRelease, android: achievementVirusRelease);
       case 200:
-          awardAchievement(
-            iOS: achievementEndOfConflict,
-            android: achievementEndOfConflict);
+        awardAchievement(
+            iOS: achievementEndOfConflict, android: achievementEndOfConflict);
     }
   }
 
@@ -165,23 +157,26 @@ class GamesServicesController {
 
   Future<GameData?> loadGame() async {
     if (await signedIn) {
-      try {
-        _log.log(Level.INFO,
-            'Is user logged in:${await gs.GameAuth.isSignedIn}, ${await gs.GamesServices.isSignedIn}');
-        final result = await gs.SaveGame.loadGame(name: saveGameName);
-        if (result != null) {
-          final Map json = jsonDecode(result);
-          final gameData = GameData.fromJson(json);
-          _log.log(Level.INFO, "Player progress: ${gameData.progress}");
-          return gameData;
+      final savedGamesList = await gs.SaveGame.getSavedGames();
+      if (savedGamesList != null && savedGamesList.isNotEmpty) {
+        try {
+          _log.log(Level.INFO,
+              'Is user logged in:${await gs.GameAuth.isSignedIn}, ${await gs.GamesServices.isSignedIn}');
+          final result = await gs.SaveGame.loadGame(name: saveGameName);
+          if (result != null) {
+            final Map json = jsonDecode(result);
+            final gameData = GameData.fromJson(json);
+            _log.log(Level.INFO, "Player progress: ${gameData.progress}");
+            return gameData;
+          }
+          _log.log(Level.INFO, "Could not load game.");
+          return null;
+        } catch (e) {
+          _log.severe('Could not load game: $e');
+          return null;
         }
-        _log.log(Level.INFO, "Could not load game.");
-        return null;
-      } catch (e) {
-        _log.severe('Could not load game: $e');
-        return null;
       }
     }
-     return null;
+    return null;
   }
 }
