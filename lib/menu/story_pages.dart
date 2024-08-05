@@ -168,6 +168,7 @@ class StoryPages extends StatelessWidget {
                   Padding(
                       padding: const EdgeInsets.all(0.0),
                       child: SegmentedButton<int>(
+                        style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.secondaryContainer),
                         segments: const <ButtonSegment<int>>[
                           ButtonSegment<int>(
                               value: 1, label: Text('Chapter 1')),

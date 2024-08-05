@@ -8,7 +8,7 @@
 PRODUCT_NAME = operation_hermes
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.operationHermes
+PRODUCT_BUNDLE_IDENTIFIER = com.indest.operationHermes
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2023 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2024 com.indest. All rights reserved.

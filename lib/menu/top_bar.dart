@@ -3,15 +3,24 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:operation_hermes/C.dart';
-import 'package:operation_hermes/game/model/level_model.dart';
-import 'package:operation_hermes/game/model/picture_model.dart';
 import 'package:operation_hermes/menu/in_app_purchase_menu.dart';
 import 'package:operation_hermes/menu/settings_menu.dart';
 import 'package:operation_hermes/menu/story_pages.dart';
 import 'package:operation_hermes/menu/story_tablo.dart';
-import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+
+Future<void> _goToStorePage()
+async {
+  var url =  Platform.isAndroid ? Uri.parse('https://play.google.com/store/apps/details?id=com.indest.subliminalfaces') :
+   Uri.parse('https://apps.apple.com/app/subliminal-faces/id6476108606');
+  if (!await launchUrl(url)) {
+    throw Exception('Could not launch $url');
+  }
+}
+
 
 class TopBar extends StatelessWidget {
   const TopBar({super.key});
@@ -43,6 +52,8 @@ class TopBar extends StatelessWidget {
         Flexible(
           flex: 1,
           child: IconButton(
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.tertiaryContainer),
+            color: Theme.of(context).colorScheme.onSecondaryContainer,
             onPressed: () {
               showDialog(
                 context: context,
@@ -54,6 +65,16 @@ class TopBar extends StatelessWidget {
             icon: const Icon(Icons.add_shopping_cart_outlined),
           ),
         ),
+        Flexible(
+          flex: 1,
+          child: LayoutBuilder(builder: (currentContext, constraints) {
+            return IconButton(
+            onPressed: () { _goToStorePage(); },
+            icon: const Icon(Icons.face_3_outlined),
+          );
+          },) 
+        ),
+        /*
         Flexible(
           flex: 1,
           child: LayoutBuilder(builder: (currentContext, constraints) {
@@ -74,6 +95,7 @@ class TopBar extends StatelessWidget {
           );
           },) 
         ),
+        */
         Flexible(
           flex: 6,
           child: Container(

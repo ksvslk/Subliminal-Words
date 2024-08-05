@@ -46,18 +46,33 @@ class AdButton extends StatelessWidget {
         .firstWhereOrNull((element) => element.id == productId);
     if (product == null) {
       _log.log(Level.INFO, "Loading (empty products) - $productId");
-      
-      if (productId == C.REMOVE_3 || productId == C.REMOVE_3_IOS) {
-        product = PurchasableProduct(ProductDetails(id: productId, title: "Remove 3", description: "", price: "", rawPrice: -1, currencyCode: ""));
-        product.status = ProductStatus.pending;
-      }
-      else if (productId == C.MANIPULATE || productId == C.MANIPULATE_IOS) {
-        product = PurchasableProduct(ProductDetails(id: productId, title: "Manipulate", description: "", price: "", rawPrice: -1, currencyCode: ""));
-        product.status = ProductStatus.pending;
 
-      }
-      else if (productId == C.HIGHLIGHT || productId == C.HIGHLIGHT_IOS) {
-        product = PurchasableProduct(ProductDetails(id: productId, title: "Highlight", description: "", price: "", rawPrice: -1, currencyCode: ""));
+      if (productId == C.REMOVE_3 || productId == C.REMOVE_3_IOS) {
+        product = PurchasableProduct(ProductDetails(
+            id: productId,
+            title: "Remove 3",
+            description: "",
+            price: "",
+            rawPrice: -1,
+            currencyCode: ""));
+        product.status = ProductStatus.pending;
+      } else if (productId == C.MANIPULATE || productId == C.MANIPULATE_IOS) {
+        product = PurchasableProduct(ProductDetails(
+            id: productId,
+            title: "Manipulate",
+            description: "",
+            price: "",
+            rawPrice: -1,
+            currencyCode: ""));
+        product.status = ProductStatus.pending;
+      } else if (productId == C.HIGHLIGHT || productId == C.HIGHLIGHT_IOS) {
+        product = PurchasableProduct(ProductDetails(
+            id: productId,
+            title: "Highlight",
+            description: "",
+            price: "",
+            rawPrice: -1,
+            currencyCode: ""));
         product.status = ProductStatus.pending;
       }
     }
@@ -71,7 +86,7 @@ class AdButton extends StatelessWidget {
           "Purchased (or all in ${allInPack?.status.name}) - $productId");
       return (
         getSuccessfulAction(audioController, levelModel),
-        (product?.productName ?? "",  const Icon(Icons.touch_app), false)
+        (product?.productName ?? "", const Icon(Icons.touch_app), false)
       );
     }
 
@@ -81,7 +96,11 @@ class AdButton extends StatelessWidget {
       _log.log(Level.INFO, "No purchase, no ads - $productId");
       return (
         null,
-        (product?.productName ?? "", const Icon(Icons.hourglass_top_outlined), false)
+        (
+          product?.productName ?? "",
+          const Icon(Icons.hourglass_top_outlined),
+          false
+        )
       );
     }
 
@@ -99,7 +118,7 @@ class AdButton extends StatelessWidget {
         (product?.productName ?? "", const Icon(Icons.slideshow_rounded), true)
       );
     }
-    return (() {}, ("¯\_(ツ)_/¯", const Icon(Icons.error), true));
+    return (() {}, ("¯_(ツ)_/¯", const Icon(Icons.error), true));
   }
 
   Function()? getSuccessfulAction(
@@ -144,39 +163,64 @@ class AdButton extends StatelessWidget {
               levelModel.remove3Available,
               audioController,
               levelModel);
-          return Padding(
+          return levelModel.levelCompleted ? const SizedBox.expand() : Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2.0),
-              child: OutlinedButton(
-                onPressed:
-                    !levelModel.levelCompleted ? callbackAndText.$1 : null,
-                child: Padding(
-                  padding: const EdgeInsets.all(1.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      callbackAndText.$2.$3
-                          ? const Flexible(
-                              child: AutoSizeText("Watch ad ▸",
+              child: Card(
+                clipBehavior: Clip.hardEdge,
+                child: InkWell(
+                  splashColor:
+                      Theme.of(context).colorScheme.tertiary.withAlpha(30),
+                  onTap: !levelModel.levelCompleted ? callbackAndText.$1 : null,
+                  child: SizedBox(
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          callbackAndText.$2.$3
+                              ? Flexible(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 2.0, vertical: 2.0),
+                                    decoration: BoxDecoration(
+                                      border: const Border.symmetric(),
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .tertiaryContainer,
+                                      borderRadius: BorderRadius.circular(8.0),
+                                    ),
+                                    child: AutoSizeText(
+                                      "WATCH AD",
+                                      style: TextStyle(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onTertiaryContainer,
+                                      ),
+                                      maxLines: 1,
+                                      textAlign: TextAlign.center,
+                                      minFontSize: minFontSize,
+                                    ),
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
+                          callbackAndText.$2.$3
+                              ? const SizedBox.shrink()
+                              : Flexible(
+                                  child: SizedBox.expand(
+                                    child: FittedBox(
+                                      child: callbackAndText.$2.$2,
+                                    ),
+                                  ),
+                                ),
+                          Flexible(
+                              child: AutoSizeText(callbackAndText.$2.$1,
                                   maxLines: 1,
                                   textAlign: TextAlign.center,
-                                  minFontSize: minFontSize))
-                          : const SizedBox.shrink(),
-                      callbackAndText.$2.$3
-                          ? const SizedBox.shrink()
-                          : Flexible(
-                              child: SizedBox.expand(
-                                child: FittedBox(
-                                  child: callbackAndText.$2.$2,
-                                ),
-                              ),
-                            ),
-                      Flexible(
-                          child: AutoSizeText(callbackAndText.$2.$1,
-                              maxLines: 1,
-                              textAlign: TextAlign.center,
-                              minFontSize: minFontSize)),
-                    ],
+                                  minFontSize: minFontSize)),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ));
