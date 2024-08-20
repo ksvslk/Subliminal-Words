@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:operation_hermes/game/copy_to_clipboard.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:operation_hermes/menu/credits_dialog.dart';
@@ -8,7 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 
-enum MenuItem { achievements, theme, faces, sound, music, about }
+enum MenuItem { achievements, competitions, theme, faces, sound, music, about }
 
 enum AboutSubMenuItem {
   follow,
@@ -19,10 +20,11 @@ enum AboutSubMenuItem {
 
 enum ThemeSubMenuItem { red, yellow, green, blue, purple }
 
-Uri _getFeedbackUri()
-{
-  return Platform.isAndroid ? Uri.parse('https://play.google.com/store/apps/details?id=com.indest.subliminalfaces') :
-   Uri.parse('https://apps.apple.com/app/subliminal-faces/id6476108606');
+Uri _getFeedbackUri() {
+  return Platform.isAndroid
+      ? Uri.parse(
+          'https://play.google.com/store/apps/details?id=com.indest.subliminalfaces')
+      : Uri.parse('https://apps.apple.com/app/subliminal-faces/id6476108606');
 }
 
 final Uri _followUri = Uri.parse('https://twitter.com/IndestGames');
@@ -84,6 +86,39 @@ class _SettingsMenuState extends State<SettingsMenu> {
                 },
                 leadingIcon: const Icon(Icons.leaderboard_outlined),
                 child: Text(item.name));
+          case MenuItem.competitions:
+            return SubmenuButton(
+              leadingIcon: const Icon(Icons.star_border_outlined),
+              menuChildren: [
+                MenuItemButton(onPressed: () {}, child: CopyToClipboardWidget(textToCopy: "98397HFJKJHSFIU389HJKFAS893R")),
+                MenuItemButton(
+                  onPressed: () {},
+                  child: Container(
+                    constraints: const BoxConstraints.expand(
+                      width: 175,
+                      height: 45,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: LinearProgressIndicator(
+                            backgroundColor:
+                                Theme.of(context).colorScheme.tertiaryContainer,
+                            value: 0.6,
+                          ),
+                        ),
+                        const SizedBox(width: 8.0),
+                        Text(
+                          "6/20",
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              child: Text(item.name),
+            );
           case MenuItem.theme:
             return ValueListenableBuilder(
                 valueListenable: settings.seedColor,
@@ -171,7 +206,7 @@ class _SettingsMenuState extends State<SettingsMenu> {
                           );
                         },
                         child: Text(item.name));
-                case AboutSubMenuItem.credits:
+                  case AboutSubMenuItem.credits:
                     return MenuItemButton(
                         onPressed: () {
                           showDialog(
