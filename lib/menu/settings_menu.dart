@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:operation_hermes/game/copy_to_clipboard.dart';
+import 'package:operation_hermes/game/join_competition_screen.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:operation_hermes/menu/credits_dialog.dart';
@@ -57,6 +59,131 @@ class SettingsMenu extends StatefulWidget {
 }
 
 class _SettingsMenuState extends State<SettingsMenu> {
+  void _showPromoCode(String promoCode) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20.0),
+          ),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: Stack(
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.only(
+                  top: 66 + 16,
+                  bottom: 16,
+                  left: 16,
+                  right: 16,
+                ),
+                margin: const EdgeInsets.only(top: 66),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  shape: BoxShape.rectangle,
+                  borderRadius: BorderRadius.circular(17),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 10.0,
+                      offset: Offset(0.0, 10.0),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      "Congratulations!",
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontSize:
+                            Theme.of(context).textTheme.titleLarge?.fontSize,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 16.0),
+                    Text(
+                      "You've won a promo code!",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontSize:
+                            Theme.of(context).textTheme.bodyLarge?.fontSize,
+                      ),
+                    ),
+                    const SizedBox(height: 24.0),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        promoCode,
+                        style: TextStyle(
+                          fontSize:
+                              Theme.of(context).textTheme.bodySmall?.fontSize,
+                          fontWeight: FontWeight.w700,
+                          color:
+                              Theme.of(context).colorScheme.onPrimaryContainer,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24.0),
+                    Align(
+                      alignment: Alignment.bottomRight,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: promoCode));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text('Copied to clipboard')),
+                              );
+                            },
+                            child: const Text('Copy'),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                            child: const Text('OK'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Positioned(
+                left: 16,
+                right: 16,
+                child: CircleAvatar(
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primaryContainer,
+                  radius: 66,
+                  child: Icon(
+                    Icons.emoji_events,
+                    size: 60,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.read<SettingsController>();
@@ -90,9 +217,14 @@ class _SettingsMenuState extends State<SettingsMenu> {
             return SubmenuButton(
               leadingIcon: const Icon(Icons.star_border_outlined),
               menuChildren: [
-                MenuItemButton(onPressed: () {}, child: CopyToClipboardWidget(textToCopy: "98397HFJKJHSFIU389HJKFAS893R")),
                 MenuItemButton(
-                  onPressed: () {},
+                    onPressed: () {},
+                    child: CopyToClipboardWidget(
+                        textToCopy: "98397HFJKJHSFIU389HJKFAS893R")),
+                MenuItemButton(
+                  onPressed: () {
+                    _showPromoCode("98397HFJKJHSFIU389HJKFAS893R");
+                  },
                   child: Container(
                     constraints: const BoxConstraints.expand(
                       width: 175,
@@ -102,8 +234,15 @@ class _SettingsMenuState extends State<SettingsMenu> {
                       children: [
                         Expanded(
                           child: LinearProgressIndicator(
-                            backgroundColor:
-                                Theme.of(context).colorScheme.tertiaryContainer,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer,
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .secondaryContainer
+                                .blendWith(
+                                    Theme.of(context).colorScheme.primary,
+                                    0.25),
                             value: 0.6,
                           ),
                         ),
@@ -150,8 +289,9 @@ class _SettingsMenuState extends State<SettingsMenu> {
           case MenuItem.faces:
             return MenuItemButton(
                 onPressed: () {
-                  final feedbackUri = _getFeedbackUri();
-                  _launchUrl(feedbackUri);
+                  showJoinCompetitionDialog(context);
+                  //final feedbackUri = _getFeedbackUri();
+                  //_launchUrl(feedbackUri);
                 },
                 leadingIcon: const Icon(Icons.games_outlined),
                 child: Text(item.name));
