@@ -119,7 +119,7 @@ class _JoinCompetitionDialogState extends State<JoinCompetitionDialog>
                 end: Alignment.bottomRight,
                 colors: [
                   Theme.of(context).colorScheme.primaryContainer,
-                  Theme.of(context).colorScheme.tertiaryContainer,
+                  Theme.of(context).colorScheme.surfaceContainer,
                 ],
               ),
               borderRadius: BorderRadius.circular(20),
@@ -165,8 +165,7 @@ class _JoinCompetitionDialogState extends State<JoinCompetitionDialog>
                       fontSize: Theme.of(context).textTheme.bodyLarge?.fontSize,
                       color: Theme.of(context)
                           .colorScheme
-                          .onPrimaryContainer
-                          .withOpacity(0.95),
+                          .onSecondaryContainer,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -208,7 +207,7 @@ class _JoinCompetitionDialogState extends State<JoinCompetitionDialog>
                       style: TextStyle(
                         color: Theme.of(context)
                             .colorScheme
-                            .onTertiaryContainer,
+                            .onSecondaryContainer,
                       ),
                     ),
                   ),
