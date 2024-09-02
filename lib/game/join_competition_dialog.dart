@@ -118,8 +118,8 @@ class _JoinCompetitionDialogState extends State<JoinCompetitionDialog>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Theme.of(context).colorScheme.primaryContainer,
                   Theme.of(context).colorScheme.surfaceContainer,
+                  Theme.of(context).colorScheme.primaryContainer,
                 ],
               ),
               borderRadius: BorderRadius.circular(20),
@@ -137,7 +137,7 @@ class _JoinCompetitionDialogState extends State<JoinCompetitionDialog>
                 Flexible(
                   flex: 1,
                   child: Lottie.network(
-                    'https://assets1.lottiefiles.com/packages/lf20_xyadoh9h.json',
+                    'https://lottie.host/718866f0-c66d-4834-bdd9-44462bd7c70f/KY6ZlGe0kM.json',
                     width: constraints.maxWidth * 0.6,
                     height: constraints.maxHeight * 0.25,
                     fit: BoxFit.contain,
@@ -160,12 +160,12 @@ class _JoinCompetitionDialogState extends State<JoinCompetitionDialog>
                 Flexible(
                   flex: 1,
                   child: Text(
-                    'Be among the first players to complete the first 50 levels and win an exclusive prize!',
+                    'Be among the players to complete the first 77 levels before others and win a promo code!',
                     style: TextStyle(
                       fontSize: Theme.of(context).textTheme.bodyLarge?.fontSize,
                       color: Theme.of(context)
                           .colorScheme
-                          .onSecondaryContainer,
+                          .onSurface,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -197,27 +197,13 @@ class _JoinCompetitionDialogState extends State<JoinCompetitionDialog>
                             style: TextStyle(fontSize: Theme.of(context).textTheme.bodyLarge?.fontSize)),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Flexible(
-                  flex: 1,
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: Text(
-                      'Maybe Later',
-                      style: TextStyle(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSecondaryContainer,
-                      ),
-                    ),
-                  ),
-                ),
+                const SizedBox(height: 24),
                 Flexible(
                   flex: 1,
                   child: Text(
-                    'Prizes left: $remainingPrizes',
+                    'Hurry up, prizes left: $remainingPrizes',
                     style: TextStyle(
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      color: Theme.of(context).colorScheme.onSurface,
                       fontSize: Theme.of(context).textTheme.bodyLarge?.fontSize,
                       fontWeight: FontWeight.bold,
                     ),

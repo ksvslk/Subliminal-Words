@@ -1,9 +1,14 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:operation_hermes/game/copy_to_clipboard.dart';
-import 'package:operation_hermes/game/join_competition_screen.dart';
+import 'package:operation_hermes/game/finished_competition_dialog.dart';
+import 'package:operation_hermes/game/info_competition_dialog.dart';
+import 'package:operation_hermes/game/join_competition_dialog.dart';
+import 'package:operation_hermes/game/won_competition_dialog.dart';
+import 'package:operation_hermes/menu/competition_prize_menu.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
+import 'package:operation_hermes/menu/competition_progress_menu.dart';
 import 'package:operation_hermes/menu/credits_dialog.dart';
 import 'package:operation_hermes/menu/licenses_dialog.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
@@ -11,7 +16,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 
-enum MenuItem { achievements, competitions, theme, faces, sound, music, about }
+enum MenuItem { achievements, competition, theme, faces, sound, music, about }
 
 enum AboutSubMenuItem {
   follow,
@@ -21,6 +26,28 @@ enum AboutSubMenuItem {
 }
 
 enum ThemeSubMenuItem { red, yellow, green, blue, purple }
+
+final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+Future<void> updatePlayerLevel(String playerId, int newLevel) async {
+  try {
+    // Attempt to update the document
+    await _firestore.collection('players').doc(playerId).update({
+      'current_level': newLevel,
+    });
+  } catch (e) {
+    if (e is FirebaseException && e.code == 'not-found') {
+      // If the document doesn't exist, create it
+      await _firestore.collection('players').doc(playerId).set({
+        'current_level': newLevel,
+      });
+    } else {
+      // If it's a different error, rethrow it
+      print('Error updating player level: $e');
+      rethrow;
+    }
+  }
+}
 
 Uri _getFeedbackUri() {
   return Platform.isAndroid
@@ -134,32 +161,6 @@ class _SettingsMenuState extends State<SettingsMenu> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24.0),
-                    Align(
-                      alignment: Alignment.bottomRight,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(text: promoCode));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text('Copied to clipboard')),
-                              );
-                            },
-                            child: const Text('Copy'),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
-                            child: const Text('OK'),
-                          ),
-                        ],
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -213,49 +214,15 @@ class _SettingsMenuState extends State<SettingsMenu> {
                 },
                 leadingIcon: const Icon(Icons.leaderboard_outlined),
                 child: Text(item.name));
-          case MenuItem.competitions:
-            return SubmenuButton(
+          case MenuItem.competition:
+            return MenuItemButton(
+              onPressed: () => {
+                gamesServices.getPlayerID().then((id) => {
+                      if (id != null) {updatePlayerLevel(id, 20)}
+                    }),
+                //showInfoCompetitionDialog(context, "TERE")
+              },
               leadingIcon: const Icon(Icons.star_border_outlined),
-              menuChildren: [
-                MenuItemButton(
-                    onPressed: () {},
-                    child: CopyToClipboardWidget(
-                        textToCopy: "98397HFJKJHSFIU389HJKFAS893R")),
-                MenuItemButton(
-                  onPressed: () {
-                    _showPromoCode("98397HFJKJHSFIU389HJKFAS893R");
-                  },
-                  child: Container(
-                    constraints: const BoxConstraints.expand(
-                      width: 175,
-                      height: 45,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: LinearProgressIndicator(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onPrimaryContainer,
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .secondaryContainer
-                                .blendWith(
-                                    Theme.of(context).colorScheme.primary,
-                                    0.25),
-                            value: 0.6,
-                          ),
-                        ),
-                        const SizedBox(width: 8.0),
-                        Text(
-                          "6/20",
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
               child: Text(item.name),
             );
           case MenuItem.theme:

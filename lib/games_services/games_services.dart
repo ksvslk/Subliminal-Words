@@ -61,6 +61,10 @@ class GamesServicesController {
     }
   }
 
+  Future<String?> getPlayerID() async {
+    return await gs.GamesServices.getPlayerID();
+  }
+
   /// Signs into the underlying games service.
   Future<void> initialize() async {
     try {

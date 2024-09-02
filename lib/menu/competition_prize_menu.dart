@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Import the services package for Clipboard
 
-class CopyToClipboardWidget extends StatelessWidget {
-  final String textToCopy;
+class CompetitionPrizeMenu extends StatelessWidget {
+  final String promoCode;
 
-  CopyToClipboardWidget({required this.textToCopy});
+  const CompetitionPrizeMenu({super.key, required this.promoCode});
 
   @override
   Widget build(BuildContext context) {
-
     copyToClipboard() {
-      Clipboard.setData(ClipboardData(text: textToCopy));
+      Clipboard.setData(ClipboardData(text: promoCode));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Copied to clipboard')),
       );
@@ -24,7 +23,7 @@ class CopyToClipboardWidget extends StatelessWidget {
             copyToClipboard();
           },
           child: Text(
-            "earned promo code",
+            "promo code prize",
             style: TextStyle(
               fontSize: Theme.of(context).textTheme.bodyMedium?.fontSize,
             ),
