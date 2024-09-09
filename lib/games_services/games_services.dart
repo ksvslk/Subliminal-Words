@@ -75,6 +75,13 @@ class GamesServicesController {
       final signedIn = await gs.GamesServices.isSignedIn;
       _signedInCompleter.complete(signedIn);
 
+      _log.info("Trying to get the player id..");
+      gs.Player.getPlayerID().then((id){
+        _log.info("ID: $id");
+      }).catchError((onError){
+        _log.severe("Could not get the player id", onError);
+      });
+
       //final savedGame = await gs.GamesServices.loadGame(name: "a");
       //final saveGameJson = savedGame.jsify();
     } catch (e) {

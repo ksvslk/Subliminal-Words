@@ -10,7 +10,7 @@ exports.checkAndAssignPromoCode = onDocumentUpdated('players/{playerId}', async 
     const db = admin.firestore();
 
     try {
-        if (newValue.current_level === 20 && !newValue.promo_code && previousValue.current_level < 20) {
+        if (newValue.current_level === 60 && !newValue.promo_code && previousValue.finished == false) {
             const promoCode = await db.runTransaction(async (transaction) => {
                 const promoSnapshot = await transaction.get(
                     db.collection('promo_codes')
@@ -30,7 +30,10 @@ exports.checkAndAssignPromoCode = onDocumentUpdated('players/{playerId}', async 
                     assigned: true, 
                     assigned_to: playerId 
                 });
-                transaction.update(event.data.after.ref, { promo_code: promoCode });
+                transaction.update(event.data.after.ref, {
+                    finished: true,
+                    promo_code: promoCode
+                });
 
                 return promoCode;
             });

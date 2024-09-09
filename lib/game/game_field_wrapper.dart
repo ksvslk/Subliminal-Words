@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/competition/competition_controller.dart';
 import 'package:operation_hermes/game/freud_dialog.dart';
 import 'package:operation_hermes/game/game_field.dart';
 import 'package:operation_hermes/game/hint_bar.dart';
+import 'package:operation_hermes/game/join_competition_dialog.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/game/puzzle.dart';
 import 'package:operation_hermes/menu/top_bar.dart';
@@ -14,11 +16,26 @@ class GameFieldWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-  
+    final levelModel = context.read<LevelModel>();
+    final competitionController = context.read<CompetitionController>();
+
+    levelModel.persistence.getMaxLevelNr().then((maxLevel) {
+      competitionController.getCompetitionData().then((data) {
+        if (data?.enrolled == false) {
+          competitionController
+              .joinCompetition(maxLevel)
+              .then((joined) {
+            if (joined) {
+              showJoinedCompetitionDialog(context);
+            }
+          });
+        }
+      });
+    });
+
     return FutureBuilder(
       future: Provider.of<LevelModel>(context, listen: false).initialize(),
       builder: (context, snapshot) {
-
         if (snapshot.connectionState == ConnectionState.done) {
           return const SafeArea(
               child: Stack(

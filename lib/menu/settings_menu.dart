@@ -1,14 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:operation_hermes/game/finished_competition_dialog.dart';
+import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/info_competition_dialog.dart';
-import 'package:operation_hermes/game/join_competition_dialog.dart';
-import 'package:operation_hermes/game/won_competition_dialog.dart';
-import 'package:operation_hermes/menu/competition_prize_menu.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
-import 'package:operation_hermes/menu/competition_progress_menu.dart';
 import 'package:operation_hermes/menu/credits_dialog.dart';
 import 'package:operation_hermes/menu/licenses_dialog.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
@@ -26,28 +20,6 @@ enum AboutSubMenuItem {
 }
 
 enum ThemeSubMenuItem { red, yellow, green, blue, purple }
-
-final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-Future<void> updatePlayerLevel(String playerId, int newLevel) async {
-  try {
-    // Attempt to update the document
-    await _firestore.collection('players').doc(playerId).update({
-      'current_level': newLevel,
-    });
-  } catch (e) {
-    if (e is FirebaseException && e.code == 'not-found') {
-      // If the document doesn't exist, create it
-      await _firestore.collection('players').doc(playerId).set({
-        'current_level': newLevel,
-      });
-    } else {
-      // If it's a different error, rethrow it
-      print('Error updating player level: $e');
-      rethrow;
-    }
-  }
-}
 
 Uri _getFeedbackUri() {
   return Platform.isAndroid
@@ -86,6 +58,8 @@ class SettingsMenu extends StatefulWidget {
 }
 
 class _SettingsMenuState extends State<SettingsMenu> {
+  static final _log = Logger('SettingsMenu');
+
   void _showPromoCode(String promoCode) {
     showDialog(
       context: context,
@@ -186,9 +160,9 @@ class _SettingsMenuState extends State<SettingsMenu> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final settings = context.read<SettingsController>();
-    final gamesServices = context.read<GamesServicesController>();
+  Widget build(BuildContext mainContext) {
+    final settings = mainContext.read<SettingsController>();
+    final gamesServices = mainContext.read<GamesServicesController>();
 
     return MenuAnchor(
       builder:
@@ -216,13 +190,10 @@ class _SettingsMenuState extends State<SettingsMenu> {
                 child: Text(item.name));
           case MenuItem.competition:
             return MenuItemButton(
-              onPressed: () => {
-                gamesServices.getPlayerID().then((id) => {
-                      if (id != null) {updatePlayerLevel(id, 20)}
-                    }),
-                //showInfoCompetitionDialog(context, "TERE")
+              onPressed: () {
+                showInfoCompetitionDialog(mainContext);
               },
-              leadingIcon: const Icon(Icons.star_border_outlined),
+              leadingIcon: const Icon(Icons.star_outline_outlined),
               child: Text(item.name),
             );
           case MenuItem.theme:
@@ -256,9 +227,8 @@ class _SettingsMenuState extends State<SettingsMenu> {
           case MenuItem.faces:
             return MenuItemButton(
                 onPressed: () {
-                  showJoinCompetitionDialog(context);
-                  //final feedbackUri = _getFeedbackUri();
-                  //_launchUrl(feedbackUri);
+                  final feedbackUri = _getFeedbackUri();
+                  _launchUrl(feedbackUri);
                 },
                 leadingIcon: const Icon(Icons.games_outlined),
                 child: Text(item.name));
@@ -306,7 +276,7 @@ class _SettingsMenuState extends State<SettingsMenu> {
                     return MenuItemButton(
                         onPressed: () {
                           showDialog(
-                            context: context,
+                            context: mainContext,
                             builder: (BuildContext context) {
                               return const LicensesDialog();
                             },
@@ -317,7 +287,7 @@ class _SettingsMenuState extends State<SettingsMenu> {
                     return MenuItemButton(
                         onPressed: () {
                           showDialog(
-                            context: context,
+                            context: mainContext,
                             builder: (BuildContext context) {
                               return const CreditsDialog();
                             },

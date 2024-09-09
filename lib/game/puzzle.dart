@@ -19,10 +19,13 @@ class Puzzle extends StatelessWidget {
   Widget build(BuildContext context) {
     final audioController = context.read<AudioController>();
     return Consumer<LevelModel>(builder: (context, levelModel, child) {
+
       return GestureDetector(
         onTap: levelModel.levelCompleted
             ? () {
-                levelModel.levelNr == 200 ? levelModel.loadLevel(1) : levelModel.nextLevel();
+                levelModel.levelNr == 200
+                    ? levelModel.loadLevel(1)
+                    : levelModel.nextLevel();
               }
             : null,
         child: AspectRatio(
@@ -118,8 +121,7 @@ class Puzzle extends StatelessWidget {
                                 );
                               }).toList(),
                             ],
-                          )
-                          ),
+                          )),
                     );
                   },
                 ),

@@ -1,9 +1,12 @@
 import 'package:collection/collection.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
+import 'package:operation_hermes/competition/competition_controller.dart';
+import 'package:operation_hermes/game/model/competition_data.dart';
 import 'package:operation_hermes/game/model/field_model.dart';
 import 'package:operation_hermes/game/level_data.dart';
 import 'package:operation_hermes/game/model/picture_model.dart';
@@ -13,6 +16,7 @@ import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
 
 class LevelModel with ChangeNotifier {
+  final CompetitionController? competitionController;
   final LevelPersistence persistence;
   final GamesServicesController? gamesServicesController;
   final AdsController? adsController;
@@ -30,6 +34,7 @@ class LevelModel with ChangeNotifier {
   late PictureModel pictureModel;
   late FieldModel fieldModel;
   late StoryModel storyModel;
+  CompetitionData? competitionData;
   FirebaseAnalytics analytics = FirebaseAnalytics.instance;
 
   bool remove3Available = false;
@@ -47,7 +52,8 @@ class LevelModel with ChangeNotifier {
   int currentStoryCardPack = 1;
 
   LevelModel(
-      {required this.adsController,
+      {required this.competitionController,
+      required this.adsController,
       required this.inAppPurchaseController,
       required this.gamesServicesController,
       required this.persistence});
@@ -63,6 +69,7 @@ class LevelModel with ChangeNotifier {
     await _createModels(level, previousStory);
     gamesServicesController?.signedIn
         .then((value) => updateProgressFromCloud());
+    await persistence.unlockLevelsUntil(58);
   }
 
   Future<void> updateProgressFromCloud() async {
@@ -82,12 +89,10 @@ class LevelModel with ChangeNotifier {
       variousTooltip =
           "Restored from cloud. Latest level accessible through story bar.";
       notifyListeners();
-    }
-    else {
+    } else {
       final lastLevelData = await persistence.getLatestLevelData();
       final lastLevelNr = int.tryParse(lastLevelData.$1);
-      if (lastLevelNr != null && levelNr != lastLevelNr)
-      {
+      if (lastLevelNr != null && levelNr != lastLevelNr) {
         loadLevel(lastLevelNr);
       }
     }
@@ -231,6 +236,10 @@ class LevelModel with ChangeNotifier {
     }
   }
 
+  Future<int> getMaxLevelNr() async {
+    return persistence.getMaxLevelNr();
+  }
+
   Future<(List<LevelData>, int)> getAllLevelsWordAndStories() async {
     final levels = await persistence.getAllLevelsForPack(currentStoryCardPack);
     final maxLevelNr = await persistence.getMaxLevelNr();
@@ -241,10 +250,10 @@ class LevelModel with ChangeNotifier {
         ?.nr);
     int lastContinueLevelNr =
         lastUnlockedLevelNr == null ? 1 : lastUnlockedLevelNr + 1;
-    
-    if (currentStoryCardPack == 2 && maxLevelNr >= 100)
-    {
-      lastContinueLevelNr = lastUnlockedLevelNr == null ? 101 : lastUnlockedLevelNr + 1;
+
+    if (currentStoryCardPack == 2 && maxLevelNr >= 100) {
+      lastContinueLevelNr =
+          lastUnlockedLevelNr == null ? 101 : lastUnlockedLevelNr + 1;
     }
 
     return (levels, lastContinueLevelNr);
@@ -286,10 +295,33 @@ class LevelModel with ChangeNotifier {
       _save();
       storyModel.addNextStory(storyModel.currentWordAndStory);
       pictureModel.setLevelComplete();
+      checkForCompetitionWin();
       logLevelEnd();
     }
     notifyListeners();
     return win;
+  }
+
+  void checkForCompetitionWin() {
+    _log.info("checkForCompetitionWin");
+
+    if (levelNr == CompetitionController.competitionGoalLevel) {
+      final playerIdFuture = gamesServicesController?.getPlayerID();
+      if (playerIdFuture != null) {
+        competitionController?.getCompetitionData().then((r) {
+          if (r?.finished == false) {
+            competitionController
+                ?.updatePlayerLevel(levelNr)
+                .then((result) {
+              if (result?.finished == true && result?.promoCode != "") {
+                competitionData = result;
+                notifyListeners();
+              }
+            });
+          }
+        });
+      }
+    }
   }
 
   Future<void> logLevelEnd() async {

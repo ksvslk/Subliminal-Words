@@ -8,6 +8,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
+import 'package:operation_hermes/competition/competition_controller.dart';
 import 'package:operation_hermes/game/game_field_wrapper.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
@@ -85,13 +86,19 @@ Future<void> main() async {
       ..subscribe();
   }
 
+  CompetitionController? competitionController;
+  if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+    competitionController = CompetitionController();
+  }
+
   runApp(
     MyApp(
         settingsPersistence: LocalStorageSettingsPersistence(),
         levelPersistence: LocalStorageLevelPersistence(),
         adsController: adsController,
         inAppPurchaseController: inAppPurchaseController,
-        gamesServicesController: gamesServicesController),
+        gamesServicesController: gamesServicesController,
+        competitionController: competitionController),
   );
 }
 
@@ -110,6 +117,7 @@ class MyApp extends StatelessWidget {
   final AdsController? adsController;
   final InAppPurchaseController? inAppPurchaseController;
   final GamesServicesController? gamesServicesController;
+  final CompetitionController? competitionController;
 
   const MyApp(
       {super.key,
@@ -117,7 +125,8 @@ class MyApp extends StatelessWidget {
       required this.levelPersistence,
       required this.adsController,
       required this.inAppPurchaseController,
-      required this.gamesServicesController});
+      required this.gamesServicesController,
+      required this.competitionController});
 
   @override
   Widget build(BuildContext context) {
@@ -133,12 +142,14 @@ class MyApp extends StatelessWidget {
         Provider<GamesServicesController?>.value(
             value: gamesServicesController),
         ChangeNotifierProvider<AdsController?>.value(value: adsController),
+        Provider<CompetitionController?>.value(value: competitionController),
         ChangeNotifierProvider<InAppPurchaseController?>.value(
             value: inAppPurchaseController),
         ChangeNotifierProxyProvider<ValueNotifier<AppLifecycleState>,
             LevelModel>(
           lazy: false,
           create: (context) => LevelModel(
+              competitionController: competitionController,
               gamesServicesController: gamesServicesController,
               persistence: levelPersistence,
               inAppPurchaseController: inAppPurchaseController,

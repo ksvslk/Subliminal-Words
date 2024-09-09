@@ -77,8 +77,8 @@ class WonCompetitionDialog extends StatelessWidget {
               children: <Widget>[
                 Flexible(
                   flex: 1,
-                  child: Lottie.network(
-                    'https://lottie.host/8a87884c-c888-4b46-bc58-e947753a03e6/Gm6ZkI3zkU.json',
+                  child: Lottie.asset(
+                    'assets/animation/win.json',
                     width: constraints.maxWidth * 0.6,
                     height: constraints.maxHeight * 0.25,
                     fit: BoxFit.contain,

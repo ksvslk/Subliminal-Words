@@ -9,6 +9,7 @@ import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/game/letter_box_data.dart';
 import 'package:operation_hermes/game/letter_box_state.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
+import 'package:operation_hermes/game/won_competition_dialog.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:provider/provider.dart';
 
@@ -18,10 +19,22 @@ class GameField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     final audioController = context.read<AudioController>();
     final levelModel = context.watch<LevelModel>();
     final gamesServices = context.read<GamesServicesController>();
+
+     
+      levelModel.addListener(() {
+       _log.info("UPDATE");
+      if (levelModel.competitionData != null &&
+          levelModel.competitionData?.promoCode != null) {
+            _log.info("SHOW THE FIN!c");
+            
+        showWonCompetitionDialog(
+            context, levelModel.competitionData!.promoCode);
+            levelModel.competitionData = null;
+      }
+      },);
 
     return Stack(
       children: [
@@ -34,7 +47,6 @@ class GameField extends StatelessWidget {
                 value: levelModel.fieldModel,
                 child:
                     Consumer<FieldModel>(builder: (context, fieldModel, child) {
-
                   return Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -44,7 +56,6 @@ class GameField extends StatelessWidget {
                               value: fieldModel.solution[i],
                               child: Consumer<LetterBoxData>(
                                 builder: (context, data, child) {
-               
                                   return GestureDetector(
                                     onTap: () {
                                       if (data.state ==
@@ -122,9 +133,10 @@ class GameField extends StatelessWidget {
             }),
           ],
         ),
-        Confetti(startConfetti: levelModel.levelNr == 200 && levelModel.levelCompleted),
+        Confetti(
+            startConfetti:
+                levelModel.levelNr == 200 && levelModel.levelCompleted),
       ],
     );
- 
   }
 }
