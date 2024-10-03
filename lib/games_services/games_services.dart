@@ -5,7 +5,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:games_services/games_services.dart' as gs;
+import 'package:games_services/games_services.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/model/game_data.dart';
 
@@ -65,22 +67,30 @@ class GamesServicesController {
     return await gs.GamesServices.getPlayerID();
   }
 
+  Future<void> signInWithCredential() async {
+
+    var authCode = await GameAuth.getAuthCode("549374376791-sh7249jmselsk4duti6jbi9g8b1dgfj4.apps.googleusercontent.com");
+    if (authCode != null) {
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(
+        PlayGamesAuthProvider.credential(serverAuthCode: authCode),
+      );
+      _log.info("CRED: $userCredential");
+    }
+  }
+
   /// Signs into the underlying games service.
   Future<void> initialize() async {
+
     try {
-      await gs.GamesServices.signIn();
+      await gs.GamesServices.signIn().then((onValue){
+        _log.info("Signed in: $onValue");
+        signInWithCredential();
+      });
       // The API is unclear so we're checking to be sure. The above call
       // returns a String, not a boolean, and there's no documentation
       // as to whether every non-error result means we're safely signed in.
       final signedIn = await gs.GamesServices.isSignedIn;
       _signedInCompleter.complete(signedIn);
-
-      _log.info("Trying to get the player id..");
-      gs.Player.getPlayerID().then((id){
-        _log.info("ID: $id");
-      }).catchError((onError){
-        _log.severe("Could not get the player id", onError);
-      });
 
       //final savedGame = await gs.GamesServices.loadGame(name: "a");
       //final saveGameJson = savedGame.jsify();

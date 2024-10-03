@@ -1,4 +1,6 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:games_services/games_services.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/competition/competition_controller.dart';
 import 'package:operation_hermes/game/freud_dialog.dart';
@@ -19,18 +21,21 @@ class GameFieldWrapper extends StatelessWidget {
     final levelModel = context.read<LevelModel>();
     final competitionController = context.read<CompetitionController>();
 
-    levelModel.persistence.getMaxLevelNr().then((maxLevel) {
-      competitionController.getCompetitionData().then((data) {
-        if (data?.enrolled == false) {
-          competitionController
-              .joinCompetition(maxLevel)
-              .then((joined) {
-            if (joined) {
-              showJoinedCompetitionDialog(context);
+
+    FirebaseAuth.instance.idTokenChanges().listen((User? user) {
+      if (user?.uid != null) {
+        levelModel.persistence.getMaxLevelNr().then((maxLevel) {
+          competitionController.getCompetitionData().then((data) {
+            if (data?.enrolled == false) {
+              competitionController.joinCompetition(maxLevel).then((joined) {
+                if (joined) {
+                  showJoinedCompetitionDialog(context);
+                }
+              });
             }
           });
-        }
-      });
+        });
+      }
     });
 
     return FutureBuilder(

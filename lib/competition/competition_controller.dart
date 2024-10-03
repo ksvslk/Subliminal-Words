@@ -8,75 +8,96 @@ class CompetitionController {
 
   static const competitionGoalLevel = 60;
 
-  static const finishedFieldName = 'finished';
-  static const currentLevelFieldName = 'current_level';
-  static const promoCodeFieldName = 'promo_code';
   static const playersCollectionName = 'players';
+  static const finishedFieldName = 'finished';
+
+  static const promoCodeCollectionName = 'promo_code';
+  static const assignedFieldName = 'assigned';
+  static const assignedToFieldName = 'assigned_to';
+
+  static const codeFieldName = 'code';
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<CompetitionData?> updatePlayerLevel(int newLevel) async {
     try {
+      // Check if the player reached the competition goal level
+      if (newLevel != competitionGoalLevel) return null;
+
       final pid = FirebaseAuth.instance.currentUser?.uid;
-      if (newLevel == competitionGoalLevel) {
-        await _firestore.runTransaction((transaction) async {
-          DocumentSnapshot snapshot = await transaction
-              .get(_firestore.collection(playersCollectionName).doc(pid));
+      if (pid == null) return null; // Return if user is not authenticated
 
-          if (snapshot.exists) {
-            bool finished = snapshot.get(finishedFieldName);
-            if (!finished) {
-              transaction.update(
-                  _firestore.collection(playersCollectionName).doc(pid), {
-                currentLevelFieldName: newLevel,
-                finishedFieldName: true,
-              });
-            }
+      return await _firestore.runTransaction((transaction) async {
+        final playerRef = _firestore.collection(playersCollectionName).doc(pid);
+        final playerSnapshot = await transaction.get(playerRef);
+
+        // Proceed only if player document exists and hasn't finished
+        if (playerSnapshot.exists &&
+            !(playerSnapshot.get(finishedFieldName) ?? false)) {
+
+          // Fetch an available promo code
+          final promoCode = await _fetchAvailablePromoCode();
+
+          if (promoCode == null) {
+            transaction.update(playerRef, {
+              finishedFieldName: true,
+              codeFieldName: "OUT OF STOCK",
+            });
+            return CompetitionData(true, true, "OUT OF STOCK");
           }
-        });
 
-        await waitForPromoCodeAssignment(pid);
+          // Update player with promo code and mark as finished
+          transaction.update(playerRef, {
+            finishedFieldName: true,
+            codeFieldName: promoCode,
+          });
 
-        DocumentSnapshot updatedSnapshot =
-            await _firestore.collection(playersCollectionName).doc(pid).get();
-
-        if (updatedSnapshot.exists) {
-          String promoCode = updatedSnapshot.get(promoCodeFieldName);
-          bool finished = updatedSnapshot.get(finishedFieldName);
-          return CompetitionData(true, finished, promoCode);
+          return CompetitionData(true, true, promoCode);
         }
-      }
-      return null;
+        return null;
+      });
     } catch (e) {
-      _log.info('Error updating player level: $e');
+      _log.severe('Error updating player level: $e');
       return null;
     }
   }
 
-  Future<void> waitForPromoCodeAssignment(String? playerId) async {
-    var playerDoc = FirebaseFirestore.instance.collection(playersCollectionName).doc(playerId);
+  Future<String?> _fetchAvailablePromoCode() async {
+    // Query for an unused promo code
+    final promoSnapshot = await _firestore
+        .collection(promoCodeCollectionName)
+        .where(assignedFieldName, isEqualTo: false)
+        .limit(1)
+        .get();
 
-    // Use a stream to listen for changes in the 'promoCodeAssigned' field
-    await playerDoc.snapshots().firstWhere((doc) {
-      // Check if the Cloud Function has completed its task
-      return doc.data()?[promoCodeFieldName] != "";
-    });
+    if (promoSnapshot.docs.isNotEmpty) {
+      final promoCodeDoc = promoSnapshot.docs.first;
+      final promoCode = promoCodeDoc.data()[codeFieldName] as String;
 
-    // Once the promoCodeAssigned is true, proceed to fetch the updated data
-    var updatedData = await playerDoc.get();
-    _log.info("Promo code assignment complete: ${updatedData.data()}");
+      // Mark the promo code as assigned
+      await promoCodeDoc.reference.update({
+        assignedFieldName: true,
+        assignedToFieldName: FirebaseAuth.instance.currentUser?.uid,
+      });
+
+      return promoCode;
+    }
+    return null; // No promo codes available
   }
 
   Future<bool> joinCompetition(int currentLevel) async {
     try {
       final pid = FirebaseAuth.instance.currentUser?.uid;
+
       DocumentSnapshot userDoc =
           await _firestore.collection(playersCollectionName).doc(pid).get();
 
       if (!userDoc.exists) {
-        await _firestore.collection(playersCollectionName).doc(pid).set({
-          currentLevelFieldName: currentLevel,
-        });
+        await _firestore
+            .collection(playersCollectionName)
+            .doc(pid)
+            .set({finishedFieldName: false, codeFieldName: ""});
+
         _log.info("Successfully joined competition.");
         return Future.value(true);
       } else {
@@ -92,24 +113,31 @@ class CompetitionController {
   Future<CompetitionData?> getCompetitionData() async {
     try {
       final pid = FirebaseAuth.instance.currentUser?.uid;
-      _log.info("UID: $pid");
+      if (pid == null) {
+        return null; // Return null if the user is not authenticated
+      }
+
       final docRef = _firestore.collection(playersCollectionName).doc(pid);
 
       // Await the document snapshot
-      DocumentSnapshot doc = await docRef.get();
+      final snapshot = await docRef.get();
 
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
-        String promoCode = data[promoCodeFieldName] ?? "";
-        bool finished = data[finishedFieldName] ?? false;
-        bool enrolled = true;
+      if (snapshot.exists) {
+        final data = snapshot.data();
 
-        // Return the competition data
-        return CompetitionData(enrolled, finished, promoCode);
-      } else {
-        // Return default data if the document doesn't exist
-        return CompetitionData(false, false, "");
+        // Check if data is not null
+        if (data != null) {
+          String promoCode = data[promoCodeCollectionName] ?? "";
+          bool finished = data[finishedFieldName] ?? false;
+          bool enrolled = true;
+
+          // Return the competition data
+          return CompetitionData(enrolled, finished, promoCode);
+        }
       }
+
+      // Return default data if the document doesn't exist or is null
+      return CompetitionData(false, false, "");
     } catch (e) {
       _log.severe("Error getting document: $e");
       return null; // Return null in case of an error

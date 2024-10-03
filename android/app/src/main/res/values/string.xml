@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <string name="project_id" translatable="false">subliminal-words-1337</string>
-  <string name="google_app_id" translatable="false">1:676549157694:android:4f3a491444ed62abe8c26f</string>
-  <string name="google_api_key" translatable="false">AIzaSyBBHEFULe4FmLI142G61nZqpBPlwRm_8tc</string>
-  <string name="gcm_defaultSenderId" translatable="false">676549157694</string>
+  <string name="project_id" translatable="false">subliminal-words</string>
+  <string name="google_app_id" translatable="false">1:549374376791:android:7ea35df78042aa1a41dc12</string>
+  <string name="google_api_key" translatable="false">AIzaSyD_wsjgHgTAZ9cWuI6HtMMs0hO3rNf-6dM</string>
+  <string name="gcm_defaultSenderId" translatable="false">549374376791</string>
 </resources>

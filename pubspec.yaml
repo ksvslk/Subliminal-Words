@@ -48,18 +48,18 @@ dependencies:
   games_services:
     git:
       url: https://github.com/Abedalkareem/games_services
-      ref: hotfix/gradle8
+      ref: develop
       path: games_services
   flutter_oss_licenses: ^2.0.1
   confetti: ^0.7.0
-  firebase_core: ^2.23.0
-  firebase_analytics: ^10.7.2
+  firebase_core: ^3.5.0
+  firebase_analytics: ^11.3.2
   share_plus: ^7.2.1
   in_app_review: ^2.0.8
-  cloud_firestore: ^4.14.0
+  cloud_firestore: ^5.4.2
   lottie: ^2.3.0
-  firebase_app_check: ^0.2.1+8
-  firebase_auth: ^4.16.0
+  firebase_app_check: ^0.3.1+2
+  firebase_auth: ^5.3.0
 
 
 dev_dependencies:

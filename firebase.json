@@ -1,45 +1,30 @@
 {
-  "flutter": {
-    "platforms": {
-      "android": {
-        "default": {
-          "projectId": "subliminal-words-1337",
-          "appId": "1:676549157694:android:4f3a491444ed62abe8c26f",
-          "fileOutput": "android/app/google-services.json"
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "subliminal-words",
+                    "appId": "1:549374376791:android:7ea35df78042aa1a41dc12",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            },
+            "ios": {
+                "default": {
+                    "projectId": "subliminal-words",
+                    "appId": "1:549374376791:ios:ab56a8bbfd90023241dc12",
+                    "uploadDebugSymbols": false,
+                    "fileOutput": "ios/Runner/GoogleService-Info.plist"
+                }
+            },
+            "dart": {
+                "lib/firebase_options.dart": {
+                    "projectId": "subliminal-words",
+                    "configurations": {
+                        "android": "1:549374376791:android:7ea35df78042aa1a41dc12",
+                        "ios": "1:549374376791:ios:ab56a8bbfd90023241dc12"
+                    }
+                }
+            }
         }
-      },
-      "ios": {
-        "default": {
-          "projectId": "subliminal-words-1337",
-          "appId": "1:676549157694:ios:6d8e4e286376dcd3e8c26f",
-          "uploadDebugSymbols": false,
-          "fileOutput": "ios/Runner/GoogleService-Info.plist"
-        }
-      },
-      "dart": {
-        "lib/firebase_options.dart": {
-          "projectId": "subliminal-words-1337",
-          "configurations": {
-            "android": "1:676549157694:android:4f3a491444ed62abe8c26f",
-            "ios": "1:676549157694:ios:6d8e4e286376dcd3e8c26f"
-          }
-        }
-      }
     }
-  },
-  "functions": [
-    {
-      "source": "functions",
-      "runtime": "nodejs18",
-      "v2": true,
-      "codebase": "default",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
-      ]
-    }
-  ]
 }

@@ -304,10 +304,7 @@ class LevelModel with ChangeNotifier {
 
   void checkForCompetitionWin() {
     _log.info("checkForCompetitionWin");
-
     if (levelNr == CompetitionController.competitionGoalLevel) {
-      final playerIdFuture = gamesServicesController?.getPlayerID();
-      if (playerIdFuture != null) {
         competitionController?.getCompetitionData().then((r) {
           if (r?.finished == false) {
             competitionController
@@ -320,7 +317,6 @@ class LevelModel with ChangeNotifier {
             });
           }
         });
-      }
     }
   }
 
