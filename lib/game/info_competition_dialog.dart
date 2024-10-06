@@ -4,7 +4,6 @@ import 'package:operation_hermes/competition/competition_controller.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/game/model/competition_data.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
-import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:provider/provider.dart';
 
 class InfoCompetitionDialog extends StatelessWidget {

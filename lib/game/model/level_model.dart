@@ -69,7 +69,6 @@ class LevelModel with ChangeNotifier {
     await _createModels(level, previousStory);
     gamesServicesController?.signedIn
         .then((value) => updateProgressFromCloud());
-    await persistence.unlockLevelsUntil(58);
   }
 
   Future<void> updateProgressFromCloud() async {

@@ -23,18 +23,16 @@ class GameField extends StatelessWidget {
     final levelModel = context.watch<LevelModel>();
     final gamesServices = context.read<GamesServicesController>();
 
-     
-      levelModel.addListener(() {
-       _log.info("UPDATE");
-      if (levelModel.competitionData != null &&
-          levelModel.competitionData?.promoCode != null) {
-            _log.info("SHOW THE FIN!c");
-            
-        showWonCompetitionDialog(
-            context, levelModel.competitionData!.promoCode);
-            levelModel.competitionData = null;
-      }
-      },);
+    levelModel.addListener(
+      () {
+        if (levelModel.competitionData != null &&
+            levelModel.competitionData?.promoCode != null) {
+          showWonCompetitionDialog(
+              context, levelModel.competitionData!.promoCode);
+          levelModel.competitionData = null;
+        }
+      },
+    );
 
     return Stack(
       children: [

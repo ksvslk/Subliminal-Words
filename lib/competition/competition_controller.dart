@@ -127,7 +127,7 @@ class CompetitionController {
 
         // Check if data is not null
         if (data != null) {
-          String promoCode = data[promoCodeCollectionName] ?? "";
+          String promoCode = data[codeFieldName] ?? "";
           bool finished = data[finishedFieldName] ?? false;
           bool enrolled = true;
 
