@@ -4,6 +4,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:games_services/games_services.dart' as gs;
@@ -68,22 +69,24 @@ class GamesServicesController {
   }
 
   Future<void> signInWithCredential() async {
-
-    var authCode = await GameAuth.getAuthCode("549374376791-sh7249jmselsk4duti6jbi9g8b1dgfj4.apps.googleusercontent.com");
-    if (authCode != null) {
-      final userCredential = await FirebaseAuth.instance.signInWithCredential(
-        PlayGamesAuthProvider.credential(serverAuthCode: authCode),
-      );
-      _log.info("CRED: $userCredential");
+    if (Platform.isAndroid) {
+      var authCode = await GameAuth.getAuthCode(
+          "549374376791-sh7249jmselsk4duti6jbi9g8b1dgfj4.apps.googleusercontent.com");
+      if (authCode != null) {
+        await FirebaseAuth.instance.signInWithCredential(
+          PlayGamesAuthProvider.credential(serverAuthCode: authCode),
+        );
+      }
+    } else if (Platform.isIOS) {
+      FirebaseAuth.instance
+          .signInWithCredential(GameCenterAuthProvider.credential());
     }
   }
 
   /// Signs into the underlying games service.
   Future<void> initialize() async {
-
     try {
-      await gs.GamesServices.signIn().then((onValue){
-        _log.info("Signed in: $onValue");
+      await gs.GamesServices.signIn().then((onValue) {
         signInWithCredential();
       });
       // The API is unclear so we're checking to be sure. The above call

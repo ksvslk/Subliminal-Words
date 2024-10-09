@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:logging/logging.dart';
@@ -8,10 +10,10 @@ class CompetitionController {
 
   static const competitionGoalLevel = 60;
 
-  static const playersCollectionName = 'players';
+  static var playersCollectionName = Platform.isAndroid ? 'players' : 'players_ios';
   static const finishedFieldName = 'finished';
 
-  static const promoCodeCollectionName = 'promo_code';
+  static var promoCodeCollectionName = Platform.isAndroid ? 'promo_code' : 'promo_code_ios';
   static const assignedFieldName = 'assigned';
   static const assignedToFieldName = 'assigned_to';
 

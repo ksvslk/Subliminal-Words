@@ -21,6 +21,7 @@ class GameFieldWrapper extends StatelessWidget {
     final competitionController = context.read<CompetitionController>();
 
     FirebaseAuth.instance.idTokenChanges().listen((User? user) {
+      _log.info(user);
       if (user?.uid != null) {
         levelModel.persistence.getMaxLevelNr().then((maxLevel) {
           competitionController.getCompetitionData().then((data) {
