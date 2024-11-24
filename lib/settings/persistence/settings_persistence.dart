@@ -11,8 +11,12 @@ abstract class SettingsPersistence {
   Future<bool> getMusicOn();
   Future<bool> getSoundsOn();
   Future<int> getSeedColor();
+  Future<String> getToken();
 
   Future<void> saveMusicOn(bool value);
   Future<void> saveSoundsOn(bool value);
   Future<void> saveSeedColor(int value);
+  Future<void> setToken(String value);
+
+
 }

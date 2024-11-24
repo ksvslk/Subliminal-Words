@@ -32,10 +32,17 @@ class SettingsController {
     ]);
   }
 
-  void changeSeedColor(Color color)
-  {
+  void changeSeedColor(Color color) {
     seedColor.value = color.value;
     _persistence.saveSeedColor(seedColor.value);
+  }
+
+  Future<void> setToken(String token) async {
+    await _persistence.setToken(token);
+  }
+
+  Future<String> getToken() async {
+    return await _persistence.getToken();
   }
 
   void toggleMusicOn() {

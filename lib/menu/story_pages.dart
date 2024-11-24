@@ -6,17 +6,22 @@ import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/menu/story_card.dart';
 import 'package:provider/provider.dart';
 
-class StoryPages extends StatelessWidget {
+class StoryPages extends StatefulWidget {
   const StoryPages({super.key});
 
-  static RegExp punctuation = RegExp(r"[.,!?]");
+  @override
+  _StoryPagesState createState() => _StoryPagesState();
+}
+
+class _StoryPagesState extends State<StoryPages> {
   static final _log = Logger('StoryPages');
 
-  List<WidgetSpan> createWidgetSpans(
+  Future<List<WidgetSpan>> createWidgetSpans(
     (List<LevelData>, int) levelsAndContinueLevelNr,
     BuildContext context,
     LevelModel levelModel,
-  ) {
+  ) async {
+    Stopwatch stopwatch = Stopwatch()..start();
     final list = levelsAndContinueLevelNr.$1.fold(
         List<WidgetSpan>.empty(growable: true), (previousLevel, currentLevel) {
       return previousLevel +
@@ -42,10 +47,59 @@ class StoryPages extends StatelessWidget {
             return previousWidgets;
           }).toList();
     });
+    _log.log(Level.INFO, "createWidgetSpans executed in ${stopwatch.elapsed}");
     return list;
   }
 
-  Color? getColorForBox(ColorScheme colorScheme, bool isMainWord,
+  WidgetSpan _createWidgetSpan(
+    BuildContext context, {
+    required String word,
+    required String storyWord,
+    required bool isClickable,
+    required int levelNr,
+    required int continueLevelNr,
+    VoidCallback? onTap,
+  }) {
+    TextStyle baseStyle = DefaultTextStyle.of(context).style;
+    ColorScheme colorScheme = Theme.of(context).colorScheme;
+
+    final comparisonMainWord =
+        word.replaceAll(RegExp(r"[.,!?]"), '').toLowerCase();
+    final comparisonStoryWord =
+        storyWord.replaceAll(RegExp(r"[.,!?]"), '').toLowerCase();
+    final isMainWord = comparisonMainWord == comparisonStoryWord;
+    final continueLevel = levelNr == continueLevelNr;
+
+    return WidgetSpan(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 2.0),
+        padding: const EdgeInsets.symmetric(horizontal: 6.0),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.transparent),
+          color: _getColorForBox(
+              colorScheme, isMainWord, isClickable, continueLevel),
+          borderRadius: const BorderRadius.all(Radius.circular(8.0)),
+        ),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: (isMainWord && isClickable) || (isMainWord && continueLevel)
+              ? onTap
+              : null,
+          child: Text(
+            _getText(isMainWord, isClickable, storyWord, continueLevel),
+            style: TextStyle(
+              fontFamily: baseStyle.fontFamily,
+              color: _getColorForText(
+                  colorScheme, isMainWord, isClickable, continueLevel),
+              fontSize: Theme.of(context).textTheme.titleLarge?.fontSize,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color? _getColorForBox(ColorScheme colorScheme, bool isMainWord,
       bool isLevelUnlocked, bool continueLevel) {
     if (isLevelUnlocked && !isMainWord) {
       return null;
@@ -62,7 +116,7 @@ class StoryPages extends StatelessWidget {
     }
   }
 
-  Color getColorForText(ColorScheme colorScheme, bool isMainWord,
+  Color _getColorForText(ColorScheme colorScheme, bool isMainWord,
       bool isLevelUnlocked, bool continueLevel) {
     if (isLevelUnlocked && !isMainWord) {
       return colorScheme.onBackground;
@@ -79,15 +133,15 @@ class StoryPages extends StatelessWidget {
     }
   }
 
-  String getText(bool isMainWord, bool isLevelUnlocked, String word,
-      bool continueLevelNr) {
+  String _getText(
+      bool isMainWord, bool isLevelUnlocked, String word, bool continueLevel) {
     if (isLevelUnlocked && !isMainWord) {
       return word;
     } else if (isLevelUnlocked && isMainWord) {
       return word;
-    } else if (!isLevelUnlocked && isMainWord && !continueLevelNr) {
+    } else if (!isLevelUnlocked && isMainWord && !continueLevel) {
       return "🔒";
-    } else if (!isLevelUnlocked && isMainWord && continueLevelNr) {
+    } else if (!isLevelUnlocked && isMainWord && continueLevel) {
       return "🔅";
     } else if (!isLevelUnlocked && !isMainWord) {
       return "_";
@@ -96,129 +150,165 @@ class StoryPages extends StatelessWidget {
     }
   }
 
-  WidgetSpan _createWidgetSpan(
-    BuildContext context, {
-    required String word,
-    required String storyWord,
-    required bool isClickable,
-    required int levelNr,
-    required int continueLevelNr,
-    VoidCallback? onTap,
-  }) {
-    TextStyle baseStyle = DefaultTextStyle.of(context).style;
-    ColorScheme colorScheme = Theme.of(context).colorScheme;
-
-    final comparisonMainWord = word.replaceAll(punctuation, '').toLowerCase();
-    final comparisonStoryWord =
-        storyWord.replaceAll(punctuation, '').toLowerCase();
-    final isMainWord = comparisonMainWord == comparisonStoryWord;
-    final continueLevel = levelNr == continueLevelNr;
-
-    return WidgetSpan(
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 2.0),
-        padding: const EdgeInsets.symmetric(horizontal: 6.0),
-        decoration: BoxDecoration(
-            border: Border.all(color: Colors.transparent),
-            color: getColorForBox(colorScheme, isMainWord, isClickable, continueLevel),
-            borderRadius: const BorderRadius.all(Radius.circular(8.0))),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: (isMainWord && isClickable) || (isMainWord && continueLevel) ? onTap : null,
-          child: Text(
-            getText(isMainWord, isClickable, storyWord, continueLevel),
-            style: TextStyle(
-              fontFamily: baseStyle.fontFamily,
-              color: getColorForText(colorScheme, isMainWord, isClickable, continueLevel),
-              fontSize: Theme.of(context).textTheme.titleLarge?.fontSize,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  List<StoryCard> combinedF(
-      BuildContext context, (List<LevelData>, int) levels, LevelModel levelModel) {
-    var results = createWidgetSpans(levels, context, levelModel);
-    return results.slices(50).map((e) => StoryCard(text: e)).toList();
+  Future<List<StoryCard>> _getStoryCards(
+    BuildContext context,
+    LevelModel levelModel,
+    (List<LevelData>, int) levels,
+  ) async {
+    var widgetSpans = await createWidgetSpans(levels, context, levelModel);
+    return widgetSpans
+        .slices(50)
+        .map((slice) => StoryCard(text: slice))
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final levelModel = context.watch<LevelModel>();
     final PageController controller = PageController(
-        initialPage: levelModel.currentStoryCardPack == 1 ? levelModel.currentStoryCardPageNr1.value - 1 : levelModel.currentStoryCardPageNr2.value - 1);
-    return FutureBuilder(
-      future: levelModel.getAllLevelsWordAndStories(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.done) {
-          final storyCards = combinedF(context, snapshot.data!, levelModel);
-          final totalPages = storyCards.length;
-          return Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: FilledButton(
-                        onPressed: () => {Navigator.pop(context)},
-                        child: const Text('Back to game')),
+      initialPage: levelModel.currentStoryCardPack == 1
+          ? levelModel.currentStoryCardPageNr1.value - 1
+          : levelModel.currentStoryCardPageNr2.value - 1,
+    );
+
+    final loadingPageCard = PageView(
+        clipBehavior: Clip.hardEdge,
+        scrollDirection: Axis.vertical,
+        controller: controller,
+        children: const [
+          Center(
+            child: Card(
+              child: Center(
+                child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: CircularProgressIndicator()),
+              ),
+            ),
+          )
+        ]);
+
+    return Stack(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              OutlinedButton(
+                style: ButtonStyle(
+                  backgroundColor: WidgetStateProperty.resolveWith<Color>(
+                    (Set<WidgetState> states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return Theme.of(context).colorScheme.primary;
+                      }
+                      return Theme.of(context).colorScheme.secondaryContainer;
+                    },
                   ),
-                  Padding(
-                      padding: const EdgeInsets.all(0.0),
-                      child: SegmentedButton<int>(
-                        style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.secondaryContainer),
-                        segments: const <ButtonSegment<int>>[
-                          ButtonSegment<int>(
-                              value: 1, label: Text('Chapter 1')),
-                          ButtonSegment<int>(
-                              value: 2, label: Text('Chapter 2')),
-                        ],
-                        selected: { levelModel.currentStoryCardPack },
-                        onSelectionChanged: (chapter) {
-                          levelModel.changeStoryPackNr(chapter.first);
-                        },
-                      )),
-                  Expanded(
-                    flex: 20,
-                    child: PageView(
-                      clipBehavior: Clip.hardEdge,
-                      scrollDirection: Axis.vertical,
-                      controller: controller,
-                      children: storyCards,
-                      onPageChanged: (value) {
-                        if (levelModel.currentStoryCardPack == 1)
-                        {
-                          levelModel.currentStoryCardPageNr1.value = value + 1;
-                        }
-                        else if (levelModel.currentStoryCardPack == 2)
-                        {
-                          levelModel.currentStoryCardPageNr2.value = value + 1;
-                        }
-                      },
-                    ),
+                ),
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Back to game'),
+              ),
+              SegmentedButton<int>(
+                style: ButtonStyle(
+                  backgroundColor: WidgetStateProperty.resolveWith<Color>(
+                    (Set<WidgetState> states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return Theme.of(context).colorScheme.primary;
+                      }
+                      return Theme.of(context).colorScheme.secondaryContainer;
+                    },
                   ),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: ValueListenableBuilder<int>(
-                        builder:
-                            (BuildContext context, int value, Widget? child) {
-                          return LinearProgressIndicator(
-                              minHeight: 8.0,
-                              value: value / totalPages,
-                              borderRadius: BorderRadius.circular(8));
-                        },
-                        valueListenable: levelModel.currentStoryCardPack == 1 ? levelModel.currentStoryCardPageNr1 : levelModel.currentStoryCardPageNr2),
+                  foregroundColor: WidgetStateProperty.resolveWith<Color>(
+                    (Set<WidgetState> states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return Theme.of(context).colorScheme.onPrimary;
+                      }
+                      return Theme.of(context).colorScheme.onSecondaryContainer;
+                    },
+                  ),
+                ),
+                showSelectedIcon: false, // This removes the tick icon
+                segments: const <ButtonSegment<int>>[
+                  ButtonSegment<int>(
+                    value: 1,
+                    label: Text('Chapter 1'),
+                  ),
+                  ButtonSegment<int>(
+                    value: 2,
+                    label: Text('Chapter 2'),
+                  ),
+                  ButtonSegment<int>(
+                    value: 3,
+                    label: Text('Quest'),
                   ),
                 ],
-              ));
-        } else {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
-      },
+                selected: {levelModel.currentStoryCardPack},
+                onSelectionChanged: (chapter) async {
+                  levelModel.changeStoryPackNr(chapter.first);
+                },
+              ),
+              Expanded(
+                child: FutureBuilder(
+                  future: levelModel.getCurrentStoryLevelsAndContinueLevel(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return Stack(
+                        children: [
+                          loadingPageCard,
+                        ],
+                      );
+                    }
+
+                    return FutureBuilder<List<StoryCard>>(
+                      future:
+                          _getStoryCards(context, levelModel, snapshot.data!),
+                      builder: (context, storySnapshot) {
+                        if (!storySnapshot.hasData) {
+                          return Stack(
+                            children: [
+                              loadingPageCard,
+                            ],
+                          );
+                        }
+
+                        final storyCards = storySnapshot.data!;
+
+                        return Stack(
+                          children: [
+                            PageView(
+                              clipBehavior: Clip.hardEdge,
+                              scrollDirection: Axis.vertical,
+                              controller: controller,
+                              children: levelModel.networkRequestActive
+                                  ? [
+                                      loadingPageCard,
+                                    ]
+                                  : storyCards,
+                              onPageChanged: (value) {
+                                if (levelModel.currentStoryCardPack == 1) {
+                                  levelModel.currentStoryCardPageNr1.value =
+                                      value + 1;
+                                } else if (levelModel.currentStoryCardPack ==
+                                    2) {
+                                  levelModel.currentStoryCardPageNr2.value =
+                                      value + 1;
+                                } else if (levelModel.currentStoryCardPack ==
+                                    3) {
+                                  levelModel.currentStoryCardPageNr3.value =
+                                      value + 1;
+                                }
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

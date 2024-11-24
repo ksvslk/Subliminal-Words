@@ -1,5 +1,9 @@
+import 'dart:math';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:collection/collection.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:in_app_review/in_app_review.dart';
@@ -49,7 +53,11 @@ class LevelModel with ChangeNotifier {
 
   ValueNotifier<int> currentStoryCardPageNr1 = ValueNotifier(1);
   ValueNotifier<int> currentStoryCardPageNr2 = ValueNotifier(1);
+  ValueNotifier<int> currentStoryCardPageNr3 = ValueNotifier(1);
+
   int currentStoryCardPack = 1;
+
+  bool networkRequestActive = false;
 
   LevelModel(
       {required this.competitionController,
@@ -69,11 +77,18 @@ class LevelModel with ChangeNotifier {
     await _createModels(level, previousStory);
     gamesServicesController?.signedIn
         .then((value) => updateProgressFromCloud());
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null) {
+        showMessageFromMascot(
+            "${message.notification?.title}. ${message.notification?.body}.");
+      }
+    });
   }
 
   Future<void> updateProgressFromCloud() async {
     final cloudGameData = await gamesServicesController?.loadGame();
-    final localMaxLevelNr = await persistence.getMaxLevelNr();
+    final localMaxLevelNr = await persistence.getMaxLevelNrUnlocked();
 
     if (cloudGameData?.progress.compareTo(levelNr) == 1 ||
         cloudGameData?.progress.compareTo(levelNr) == 0) {
@@ -102,10 +117,20 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
+  int _getCurrentStoryCardPack() {
+    if (levelNr <= 100) {
+      return 1;
+    } else if (levelNr > 100 && levelNr <= 200) {
+      return 2;
+    } else {
+      return 3;
+    }
+  }
+
   Future<void> _createModels(
       LevelData level, (String, String)? previousStory) async {
     levelNr = level.nr;
-    currentStoryCardPack = levelNr > 100 ? 2 : 1;
+    currentStoryCardPack = _getCurrentStoryCardPack();
     tooltipStart = level.tooltipStart;
     tooltipEnd = level.tooltipEnd;
     if (tooltipStart.isEmpty) {
@@ -149,16 +174,39 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
+  int getStoryPackNr() {
+    if (levelNr + 1 > 200) {
+      return 3;
+    } else if (levelNr + 1 > 100) {
+      return 2;
+    } else {
+      return 1;
+    }
+  }
+
   Future<void> nextLevel() async {
     lettersAnimationFadeOutDuration = 0;
-    currentStoryCardPack = levelNr + 1 > 100 ? 2 : 1;
+    currentStoryCardPack = getStoryPackNr();
     notifyListeners();
-    await loadLevel(levelNr + 1);
-    askForReview(levelNr + 1);
+    final nextLevelNr = levelNr + 1;
+    if (currentStoryCardPack == 3) {
+      final lastLevel = await persistence.getMaxLevelInPersistence();
+      if (lastLevel == levelNr) {
+        variousTooltip =
+            "Cool! You will receive a message when next level is out - keep your push notifications on!";
+        notifyListeners();
+      } else {
+        await loadLevel(nextLevelNr);
+        askForReview(nextLevelNr);
+      }
+    } else {
+      await loadLevel(nextLevelNr);
+      askForReview(nextLevelNr);
+    }
   }
 
   void askForReview(int levelNr) async {
-    if (levelNr == 26 || levelNr == 124) {
+    if (levelNr == 15 || levelNr == 115) {
       final InAppReview inAppReview = InAppReview.instance;
       if (await inAppReview.isAvailable()) {
         try {
@@ -236,31 +284,78 @@ class LevelModel with ChangeNotifier {
   }
 
   Future<int> getMaxLevelNr() async {
-    return persistence.getMaxLevelNr();
+    return persistence.getMaxLevelNrUnlocked();
   }
 
-  Future<(List<LevelData>, int)> getAllLevelsWordAndStories() async {
-    final levels = await persistence.getAllLevelsForPack(currentStoryCardPack);
-    final maxLevelNr = await persistence.getMaxLevelNr();
-    int lastLevelNr = currentStoryCardPack == 1 ? 100 : 200;
-    final lastUnlockedLevelNr = (levels
-        .lastWhereOrNull(
-            (element) => element.unlocked == true && element.nr < lastLevelNr)
-        ?.nr);
-    int lastContinueLevelNr =
-        lastUnlockedLevelNr == null ? 1 : lastUnlockedLevelNr + 1;
-
-    if (currentStoryCardPack == 2 && maxLevelNr >= 100) {
-      lastContinueLevelNr =
-          lastUnlockedLevelNr == null ? 101 : lastUnlockedLevelNr + 1;
+  Future<int> getLastLevelNr() async {
+    if (currentStoryCardPack == 1) {
+      return 100;
+    } else if (currentStoryCardPack == 2) {
+      return 200;
+    } else {
+      return persistence.getMaxLevelInPersistence();
     }
+  }
 
+  Future<(List<LevelData>, int)> getCurrentStoryLevelsAndContinueLevel() async {
+    final levels = await persistence.getAllLevelsForPack(currentStoryCardPack);
+    int lastLevelNrInPersistence = await getLastLevelNr();
+    final lastUnlockedLevelNr = (levels
+        .lastWhereOrNull((element) =>
+            element.unlocked == true && element.nr < lastLevelNrInPersistence)
+        ?.nr);
+
+    int lastContinueLevelNr = lastUnlockedLevelNr == null
+        ? getDefaultFirstLevel()
+        : lastUnlockedLevelNr + 1;
+
+    _log.log(Level.INFO, "Levels: ${levels.last.nr}");
     return (levels, lastContinueLevelNr);
   }
 
+  int getDefaultFirstLevel() {
+    if (currentStoryCardPack == 1) {
+      return 1;
+    } else if (currentStoryCardPack == 2) {
+      return 101;
+    } else {
+      return 201;
+    }
+  }
+
   void changeStoryPackNr(int newPackNr) {
-    currentStoryCardPack = newPackNr;
-    notifyListeners();
+    if (newPackNr == 3) {
+      networkRequestActive = true;
+      currentStoryCardPack = newPackNr;
+      notifyListeners();
+      syncLevelsWithCloud().then((str) {
+        variousTooltip = str;
+        networkRequestActive = false;
+        notifyListeners();
+      }).onError((error, stackTrace) {
+        variousTooltip =
+            "Something went terribly wrong when trying to update levels. ${error}";
+        currentStoryCardPack = newPackNr;
+        networkRequestActive = false;
+        notifyListeners();
+      });
+    } else {
+      currentStoryCardPack = newPackNr;
+      notifyListeners();
+    }
+  }
+
+  Future<String> syncLevelsWithCloud() async {
+    final maxLocalLevel = await getMaxLevelNr();
+    final _firestore = FirebaseFirestore.instance;
+    try {
+      final levels = await _firestore.collection("endless").doc("levels").get();
+      final maxCloudLevel = levels.data()?["max_level"] as int?;
+      await Future.delayed(const Duration(seconds: 5));
+      return "Local level is $maxLocalLevel and cloud level is $maxCloudLevel";
+    } catch (error) {
+      rethrow;
+    }
   }
 
   void _setLevelCompleted() {
@@ -304,18 +399,16 @@ class LevelModel with ChangeNotifier {
   void checkForCompetitionWin() {
     _log.info("checkForCompetitionWin");
     if (levelNr == CompetitionController.competitionGoalLevel) {
-        competitionController?.getCompetitionData().then((r) {
-          if (r?.finished == false) {
-            competitionController
-                ?.updatePlayerLevel(levelNr)
-                .then((result) {
-              if (result?.finished == true && result?.promoCode != "") {
-                competitionData = result;
-                notifyListeners();
-              }
-            });
-          }
-        });
+      competitionController?.getCompetitionData().then((r) {
+        if (r?.finished == false) {
+          competitionController?.updatePlayerLevel(levelNr).then((result) {
+            if (result?.finished == true && result?.promoCode != "") {
+              competitionData = result;
+              notifyListeners();
+            }
+          });
+        }
+      });
     }
   }
 
@@ -374,8 +467,18 @@ class LevelModel with ChangeNotifier {
     persistence.setLatestLevel(levelNr);
 
     // Possible cloud save
-    final localMaxLevelNr = await persistence.getMaxLevelNr();
+    final localMaxLevelNr = await persistence.getMaxLevelNrUnlocked();
     gamesServicesController?.saveGame(localMaxLevelNr);
+  }
+
+  ValueNotifier<int> getCurrentStoryValueNotifier() {
+    if (currentStoryCardPack == 1) {
+      return currentStoryCardPageNr1;
+    } else if (currentStoryCardPack == 2) {
+      return currentStoryCardPageNr2;
+    } else {
+      return currentStoryCardPageNr3;
+    }
   }
 
   void attachLifecycleNotifier(

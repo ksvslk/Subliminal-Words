@@ -69,17 +69,42 @@ class GamesServicesController {
   }
 
   Future<void> signInWithCredential() async {
-    if (Platform.isAndroid) {
-      var authCode = await GameAuth.getAuthCode(
-          "549374376791-sh7249jmselsk4duti6jbi9g8b1dgfj4.apps.googleusercontent.com");
-      if (authCode != null) {
-        await FirebaseAuth.instance.signInWithCredential(
-          PlayGamesAuthProvider.credential(serverAuthCode: authCode),
-        );
+    try {
+      final UserCredential? credential = await _getPlatformCredential();
+      if (credential?.user?.uid == null) {
+        await _signInAnonymously();
       }
-    } else if (Platform.isIOS) {
-      FirebaseAuth.instance
-          .signInWithCredential(GameCenterAuthProvider.credential());
+    } catch (e) {
+      await _signInAnonymously();
+    }
+  }
+
+  Future<UserCredential?> _getPlatformCredential() async {
+    if (Platform.isAndroid) {
+      final authCode = await GameAuth.getAuthCode(
+          "549374376791-sh7249jmselsk4duti6jbi9g8b1dgfj4.apps.googleusercontent.com");
+      if (authCode == null) return null;
+
+      return FirebaseAuth.instance.signInWithCredential(
+        PlayGamesAuthProvider.credential(serverAuthCode: authCode),
+      );
+    }
+
+    if (Platform.isIOS) {
+      return FirebaseAuth.instance.signInWithCredential(
+        GameCenterAuthProvider.credential(),
+      );
+    }
+
+    return null;
+  }
+
+  Future<void> _signInAnonymously() async {
+    try {
+      await FirebaseAuth.instance.signInAnonymously();
+      _log.log(Level.INFO, 'Signed in anonymously as fallback');
+    } catch (e) {
+      _log.log(Level.SEVERE, 'Anonymous authentication failed: $e');
     }
   }
 
