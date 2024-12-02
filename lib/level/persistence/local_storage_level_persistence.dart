@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/firebase_options.dart';
 import 'package:operation_hermes/game/level_data.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,6 +13,7 @@ import 'package:flutter/services.dart' show rootBundle;
 
 const latestLevel = "LATEST_LEVEL";
 const maxLevel = "MAX_LEVEL";
+const openLevelSelectQuest = "OPEN_QUEST_TAB";
 
 class LocalStorageLevelPersistence extends LevelPersistence {
   static final _log = Logger('LocalStorageLevelPersistence');
@@ -211,7 +215,7 @@ class LocalStorageLevelPersistence extends LevelPersistence {
     final prefs = await instanceFuture;
     final maxLevel = await getMaxLevelInPersistence();
     List<LevelData> levels = List.empty(growable: true);
-    for (var i = 1; i < maxLevel; i++) {
+    for (var i = 1; i <= maxLevel; i++) {
       final levelStrings = prefs.getStringList(i.toString());
       if (levelStrings != null) {
         final levelData = LevelData.from((i.toString(), levelStrings));
@@ -223,9 +227,9 @@ class LocalStorageLevelPersistence extends LevelPersistence {
   }
 
   @override
-  Future<void> unlockLevelsUntil(int levelNr) async {
+  Future<void> unlockLevelsRange(int start, int end) async {
     final prefs = await instanceFuture;
-    for (var i = 1; i <= levelNr; i++) {
+    for (var i = start; i <= end; i++) {
       final levelStrings = prefs.getStringList(i.toString());
       if (levelStrings != null) {
         var levelData = LevelData.from((i.toString(), levelStrings));
@@ -233,6 +237,72 @@ class LocalStorageLevelPersistence extends LevelPersistence {
         final basicData = levelData.getLevelDataBasic();
         await setLevelData(basicData);
       }
+    }
+  }
+
+  @override
+  Future<void> setOpenQuestTab(bool value) async {
+    final prefs = await instanceFuture;
+    await prefs.setBool(openLevelSelectQuest, value);
+  }
+
+  @override
+  Future<bool> getOpenQuestTab() async {
+    final prefs = await instanceFuture;
+    return prefs.getBool(openLevelSelectQuest) ?? false;
+  }
+
+  @override
+  Future<int> getMaxLeveNrUnlockedInRange(int start, int end) async {
+    final prefs = await instanceFuture;
+    List<LevelData> levels = List.empty(growable: true);
+    for (var i = start; i <= end; i++) {
+      final levelStrings = prefs.getStringList(i.toString());
+      if (levelStrings != null) {
+        final levelData = LevelData.from((i.toString(), levelStrings));
+        levels.add(levelData);
+      }
+    }
+    return levels.lastWhereOrNull((element) => element.unlocked == true)?.nr ??
+        1;
+  }
+
+  @override
+  Future<void> tryAddingNotificationLevel(RemoteMessage message) async {
+    try {
+      final level = message.data;
+      final maxLevelInPersistence = await getMaxLevelInPersistence();
+      final newLevelNr = int.parse(level['nr']);
+      final fbs = FirebaseStorage.instanceFor(
+          bucket: Platform.isAndroid
+              ? DefaultFirebaseOptions.android.storageBucket
+              : DefaultFirebaseOptions.ios.storageBucket);
+      final picDownloadUrl =
+          await fbs.refFromURL(level['picturePath']).getDownloadURL();
+
+      if (maxLevelInPersistence + 1 == newLevelNr) {
+        final levelData = LevelData(
+            int.parse(level['nr']),
+            level['word'].toString().toUpperCase(),
+            level['story'],
+            picDownloadUrl,
+            level['svgPath'],
+            level['tooltipStart'],
+            level['tooltipEnd'],
+            false,
+            false,
+            0,
+            false);
+
+        // Save level
+        setLevelData(levelData.getLevelDataBasic());
+        setOpenQuestTab(true);
+      } else {
+        _log.log(
+            Level.WARNING, "Too many levels to add in background. Skipping.");
+      }
+    } catch (error) {
+      _log.log(Level.SEVERE, "Could not add new level. $error");
     }
   }
 }

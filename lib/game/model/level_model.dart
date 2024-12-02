@@ -1,15 +1,18 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:collection/collection.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
 import 'package:operation_hermes/competition/competition_controller.dart';
+import 'package:operation_hermes/firebase_options.dart';
 import 'package:operation_hermes/game/model/competition_data.dart';
 import 'package:operation_hermes/game/model/field_model.dart';
 import 'package:operation_hermes/game/level_data.dart';
@@ -18,6 +21,7 @@ import 'package:operation_hermes/game/model/story_model.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
+import 'package:path_provider/path_provider.dart';
 
 class LevelModel with ChangeNotifier {
   final CompetitionController? competitionController;
@@ -51,11 +55,7 @@ class LevelModel with ChangeNotifier {
   final lettersAnimationFadeInDuration = 1750;
   var lettersAnimationFadeOutDuration = 1750;
 
-  ValueNotifier<int> currentStoryCardPageNr1 = ValueNotifier(1);
-  ValueNotifier<int> currentStoryCardPageNr2 = ValueNotifier(1);
-  ValueNotifier<int> currentStoryCardPageNr3 = ValueNotifier(1);
-
-  int currentStoryCardPack = 1;
+  bool openQuestTab = false;
 
   bool networkRequestActive = false;
 
@@ -65,6 +65,16 @@ class LevelModel with ChangeNotifier {
       required this.inAppPurchaseController,
       required this.gamesServicesController,
       required this.persistence});
+
+  Future<void> tryToOpenQuestTab({bool openNow = false}) async {
+    final openTab = await persistence.getOpenQuestTab();
+    if (openTab || openNow) {
+      persistence.setOpenQuestTab(false);
+      currentStoryCardPack = 3;
+      openQuestTab = true;
+      notifyListeners();
+    }
+  }
 
   Future<void> initialize() async {
     final latestLevelData = await persistence.initialize().then((value) async {
@@ -79,36 +89,47 @@ class LevelModel with ChangeNotifier {
         .then((value) => updateProgressFromCloud());
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      if (message.notification != null) {
-        showMessageFromMascot(
-            "${message.notification?.title}. ${message.notification?.body}.");
-      }
+      persistence.tryAddingNotificationLevel(message).then((onValue) {
+        variousTooltip = "New level added!";
+        tryToOpenQuestTab(openNow: true);
+      });
     });
   }
 
   Future<void> updateProgressFromCloud() async {
     final cloudGameData = await gamesServicesController?.loadGame();
-    final localMaxLevelNr = await persistence.getMaxLevelNrUnlocked();
+    final localMaxLevelNr =
+        await persistence.getMaxLeveNrUnlockedInRange(1, 200);
+    final localMaxLevelNrForQuest = await persistence.getMaxLevelNrUnlocked();
 
     if (cloudGameData?.progress.compareTo(levelNr) == 1 ||
-        cloudGameData?.progress.compareTo(levelNr) == 0) {
+        cloudGameData?.progress.compareTo(levelNr) == 0 ||
+        cloudGameData?.questProgress?.compareTo(levelNr) == 1 ||
+        cloudGameData?.questProgress?.compareTo(levelNr) == 0) {
       unlocked = true;
     }
 
-    // When cloud progress is higher then save
+    var cloudRestore = false;
+
+    if (cloudGameData?.questProgress?.compareTo(localMaxLevelNrForQuest) == 1) {
+      await persistence.unlockLevelsRange(201, cloudGameData!.questProgress!);
+      cloudRestore = true;
+    }
+
     if (cloudGameData?.progress.compareTo(localMaxLevelNr) == 1) {
-      _log.log(Level.INFO,
-          'Cloud is more powerful, unlock levels until: ${cloudGameData?.progress}');
-      await persistence.unlockLevelsUntil(cloudGameData!.progress);
-      variousTooltip =
-          "Restored from cloud. Latest level accessible through story bar.";
-      notifyListeners();
-    } else {
+      await persistence.unlockLevelsRange(1, cloudGameData!.progress);
+      cloudRestore = true;
+    }
+
+    if (!cloudRestore) {
       final lastLevelData = await persistence.getLatestLevelData();
       final lastLevelNr = int.tryParse(lastLevelData.$1);
       if (lastLevelNr != null && levelNr != lastLevelNr) {
         loadLevel(lastLevelNr);
       }
+    } else {
+      variousTooltip = "Restored from cloud.";
+      notifyListeners();
     }
   }
 
@@ -287,6 +308,10 @@ class LevelModel with ChangeNotifier {
     return persistence.getMaxLevelNrUnlocked();
   }
 
+  Future<int> getMaxLevelNr60() {
+    return persistence.getMaxLeveNrUnlockedInRange(1, 60);
+  }
+
   Future<int> getLastLevelNr() async {
     if (currentStoryCardPack == 1) {
       return 100;
@@ -323,22 +348,17 @@ class LevelModel with ChangeNotifier {
     }
   }
 
-  void changeStoryPackNr(int newPackNr) {
+  int currentStoryCardPack = 1;
+
+  Future<void> changeStoryPackNr(int newPackNr) async {
     if (newPackNr == 3) {
       networkRequestActive = true;
+      notifyListeners();
+      final result = await syncLevelsWithCloud();
+      variousTooltip = result;
+      networkRequestActive = false;
       currentStoryCardPack = newPackNr;
       notifyListeners();
-      syncLevelsWithCloud().then((str) {
-        variousTooltip = str;
-        networkRequestActive = false;
-        notifyListeners();
-      }).onError((error, stackTrace) {
-        variousTooltip =
-            "Something went terribly wrong when trying to update levels. ${error}";
-        currentStoryCardPack = newPackNr;
-        networkRequestActive = false;
-        notifyListeners();
-      });
     } else {
       currentStoryCardPack = newPackNr;
       notifyListeners();
@@ -346,14 +366,62 @@ class LevelModel with ChangeNotifier {
   }
 
   Future<String> syncLevelsWithCloud() async {
-    final maxLocalLevel = await getMaxLevelNr();
-    final _firestore = FirebaseFirestore.instance;
+    final maxLocalLevel = await persistence.getMaxLevelInPersistence();
+    final fs = FirebaseFirestore.instance;
     try {
-      final levels = await _firestore.collection("endless").doc("levels").get();
-      final maxCloudLevel = levels.data()?["max_level"] as int?;
-      await Future.delayed(const Duration(seconds: 5));
-      return "Local level is $maxLocalLevel and cloud level is $maxCloudLevel";
+      final firebaseLevels = await fs.collection("endless").doc("levels").get();
+      final maxFirebaseLevel = firebaseLevels.data()?["max_level"] as int?;
+      _log.log(Level.INFO, "maxLocalLevel: $maxLocalLevel");
+      _log.log(Level.INFO, "maxFirebaseLevel: $maxFirebaseLevel");
+      if (maxFirebaseLevel?.compareTo(maxLocalLevel) == 1) {
+        final newLevels = await fs
+            .collection("endless")
+            .doc("levels")
+            .collection("new")
+            .where('nr', isGreaterThan: maxLocalLevel)
+            .get();
+
+        final fbs = FirebaseStorage.instanceFor(
+            bucket: Platform.isAndroid
+                ? DefaultFirebaseOptions.android.storageBucket
+                : DefaultFirebaseOptions.ios.storageBucket);
+
+        for (var level in newLevels.docs) {
+          final picDownloadUrl =
+              await fbs.refFromURL(level['picturePath']).getDownloadURL();
+          final svgPath = await downloadFile(fbs.refFromURL(level['svgPath']));
+          final levelData = LevelData(
+              level['nr'],
+              level['word'].toString().toUpperCase(),
+              level['story'],
+              picDownloadUrl, //picturePath,
+              svgPath,
+              level['tooltipStart'],
+              level['tooltipEnd'],
+              false,
+              false,
+              0,
+              false);
+          await persistence.setLevelData(levelData.getLevelDataBasic());
+        }
+        _log.log(Level.INFO, "Added ${newLevels.docs.length} new levels!");
+        return "Successfully added ${newLevels.docs.length} new levels!";
+      } else {
+        return "All up to date!";
+      }
     } catch (error) {
+      rethrow;
+    }
+  }
+
+  Future<String> downloadFile(Reference ref) async {
+    try {
+      final Directory appDir = await getApplicationDocumentsDirectory();
+      final File pic = File('${appDir.absolute.path}/${ref.name}');
+      if (pic.existsSync()) await pic.delete();
+      await ref.writeToFile(pic);
+      return pic.path;
+    } catch (e) {
       rethrow;
     }
   }
@@ -467,18 +535,10 @@ class LevelModel with ChangeNotifier {
     persistence.setLatestLevel(levelNr);
 
     // Possible cloud save
-    final localMaxLevelNr = await persistence.getMaxLevelNrUnlocked();
-    gamesServicesController?.saveGame(localMaxLevelNr);
-  }
-
-  ValueNotifier<int> getCurrentStoryValueNotifier() {
-    if (currentStoryCardPack == 1) {
-      return currentStoryCardPageNr1;
-    } else if (currentStoryCardPack == 2) {
-      return currentStoryCardPageNr2;
-    } else {
-      return currentStoryCardPageNr3;
-    }
+    final localMaxLevelNr =
+        await persistence.getMaxLeveNrUnlockedInRange(1, 200);
+    final localMaxLevelQuestNr = await persistence.getMaxLevelNrUnlocked();
+    gamesServicesController?.saveGame(localMaxLevelNr, localMaxLevelQuestNr);
   }
 
   void attachLifecycleNotifier(
@@ -494,6 +554,7 @@ class LevelModel with ChangeNotifier {
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
       case AppLifecycleState.resumed:
+        tryToOpenQuestTab();
       case AppLifecycleState.inactive:
         break;
     }

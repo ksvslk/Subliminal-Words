@@ -79,7 +79,7 @@ class CompetitionDialog extends StatelessWidget {
                 Flexible(
                   flex: 1,
                   child: Text(
-                    'Be among the players to complete the first ${CompetitionController.competitionGoalLevel} levels before others and win a promo code!',
+                    'Be among the players to complete ${CompetitionController.competitionGoalLevel} first levels in Chapter I before others and win a promo code!',
                     style: TextStyle(
                       fontSize: Theme.of(context).textTheme.bodyLarge?.fontSize,
                       color: Theme.of(context).colorScheme.onSurface,

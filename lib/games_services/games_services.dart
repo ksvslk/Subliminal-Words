@@ -187,17 +187,13 @@ class GamesServicesController {
     }
   }
 
-  Future<void> saveGame(int progress) async {
+  Future<void> saveGame(int progress, int questProgress) async {
     if (await signedIn) {
       try {
         final gameData = await loadGame();
-        _log.log(Level.INFO,
-            "Cloud progress: ${gameData?.progress}, local progress: $progress");
-        if (gameData?.progress.compareTo(progress) == 1) return;
-        final data = jsonEncode(GameData(progress).toJson());
-        final result =
-            await gs.SaveGame.saveGame(data: data, name: saveGameName);
-        _log.log(Level.INFO, "Save game result: $result");
+        if (gameData?.progress.compareTo(progress) == 1 && gameData?.questProgress?.compareTo(questProgress) == 1) return;
+        final data = jsonEncode(GameData(progress, questProgress).toJson());
+        await gs.SaveGame.saveGame(data: data, name: saveGameName);
       } catch (e) {
         _log.severe('Could not save game: $e');
       }
@@ -216,6 +212,7 @@ class GamesServicesController {
             final Map json = jsonDecode(result);
             final gameData = GameData.fromJson(json);
             _log.log(Level.INFO, "Player progress: ${gameData.progress}");
+            _log.log(Level.INFO, "Player quest progress: ${gameData.questProgress}");
             return gameData;
           }
           _log.log(Level.INFO, "Could not load game.");

@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +11,9 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
 import 'package:operation_hermes/competition/competition_controller.dart';
+import 'package:operation_hermes/firebase_options.dart';
 import 'package:operation_hermes/game/game_field_wrapper.dart';
+import 'package:operation_hermes/game/level_data.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart';
@@ -24,6 +28,16 @@ import 'package:provider/provider.dart';
 import 'settings/settings_controller.dart';
 import 'audio/audio_controller.dart';
 import 'package:firebase_core/firebase_core.dart';
+
+final LocalStorageLevelPersistence globalLevelPersistence = LocalStorageLevelPersistence();
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // If you're going to use other Firebase services in the background, such as Firestore,
+  // make sure you call `initializeApp` before using other Firebase services.
+  await Firebase.initializeApp();
+  globalLevelPersistence.tryAddingNotificationLevel(message);
+}
 
 Future<void> main() async {
   //debugPaintSizeEnabled = true;
@@ -92,10 +106,12 @@ Future<void> main() async {
     competitionController = CompetitionController();
   }
 
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   runApp(
     MyApp(
         settingsPersistence: LocalStorageSettingsPersistence(),
-        levelPersistence: LocalStorageLevelPersistence(),
+        levelPersistence: globalLevelPersistence,
         adsController: adsController,
         inAppPurchaseController: inAppPurchaseController,
         gamesServicesController: gamesServicesController,

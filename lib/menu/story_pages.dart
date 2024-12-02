@@ -10,10 +10,10 @@ class StoryPages extends StatefulWidget {
   const StoryPages({super.key});
 
   @override
-  _StoryPagesState createState() => _StoryPagesState();
+  StoryPagesState createState() => StoryPagesState();
 }
 
-class _StoryPagesState extends State<StoryPages> {
+class StoryPagesState extends State<StoryPages> {
   static final _log = Logger('StoryPages');
 
   Future<List<WidgetSpan>> createWidgetSpans(
@@ -21,7 +21,6 @@ class _StoryPagesState extends State<StoryPages> {
     BuildContext context,
     LevelModel levelModel,
   ) async {
-    Stopwatch stopwatch = Stopwatch()..start();
     final list = levelsAndContinueLevelNr.$1.fold(
         List<WidgetSpan>.empty(growable: true), (previousLevel, currentLevel) {
       return previousLevel +
@@ -47,7 +46,6 @@ class _StoryPagesState extends State<StoryPages> {
             return previousWidgets;
           }).toList();
     });
-    _log.log(Level.INFO, "createWidgetSpans executed in ${stopwatch.elapsed}");
     return list;
   }
 
@@ -165,11 +163,7 @@ class _StoryPagesState extends State<StoryPages> {
   @override
   Widget build(BuildContext context) {
     final levelModel = context.watch<LevelModel>();
-    final PageController controller = PageController(
-      initialPage: levelModel.currentStoryCardPack == 1
-          ? levelModel.currentStoryCardPageNr1.value - 1
-          : levelModel.currentStoryCardPageNr2.value - 1,
-    );
+    final PageController controller = PageController(initialPage: 1);
 
     final loadingPageCard = PageView(
         clipBehavior: Clip.hardEdge,
@@ -244,6 +238,7 @@ class _StoryPagesState extends State<StoryPages> {
                 selected: {levelModel.currentStoryCardPack},
                 onSelectionChanged: (chapter) async {
                   levelModel.changeStoryPackNr(chapter.first);
+                  controller.jumpToPage(0);
                 },
               ),
               Expanded(
@@ -283,20 +278,6 @@ class _StoryPagesState extends State<StoryPages> {
                                       loadingPageCard,
                                     ]
                                   : storyCards,
-                              onPageChanged: (value) {
-                                if (levelModel.currentStoryCardPack == 1) {
-                                  levelModel.currentStoryCardPageNr1.value =
-                                      value + 1;
-                                } else if (levelModel.currentStoryCardPack ==
-                                    2) {
-                                  levelModel.currentStoryCardPageNr2.value =
-                                      value + 1;
-                                } else if (levelModel.currentStoryCardPack ==
-                                    3) {
-                                  levelModel.currentStoryCardPageNr3.value =
-                                      value + 1;
-                                }
-                              },
                             ),
                           ],
                         );

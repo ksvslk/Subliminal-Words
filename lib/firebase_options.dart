@@ -54,7 +54,7 @@ class DefaultFirebaseOptions {
     appId: '1:549374376791:android:7ea35df78042aa1a41dc12',
     messagingSenderId: '549374376791',
     projectId: 'subliminal-words',
-    storageBucket: 'subliminal-words.appspot.com',
+    storageBucket: 'subliminal-words.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
@@ -62,7 +62,7 @@ class DefaultFirebaseOptions {
     appId: '1:549374376791:ios:ab56a8bbfd90023241dc12',
     messagingSenderId: '549374376791',
     projectId: 'subliminal-words',
-    storageBucket: 'subliminal-words.appspot.com',
+    storageBucket: 'subliminal-words.firebasestorage.app',
     androidClientId: '549374376791-3pm4vphv771k55qibbgsnhc01up8t8r1.apps.googleusercontent.com',
     iosBundleId: 'com.indest.subliminalwords',
   );

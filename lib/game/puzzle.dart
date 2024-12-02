@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/audio/audio_controller.dart';
@@ -19,7 +20,6 @@ class Puzzle extends StatelessWidget {
   Widget build(BuildContext context) {
     final audioController = context.read<AudioController>();
     return Consumer<LevelModel>(builder: (context, levelModel, child) {
-
       return GestureDetector(
         onTap: levelModel.levelCompleted
             ? () {
@@ -89,11 +89,24 @@ class Puzzle extends StatelessWidget {
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(4),
-                                child: Image.asset(
-                                  model.picturePath,
-                                  fit: BoxFit.contain,
-                                  gaplessPlayback: true,
-                                ),
+                                child: levelModel.levelNr > 201
+                                    ? CachedNetworkImage(
+                                        imageUrl: model.picturePath,
+                                        placeholder: (context, url) =>
+                                             const Center(
+            child:     SizedBox.square(
+        dimension: 24,  // This sets both width and height/ Adjust height as needed
+                child: CircularProgressIndicator.adaptive(),
+            ),
+        ),
+                                        errorWidget: (context, url, error) =>
+                                            const Icon(Icons.error),
+                                      )
+                                    : Image.asset(
+                                        model.picturePath,
+                                        fit: BoxFit.contain,
+                                        gaplessPlayback: true,
+                                      ),
                               ),
                               ...model.highlightLetters.map((svgLetter) {
                                 return AnimatedOpacity(

@@ -15,7 +15,7 @@
 	<key>PROJECT_ID</key>
 	<string>subliminal-words</string>
 	<key>STORAGE_BUCKET</key>
-	<string>subliminal-words.appspot.com</string>
+	<string>subliminal-words.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>

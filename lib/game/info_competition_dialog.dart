@@ -97,7 +97,7 @@ class InfoCompetitionDialog extends StatelessWidget {
           return FutureBuilder<List<dynamic>>(
             future: Future.wait([
               competitionController.getCompetitionData(),
-              persistence.getMaxLevelNr()
+              persistence.getMaxLevelNr60()
             ]),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {

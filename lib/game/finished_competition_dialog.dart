@@ -112,7 +112,7 @@ class _FinishedCompetitionDialogState extends State<FinishedCompetitionDialog>
                 Flexible(
                   flex: 1,
                   child: Text(
-                    '77 levels done! Prizes gone. Share game store link on social media, send screenshot to indrek@indest.ee for bonus prize!',
+                    'No prizes left. Share the game on social media, send screenshot to indrek@indest.ee for bonus prize!',
                     style: TextStyle(
                       fontSize: Theme.of(context).textTheme.bodyLarge?.fontSize,
                       color: Theme.of(context).colorScheme.onSurface,

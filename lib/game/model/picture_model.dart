@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:operation_hermes/game/level_data.dart';
@@ -28,7 +29,7 @@ class PictureModel with ChangeNotifier {
       required this.picturePath,
       required this.svgPath,
       required this.levelNr}) {
-    _loadSvgLetters(svgImage: svgPath).then((loadedLetters) {
+    _loadSvgLetters(svgImage: svgPath, levelNr:this.levelNr).then((loadedLetters,) {
       highlightLetters = loadedLetters;
       notifyListeners();
     });
@@ -41,7 +42,7 @@ class PictureModel with ChangeNotifier {
     picturePath = level.picturePath;
     svgPath = level.svgPath;
     levelNr = level.nr;
-    await _loadSvgLetters(svgImage: svgPath).then((loadedLetters) {
+    await _loadSvgLetters(svgImage: svgPath, levelNr: level.nr).then((loadedLetters) {
       highlightLetters = loadedLetters;
       notifyListeners();
     });
@@ -103,9 +104,16 @@ class PictureModel with ChangeNotifier {
     }
   }
 
-  Future<List<SvgLetter>> _loadSvgLetters({required String svgImage}) async {
+  Future<List<SvgLetter>> _loadSvgLetters({required String svgImage, required int levelNr}) async {
     List<SvgLetter> maps = [];
-    String generalString = await rootBundle.loadString(svgImage);
+    var generalString = "";
+    if (levelNr > 201) {
+      File file = File(svgImage);
+      generalString = await file.readAsString();
+    }
+    else {
+      generalString = await rootBundle.loadString(svgImage);
+    }
     XmlDocument document = XmlDocument.parse(generalString);
     final allPaths = document.findAllElements('path');
     for (var element in allPaths) {
