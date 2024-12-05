@@ -10,35 +10,26 @@ class NotificationController {
   static final Logger _log = Logger('NotificationController');
 
   SettingsController? _settings;
-  late final String? _apnsToken;
 
   Future<void> initialize() async {
-    if (Platform.isIOS) {
-      _apnsToken = await FirebaseMessaging.instance.getAPNSToken();
+    await askPermissions();
+    if (Platform.isMacOS || Platform.isIOS) {
+      await FirebaseMessaging.instance.getAPNSToken();
     }
-    askPermissions();
-  }
-
-  // First get current token and make updates if needed
-  // because somehow the listening won't get you the token.
-  Future<void> listenNewToken() async {
-    final oldToken = await FirebaseMessaging.instance.getToken();
-    checkAndStoreToken(oldToken ?? "").then((_) {
-      _log.log(Level.INFO, "Start onTokenRefresh listening.");
-      FirebaseMessaging.instance.onTokenRefresh.listen((fcmToken) {
-        // Note: This callback is fired at each app startup and whenever a new
-        // token is generated.
-        _log.log(Level.INFO, "NEW! Token: $fcmToken");
-        checkAndStoreToken(fcmToken);
-      }).onError((err) {
-        _log.log(Level.INFO, "Error getting new token: $err");
-      });
+    final oldToken =  await FirebaseMessaging.instance.getToken();
+    await checkAndStoreToken(oldToken ?? "");
+    FirebaseMessaging.instance.onTokenRefresh.listen((fcmToken) {
+      // Note: This callback is fired at each app startup and whenever a new
+      // token is generated.
+      checkAndStoreToken(fcmToken);
+    }).onError((err) {
+      _log.log(Level.WARNING, "Error getting new token: $err");
     });
   }
 
+
   Future<void> askPermissions() async {
-    if (Platform.isIOS && _apnsToken == null) return;
-    _log.log(Level.INFO, "ask permissions!");
+    //if (Platform.isIOS && _apnsToken == null) return;
     await FirebaseMessaging.instance.requestPermission(
       alert: true,
       announcement: false,
@@ -51,18 +42,13 @@ class NotificationController {
   }
 
   Future<void> checkAndStoreToken(String token) async {
-    _log.log(Level.INFO, "checkAndStoreToken: $token");
-
-    if (Platform.isIOS && _apnsToken == null) return;
-
     // Check whether the retrieved token matches the one on your server for this user's device
     final tokenStored = await _settings?.getToken() ?? '';
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
-    _log.log(Level.INFO, "current prefs token: $tokenStored");
-
-
-    if (uid != null && token != '' && (tokenStored == '' || tokenStored != token)) {
+    if (uid != null &&
+        token != '' &&
+        (tokenStored == '' || tokenStored != token)) {
       // If you have your own server, call API to send the above token and Date() for this user's device
 
       // Example shown below with Firestore
@@ -72,16 +58,12 @@ class NotificationController {
         'timestamp': FieldValue.serverTimestamp(),
       };
 
-      _log.log(Level.INFO, "Update token on cloud: $token");
-
       // Get user ID from Firebase Auth or your own server
       await FirebaseFirestore.instance
           .collection(Platform.isAndroid ? 'fcmTokensAndroid' : 'fcmTokensIos')
           .doc(uid)
           .set(deviceToken);
 
-      _log.log(Level.INFO, "Save token locally: $token");
-      
       // Save locally
       await _settings?.setToken(token);
     }

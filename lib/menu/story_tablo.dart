@@ -21,7 +21,6 @@ class _StoryTabloState extends State<StoryTablo>
 
   RichText getRichText(
       BuildContext context, (String, String) levelWordAndStory) {
-    Stopwatch stopwatch = Stopwatch()..start();
       
     final List<String> words = levelWordAndStory.$2.split(' ');
     final inlineSpans = words.mapIndexed((index, word) {
@@ -41,7 +40,6 @@ class _StoryTabloState extends State<StoryTablo>
                     )));
     }).toList();
 
-    _log.log(Level.INFO, "getRichText executed in: ${stopwatch.elapsed}");
     return RichText(
       maxLines: 1,
       overflow: TextOverflow.clip,
@@ -50,9 +48,7 @@ class _StoryTabloState extends State<StoryTablo>
   }
 
   List<RichText> getStories(List<(String, String)> stories) {
-    Stopwatch stopwatch = Stopwatch()..start();
     final listOfStories = List.of(stories.map((e) => getRichText(context, e)));
-    _log.log(Level.INFO, "getStories executed in: ${stopwatch.elapsed}");
     return listOfStories;
   }
 

@@ -56,7 +56,6 @@ class LevelModel with ChangeNotifier {
   var lettersAnimationFadeOutDuration = 1750;
 
   bool openQuestTab = false;
-
   bool networkRequestActive = false;
 
   LevelModel(
@@ -66,12 +65,12 @@ class LevelModel with ChangeNotifier {
       required this.gamesServicesController,
       required this.persistence});
 
-  Future<void> tryToOpenQuestTab({bool openNow = false}) async {
+  Future<void> tryToOpenQuestTab() async {
     final openTab = await persistence.getOpenQuestTab();
-    if (openTab || openNow) {
+    if (openTab) {
       persistence.setOpenQuestTab(false);
-      currentStoryCardPack = 3;
-      openQuestTab = true;
+      variousTooltip = "New level added to the 'Quest' chapter!";
+      currentStoryCardPack = 1;
       notifyListeners();
     }
   }
@@ -88,11 +87,13 @@ class LevelModel with ChangeNotifier {
     gamesServicesController?.signedIn
         .then((value) => updateProgressFromCloud());
 
+    await tryToOpenQuestTab();
+
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      persistence.tryAddingNotificationLevel(message).then((onValue) {
-        variousTooltip = "New level added!";
-        tryToOpenQuestTab(openNow: true);
-      });
+      persistence.setOpenQuestTab(false);
+      variousTooltip = "New level added to the 'Quest' chapter!";
+      currentStoryCardPack = 1;
+      notifyListeners();
     });
   }
 
@@ -241,7 +242,6 @@ class LevelModel with ChangeNotifier {
   }
 
   Future<void> loadLevel(int nr, {bool fromLevelSelect = false}) async {
-    _log.log(Level.INFO, "loadLevel");
     persistence.getLevelNr(nr).then((currentLevel) {
       final level = LevelData.from(currentLevel);
       persistence
@@ -334,7 +334,6 @@ class LevelModel with ChangeNotifier {
         ? getDefaultFirstLevel()
         : lastUnlockedLevelNr + 1;
 
-    _log.log(Level.INFO, "Levels: ${levels.last.nr}");
     return (levels, lastContinueLevelNr);
   }
 
@@ -353,11 +352,11 @@ class LevelModel with ChangeNotifier {
   Future<void> changeStoryPackNr(int newPackNr) async {
     if (newPackNr == 3) {
       networkRequestActive = true;
+      currentStoryCardPack = newPackNr;
       notifyListeners();
       final result = await syncLevelsWithCloud();
       variousTooltip = result;
       networkRequestActive = false;
-      currentStoryCardPack = newPackNr;
       notifyListeners();
     } else {
       currentStoryCardPack = newPackNr;
@@ -367,12 +366,10 @@ class LevelModel with ChangeNotifier {
 
   Future<String> syncLevelsWithCloud() async {
     final maxLocalLevel = await persistence.getMaxLevelInPersistence();
-    final fs = FirebaseFirestore.instance;
     try {
+      final fs = FirebaseFirestore.instance;
       final firebaseLevels = await fs.collection("endless").doc("levels").get();
       final maxFirebaseLevel = firebaseLevels.data()?["max_level"] as int?;
-      _log.log(Level.INFO, "maxLocalLevel: $maxLocalLevel");
-      _log.log(Level.INFO, "maxFirebaseLevel: $maxFirebaseLevel");
       if (maxFirebaseLevel?.compareTo(maxLocalLevel) == 1) {
         final newLevels = await fs
             .collection("endless")
@@ -389,7 +386,8 @@ class LevelModel with ChangeNotifier {
         for (var level in newLevels.docs) {
           final picDownloadUrl =
               await fbs.refFromURL(level['picturePath']).getDownloadURL();
-          final svgPath = await downloadFile(fbs.refFromURL(level['svgPath']));
+          final ref = fbs.refFromURL(level['svgPath']);
+          final svgPath = await downloadFile(ref);
           final levelData = LevelData(
               level['nr'],
               level['word'].toString().toUpperCase(),
@@ -404,20 +402,19 @@ class LevelModel with ChangeNotifier {
               false);
           await persistence.setLevelData(levelData.getLevelDataBasic());
         }
-        _log.log(Level.INFO, "Added ${newLevels.docs.length} new levels!");
         return "Successfully added ${newLevels.docs.length} new levels!";
       } else {
         return "All up to date!";
       }
     } catch (error) {
-      rethrow;
+      return "All up to date!";
     }
   }
 
   Future<String> downloadFile(Reference ref) async {
     try {
       final Directory appDir = await getApplicationDocumentsDirectory();
-      final File pic = File('${appDir.absolute.path}/${ref.name}');
+      final File pic = File('${appDir.path}/${ref.name}');
       if (pic.existsSync()) await pic.delete();
       await ref.writeToFile(pic);
       return pic.path;
@@ -554,7 +551,6 @@ class LevelModel with ChangeNotifier {
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
       case AppLifecycleState.resumed:
-        tryToOpenQuestTab();
       case AppLifecycleState.inactive:
         break;
     }

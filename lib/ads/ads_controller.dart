@@ -61,7 +61,6 @@ class AdsController extends ChangeNotifier {
 
   /// Initializes the injected [MobileAds.instance].
   Future<void> initialize() async {
-    _log.info('initialize');
     await _instance.initialize();
     Future<void>.delayed(const Duration(seconds: 1)).then((_) {
       return loadRewardedAd(null);
@@ -75,7 +74,6 @@ class AdsController extends ChangeNotifier {
   void loadRewardedAd(AdRequest? adRequestNullable) {
     assert(Platform.isAndroid || Platform.isIOS,
         'AdMob currently does not support ${Platform.operatingSystem}');
-    _log.info('loadRewardedAd');
     final adRequest = adRequestNullable ?? const AdRequest();
     RewardedAd.load(
         adUnitId: rewardedAdUnitId,
@@ -103,7 +101,6 @@ class AdsController extends ChangeNotifier {
   void loadInterstitialAd(AdRequest? adRequestNullable) {
     assert(Platform.isAndroid || Platform.isIOS,
         'AdMob currently does not support ${Platform.operatingSystem}');
-    _log.info('loadInterstitialAd');
     final adRequest = adRequestNullable ?? const AdRequest();
     InterstitialAd.load(
       adUnitId: intersitialAdUnitId,
@@ -111,11 +108,9 @@ class AdsController extends ChangeNotifier {
       adLoadCallback: InterstitialAdLoadCallback(
         onAdLoaded: (ad) {
           _interstitialAd = ad;
-          _log.info('preloaded interstitial ad loaded.');
           _intersitialRetryCount = 0; // Reset retry count on success
         },
         onAdFailedToLoad: ((error) async {
-          _log.info('preloaded interstitial ad not loaded - $error');
           if (_intersitialRetryCount < _maxRetryCount) {
             _intersitialRetryCount++;
             final delay = _initialDelay * pow(2, _intersitialRetryCount - 1);
@@ -264,7 +259,7 @@ class AdsController extends ChangeNotifier {
         }
       },
       (formError) async {
-        _log.log(Level.SEVERE, 'Could not load consent form: $formError');
+        _log.log(Level.WARNING, 'Could not load consent form: $formError');
         if (_consentRetryCount < _maxRetryCount) {
           _consentRetryCount++;
           final delay = _initialDelay * pow(2, _consentRetryCount - 1);

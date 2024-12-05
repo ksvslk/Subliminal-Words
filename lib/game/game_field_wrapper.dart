@@ -8,9 +8,7 @@ import 'package:operation_hermes/game/hint_bar.dart';
 import 'package:operation_hermes/game/join_competition_dialog.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/game/puzzle.dart';
-import 'package:operation_hermes/level/persistence/local_storage_level_persistence.dart';
 import 'package:operation_hermes/menu/top_bar.dart';
-import 'package:operation_hermes/notification/notification_controller.dart';
 import 'package:provider/provider.dart';
 
 class GameFieldWrapper extends StatelessWidget {
@@ -21,12 +19,10 @@ class GameFieldWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     final levelModel = context.read<LevelModel>();
     final competitionController = context.read<CompetitionController>();
-    final notificationController = context.read<NotificationController>();
 
     FirebaseAuth.instance.idTokenChanges().listen((User? user) {
       if (user?.uid != null) {
-        levelModel.tryToOpenQuestTab();
-        notificationController.listenNewToken();
+        //levelModel.tryToOpenQuestTab();
         levelModel.persistence.getMaxLevelNrUnlocked().then((maxLevel) {
           competitionController.getCompetitionData().then((data) {
             if (data?.enrolled == false) {

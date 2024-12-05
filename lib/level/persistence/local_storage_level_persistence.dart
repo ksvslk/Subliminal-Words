@@ -179,7 +179,6 @@ class LocalStorageLevelPersistence extends LevelPersistence {
         // Add 'word' to the set
         words.add(word);
         s.add(story.replaceFirst(word, "#$word"));
-        _log.log(Level.INFO, words);
         int levelNr = item["nr"] > 100 ? item["nr"] - 100 : item["nr"];
         assert(words.length == levelNr, 'Repeating $word');
       }
@@ -249,6 +248,7 @@ class LocalStorageLevelPersistence extends LevelPersistence {
   @override
   Future<bool> getOpenQuestTab() async {
     final prefs = await instanceFuture;
+    await prefs.reload();
     return prefs.getBool(openLevelSelectQuest) ?? false;
   }
 
@@ -295,8 +295,8 @@ class LocalStorageLevelPersistence extends LevelPersistence {
             false);
 
         // Save level
-        setLevelData(levelData.getLevelDataBasic());
-        setOpenQuestTab(true);
+        await setLevelData(levelData.getLevelDataBasic());
+        await setOpenQuestTab(true);
       } else {
         _log.log(
             Level.WARNING, "Too many levels to add in background. Skipping.");

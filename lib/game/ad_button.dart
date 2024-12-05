@@ -37,7 +37,6 @@ class AdButton extends StatelessWidget {
             manipulationExhausted) ||
         ((productId == C.REMOVE_3 || productId == C.REMOVE_3) &&
             !remove3Available)) {
-      _log.log(Level.INFO, "Applied - $productId");
       return (null, ('Applied', const Icon(Icons.done_rounded), false));
     }
 
@@ -45,8 +44,6 @@ class AdButton extends StatelessWidget {
     var product = iapController.products
         .firstWhereOrNull((element) => element.id == productId);
     if (product == null) {
-      _log.log(Level.INFO, "Loading (empty products) - $productId");
-
       if (productId == C.REMOVE_3 || productId == C.REMOVE_3_IOS) {
         product = PurchasableProduct(ProductDetails(
             id: productId,
@@ -82,8 +79,6 @@ class AdButton extends StatelessWidget {
         element.id == C.ALL_IN_PACK || element.id == C.ALL_IN_PACK_IOS);
     if (product?.status == ProductStatus.purchased ||
         allInPack?.status == ProductStatus.purchased) {
-      _log.log(Level.INFO,
-          "Purchased (or all in ${allInPack?.status.name}) - $productId");
       return (
         getSuccessfulAction(audioController, levelModel),
         (product?.productName ?? "", const Icon(Icons.touch_app), false)
@@ -93,7 +88,6 @@ class AdButton extends StatelessWidget {
     // ✔︎ Kui pole ostetud ja kui pole reklaami näidata - DISABLED, product name
     if (product?.status != ProductStatus.purchased &&
         !adsController.isAdAvailable()) {
-      _log.log(Level.INFO, "No purchase, no ads - $productId");
       return (
         null,
         (
@@ -107,7 +101,6 @@ class AdButton extends StatelessWidget {
     // ✔︎ Kui pole ostetud ja ON reklaami näidata - ENABLED, Product name ▷
     if (product?.status != ProductStatus.purchased &&
         adsController.isAdAvailable()) {
-      _log.log(Level.INFO, "No purchase, ADS available! - $productId");
       callback() => {
             adsController.showRewardedAd(() {
               getSuccessfulAction(audioController, levelModel)?.call();
@@ -148,13 +141,10 @@ class AdButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final audioController = context.read<AudioController>();
     return Consumer<AdsController>(builder: (context, adsController, _) {
-      _log.log(Level.INFO, "Building AdsController");
       return Consumer<InAppPurchaseController>(
           builder: (context, iapController, _) {
-        _log.log(Level.INFO, "Building InAppPurchaseController");
         return Consumer<LevelModel>(builder: (context, levelModel, _) {
           const minFontSize = 2.0;
-          _log.log(Level.INFO, "Building LevelModel");
           final callbackAndText = getCallbackAndText(
               context,
               iapController,

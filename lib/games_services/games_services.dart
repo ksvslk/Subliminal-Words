@@ -80,31 +80,34 @@ class GamesServicesController {
   }
 
   Future<UserCredential?> _getPlatformCredential() async {
-    if (Platform.isAndroid) {
-      final authCode = await GameAuth.getAuthCode(
-          "549374376791-sh7249jmselsk4duti6jbi9g8b1dgfj4.apps.googleusercontent.com");
-      if (authCode == null) return null;
+    
+    try {
+      if (Platform.isAndroid) {
+          final authCode = await GameAuth.getAuthCode(
+              "549374376791-sh7249jmselsk4duti6jbi9g8b1dgfj4.apps.googleusercontent.com");
+          if (authCode == null) return null;
 
-      return FirebaseAuth.instance.signInWithCredential(
-        PlayGamesAuthProvider.credential(serverAuthCode: authCode),
-      );
+          return FirebaseAuth.instance.signInWithCredential(
+            PlayGamesAuthProvider.credential(serverAuthCode: authCode),
+          );
+        }
+
+        if (Platform.isIOS) {
+          return FirebaseAuth.instance.signInWithCredential(
+            GameCenterAuthProvider.credential(),
+          );
+        }
+    } catch(err) {
+        return null;
     }
-
-    if (Platform.isIOS) {
-      return FirebaseAuth.instance.signInWithCredential(
-        GameCenterAuthProvider.credential(),
-      );
-    }
-
-    return null;
+  
   }
 
   Future<void> _signInAnonymously() async {
     try {
       await FirebaseAuth.instance.signInAnonymously();
-      _log.log(Level.INFO, 'Signed in anonymously as fallback');
     } catch (e) {
-      _log.log(Level.SEVERE, 'Anonymous authentication failed: $e');
+      _log.log(Level.WARNING, 'Anonymous authentication failed: $e');
     }
   }
 
@@ -113,6 +116,8 @@ class GamesServicesController {
     try {
       await gs.GamesServices.signIn().then((onValue) {
         signInWithCredential();
+      }).onError((err, st){
+        _signInAnonymously();
       });
       // The API is unclear so we're checking to be sure. The above call
       // returns a String, not a boolean, and there's no documentation
@@ -205,20 +210,16 @@ class GamesServicesController {
       final savedGamesList = await gs.SaveGame.getSavedGames();
       if (savedGamesList != null && savedGamesList.isNotEmpty) {
         try {
-          _log.log(Level.INFO,
-              'Is user logged in:${await gs.GameAuth.isSignedIn}, ${await gs.GamesServices.isSignedIn}');
           final result = await gs.SaveGame.loadGame(name: saveGameName);
           if (result != null) {
             final Map json = jsonDecode(result);
             final gameData = GameData.fromJson(json);
-            _log.log(Level.INFO, "Player progress: ${gameData.progress}");
-            _log.log(Level.INFO, "Player quest progress: ${gameData.questProgress}");
             return gameData;
           }
-          _log.log(Level.INFO, "Could not load game.");
+          _log.log(Level.WARNING, "Could not load game.");
           return null;
         } catch (e) {
-          _log.severe('Could not load game: $e');
+          _log.log(Level.SEVERE, 'Could not load game: $e');
           return null;
         }
       }
