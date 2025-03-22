@@ -142,6 +142,7 @@ class AdsController extends ChangeNotifier {
   Future<void> showInterstitialAd() async {
     if (_interstitialAd == null) {
       _log.info('Warning, attempt to show interstitial before loaded.');
+      loadInterstitialAd(null);
       return;
     }
     _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
@@ -166,6 +167,7 @@ class AdsController extends ChangeNotifier {
         _log.info('$ad onAdDismissedFullScreenContent.');
         _interstitialAd?.dispose();
         _interstitialAd = null;
+        loadInterstitialAd(null);
       },
     );
     if (Platform.isAndroid) _interstitialAd!.setImmersiveMode(true);

@@ -283,23 +283,13 @@ class LevelModel with ChangeNotifier {
     unlocked = level.unlocked;
     lettersAnimationFadeOutDuration = 1750;
     notifyListeners();
-    if (levelNr >= 19) {
-      loadAds(
-          levelNr + 1); // should execute be always 1 level before showing ads
+    if (levelNr >= 9) {
       showAds(levelNr);
     }
   }
 
-  void loadAds(int levelBeforeShowing) {
-    if (levelBeforeShowing % 5 == 0 &&
-        inAppPurchaseController?.isNoAdsPurchased() == false) {
-      adsController?.loadInterstitialAd(null);
-    }
-  }
-
   void showAds(int levelWhereToShow) {
-    if (levelWhereToShow % 5 == 0 &&
-        inAppPurchaseController?.isNoAdsPurchased() == false) {
+    if (inAppPurchaseController?.isNoAdsPurchased() == false) {
       adsController?.showInterstitialAd();
     }
   }
