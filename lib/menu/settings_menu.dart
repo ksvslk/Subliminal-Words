@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:logging/logging.dart';
 import 'package:operation_hermes/game/info_competition_dialog.dart';
 import 'package:operation_hermes/game/letter_box.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:operation_hermes/menu/credits_dialog.dart';
 import 'package:operation_hermes/menu/licenses_dialog.dart';
+import 'package:operation_hermes/screen/categories_screen.dart';
 import 'package:operation_hermes/settings/settings_controller.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 
-enum MenuItem { achievements, competition, theme, faces, sound, music, about }
+enum MenuItem {
+  levels, // Added
+  achievements,
+  competition,
+  theme,
+  faces,
+  sound,
+  music,
+  about
+}
 
 enum AboutSubMenuItem {
   follow,
@@ -58,107 +67,6 @@ class SettingsMenu extends StatefulWidget {
 }
 
 class _SettingsMenuState extends State<SettingsMenu> {
-  static final _log = Logger('SettingsMenu');
-
-  void _showPromoCode(String promoCode) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.0),
-          ),
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          child: Stack(
-            children: <Widget>[
-              Container(
-                padding: const EdgeInsets.only(
-                  top: 66 + 16,
-                  bottom: 16,
-                  left: 16,
-                  right: 16,
-                ),
-                margin: const EdgeInsets.only(top: 66),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  shape: BoxShape.rectangle,
-                  borderRadius: BorderRadius.circular(17),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 10.0,
-                      offset: Offset(0.0, 10.0),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Text(
-                      "Congratulations!",
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        fontSize:
-                            Theme.of(context).textTheme.titleLarge?.fontSize,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 16.0),
-                    Text(
-                      "You've won a promo code!",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        fontSize:
-                            Theme.of(context).textTheme.bodyLarge?.fontSize,
-                      ),
-                    ),
-                    const SizedBox(height: 24.0),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 8, horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        promoCode,
-                        style: TextStyle(
-                          fontSize:
-                              Theme.of(context).textTheme.bodySmall?.fontSize,
-                          fontWeight: FontWeight.w700,
-                          color:
-                              Theme.of(context).colorScheme.onPrimaryContainer,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Positioned(
-                left: 16,
-                right: 16,
-                child: CircleAvatar(
-                  backgroundColor:
-                      Theme.of(context).colorScheme.primaryContainer,
-                  radius: 66,
-                  child: Icon(
-                    Icons.emoji_events,
-                    size: 60,
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext mainContext) {
     final settings = mainContext.read<SettingsController>();
@@ -181,6 +89,15 @@ class _SettingsMenuState extends State<SettingsMenu> {
       },
       menuChildren: MenuItem.values.map((item) {
         switch (item) {
+          case MenuItem.levels: // Added case
+            return MenuItemButton(
+                onPressed: () {
+                  Navigator.of(mainContext).push(MaterialPageRoute(
+                    builder: (context) => CategoriesScreen(),
+                  ));
+                },
+                leadingIcon: const Icon(Icons.apps_outlined),
+                child: Text(item.name));
           case MenuItem.achievements:
             return MenuItemButton(
                 onPressed: () {
@@ -309,3 +226,4 @@ class _SettingsMenuState extends State<SettingsMenu> {
     );
   }
 }
+

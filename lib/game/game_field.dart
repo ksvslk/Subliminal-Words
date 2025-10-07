@@ -11,7 +11,6 @@ import 'package:operation_hermes/game/letter_box_state.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/game/won_competition_dialog.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
-import 'package:operation_hermes/menu/story_pages.dart';
 import 'package:provider/provider.dart';
 
 class GameField extends StatelessWidget {
@@ -31,15 +30,6 @@ class GameField extends StatelessWidget {
           showWonCompetitionDialog(
               context, levelModel.competitionData!.promoCode);
           levelModel.competitionData = null;
-        }
-        if (levelModel.openQuestTab) {
-          levelModel.openQuestTab = false;
-          showDialog(
-            context: context,
-            builder: (context) {
-              return const StoryPages();
-            },
-          );
         }
       },
     );

@@ -14,6 +14,7 @@ import 'package:operation_hermes/game/game_field_wrapper.dart';
 import 'package:operation_hermes/game/model/level_model.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart';
+import 'package:operation_hermes/level/firebase_service.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
 import 'package:operation_hermes/level/persistence/local_storage_level_persistence.dart';
 import 'package:operation_hermes/notification/notification_controller.dart';
@@ -63,7 +64,7 @@ Future<void> main() async {
     // 1. Debug provider
     // 2. Safety Net provider
     // 3. Play Integrity provider
-    androidProvider: AndroidProvider.playIntegrity,
+    androidProvider: AndroidProvider.debug,
     // Default provider for iOS/macOS is the Device Check provider. You can use the "AppleProvider" enum to choose
     // your preferred provider. Choose from:
     // 1. Debug provider
@@ -71,6 +72,7 @@ Future<void> main() async {
     // 3. App Attest provider
     // 4. App Attest provider with fallback to Device Check provider (App Attest provider is only available on iOS 14.0+, macOS 14.0+)
     appleProvider: AppleProvider.appAttestWithDeviceCheckFallback,
+    providerAndroid: AndroidDebugProvider(debugToken: "745BF683-19DE-422F-8CF7-3053081175D2")
   );
 
   _log.info('Going full screen');
@@ -148,6 +150,9 @@ class MyApp extends StatelessWidget {
     return AppLifecycleObserver(
         child: MultiProvider(
       providers: [
+        Provider<FirebaseService>(
+          create: (_) => FirebaseService(),
+        ),
         Provider<SettingsController>(
           lazy: false,
           create: (context) => SettingsController(

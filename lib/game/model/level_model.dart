@@ -7,7 +7,6 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/ads/ads_controller.dart';
@@ -21,6 +20,7 @@ import 'package:operation_hermes/game/model/story_model.dart';
 import 'package:operation_hermes/games_services/games_services.dart';
 import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart';
 import 'package:operation_hermes/level/persistence/level_persistence.dart';
+import 'package:operation_hermes/model/level.dart' as LsLevel;
 import 'package:path_provider/path_provider.dart';
 
 class LevelModel with ChangeNotifier {
@@ -241,6 +241,10 @@ class LevelModel with ChangeNotifier {
     }
   }
 
+  Future<void> loadLevelFromSelection(LsLevel.Level selectedLevel) async {
+    await loadLevel(selectedLevel.nr, fromLevelSelect: true);
+  }
+
   Future<void> loadLevel(int nr, {bool fromLevelSelect = false}) async {
     persistence.getLevelNr(nr).then((currentLevel) {
       final level = LevelData.from(currentLevel);
@@ -260,7 +264,6 @@ class LevelModel with ChangeNotifier {
   Future<void> assignInitialLevelValues(
       LevelData level, (String, String)? previousStory,
       {bool fromLevelSelect = false}) async {
-    // LevelModel
     levelNr = level.nr;
     tooltipStart = level.tooltipStart;
     tooltipEnd = level.tooltipEnd;
@@ -271,10 +274,8 @@ class LevelModel with ChangeNotifier {
     storyModel.currentWordAndStory = (level.word, level.story);
     if (fromLevelSelect) storyModel.clearAndAddStory();
 
-    // PictureModel
     await pictureModel.initializePicture(level);
 
-    // FieldModel
     fieldModel.initializeLevel(level);
 
     final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
@@ -382,7 +383,7 @@ class LevelModel with ChangeNotifier {
               level['nr'],
               level['word'].toString().toUpperCase(),
               level['story'],
-              picDownloadUrl, //picturePath,
+              picDownloadUrl,
               svgPath,
               level['tooltipStart'],
               level['tooltipEnd'],
@@ -420,7 +421,6 @@ class LevelModel with ChangeNotifier {
     notifyListeners();
   }
 
-  // Actions
   void remove3Action() {
     fieldModel.remove3ArbitaryLetters();
     final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
@@ -511,7 +511,6 @@ class LevelModel with ChangeNotifier {
   }
 
   Future<void> _save() async {
-    // Local save
     final level = getLevelData();
     if (level.levelCompleted) {
       level.disabledLettersCount = 0;
@@ -521,7 +520,6 @@ class LevelModel with ChangeNotifier {
     persistence.setLevelData(persistentData);
     persistence.setLatestLevel(levelNr);
 
-    // Possible cloud save
     final localMaxLevelNr =
         await persistence.getMaxLeveNrUnlockedInRange(1, 200);
     final localMaxLevelQuestNr = await persistence.getMaxLevelNrUnlocked();
@@ -552,3 +550,4 @@ class LevelModel with ChangeNotifier {
     _lifecycleNotifier?.removeListener(_handleAppLifecycle);
   }
 }
+

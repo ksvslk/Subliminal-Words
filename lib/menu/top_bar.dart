@@ -5,8 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:operation_hermes/C.dart';
 import 'package:operation_hermes/menu/in_app_purchase_menu.dart';
 import 'package:operation_hermes/menu/settings_menu.dart';
-import 'package:operation_hermes/menu/story_pages.dart';
-import 'package:operation_hermes/menu/story_tablo.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -115,12 +113,12 @@ class TopBar extends StatelessWidget {
               ),
               padding: const EdgeInsets.all(8), // Padding inside the container
               child: GestureDetector(
-                child: const StoryTablo(),
+                child: const Text("Hmm.."),
                 onTap: () {
                   showDialog(
                     context: context,
                     builder: (context) {
-                      return const StoryPages();
+                      return const Text("tere");
                     },
                   );
                 },
