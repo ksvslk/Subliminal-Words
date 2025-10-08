@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:operation_hermes/C.dart';
+import 'package:operation_hermes/config/C.dart';
 import 'package:operation_hermes/menu/in_app_purchase_menu.dart';
 import 'package:operation_hermes/menu/settings_menu.dart';
 import 'package:share_plus/share_plus.dart';

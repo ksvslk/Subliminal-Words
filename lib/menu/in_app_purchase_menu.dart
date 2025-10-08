@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:operation_hermes/C.dart';
-import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart';
-import 'package:operation_hermes/in_app_purchase/purchases/purchasable_product.dart';
+import 'package:operation_hermes/config/C.dart';
+import 'package:operation_hermes/controller/in_app_purchase_controller.dart';
+import 'package:operation_hermes/data/purchasable_product.dart';
 import 'package:provider/provider.dart';
 
 class InAppPurchaseMenuDialog extends StatelessWidget {

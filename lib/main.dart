@@ -8,23 +8,23 @@ import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:logging/logging.dart';
-import 'package:operation_hermes/ads/ads_controller.dart';
-import 'package:operation_hermes/competition/competition_controller.dart';
-import 'package:operation_hermes/game/game_field_wrapper.dart';
-import 'package:operation_hermes/game/model/level_model.dart';
-import 'package:operation_hermes/games_services/games_services.dart';
-import 'package:operation_hermes/in_app_purchase/in_app_purchase_controller.dart';
-import 'package:operation_hermes/level/firebase_service.dart';
-import 'package:operation_hermes/level/persistence/level_persistence.dart';
-import 'package:operation_hermes/level/persistence/local_storage_level_persistence.dart';
-import 'package:operation_hermes/notification/notification_controller.dart';
+import 'package:operation_hermes/controller/ads_controller.dart';
+import 'package:operation_hermes/controller/competition_controller.dart';
+import 'package:operation_hermes/ui/screen/game_field_screen.dart';
+import 'package:operation_hermes/change_notifier/level_model.dart';
+import 'package:operation_hermes/controller/games_services.dart';
+import 'package:operation_hermes/controller/in_app_purchase_controller.dart';
+import 'package:operation_hermes/controller/firebase_service.dart';
+import 'package:operation_hermes/persistence/level_persistence.dart';
+import 'package:operation_hermes/persistence/local_storage_level_persistence.dart';
+import 'package:operation_hermes/controller/notification_controller.dart';
 import 'dart:developer' as dev;
-import 'settings/persistence/settings_persistence.dart';
-import 'settings/persistence/local_storage_settings_persistence.dart';
-import 'app_lifecycle/app_lifecycle.dart';
+import 'persistence/settings_persistence.dart';
+import 'persistence/local_storage_settings_persistence.dart';
+import 'app_lifecycle.dart';
 import 'package:provider/provider.dart';
-import 'settings/settings_controller.dart';
-import 'audio/audio_controller.dart';
+import 'controller/settings_controller.dart';
+import 'controller/audio_controller.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 final LocalStorageLevelPersistence globalLevelPersistence = LocalStorageLevelPersistence();
@@ -35,7 +35,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // make sure you call `initializeApp` before using other Firebase services.
   await Firebase.initializeApp();
   //globalLevelPersistence.tryAddingNotificationLevel(message);
-  globalLevelPersistence.setOpenQuestTab(true);
 }
 
 Future<void> main() async {
@@ -241,7 +240,7 @@ class MyApp extends StatelessWidget {
                     ),
                     fontFamily: 'Gabarito'),
                 home: const Scaffold(
-                  body: GameFieldWrapper(),
+                  body: GameFieldScreen(),
                 ));
           },
         );

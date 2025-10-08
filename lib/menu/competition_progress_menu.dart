@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:operation_hermes/game/letter_box.dart'; 
+import 'package:operation_hermes/ui/letter_box.dart'; 
 
 class CompetitionProgressMenu extends StatelessWidget {
   final int progress;
