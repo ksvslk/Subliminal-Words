@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Add this import for ImageInfo
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:operation_hermes/level/firebase_service.dart'; // Ensure this path is correct
+import 'package:operation_hermes/level/firebase_service.dart';
 
 class FirebaseImage extends StatefulWidget {
   final String storagePath;
   final BoxFit fit;
+  final Alignment alignment;
   final VoidCallback? onLoaded;
+  final ValueChanged<ImageInfo>? onImageInfoLoaded; // ADD THIS CALLBACK
 
   const FirebaseImage({
     super.key,
     required this.storagePath,
     this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
     this.onLoaded,
+    this.onImageInfoLoaded, // ADD THIS TO CONSTRUCTOR
   });
 
   @override
@@ -29,6 +34,7 @@ class _FirebaseImageState extends State<FirebaseImage> {
     _loadUrl();
   }
 
+  // ... (loadUrl and didUpdateWidget methods remain the same) ...
   void _loadUrl() {
     final service = Provider.of<FirebaseService>(context, listen: false);
     _urlFuture = service.getDownloadUrl(widget.storagePath)
@@ -48,6 +54,7 @@ class _FirebaseImageState extends State<FirebaseImage> {
     }
   }
 
+
   void _notifyOnce() {
     if (!_isLoadNotified) {
       _isLoadNotified = true;
@@ -59,6 +66,7 @@ class _FirebaseImageState extends State<FirebaseImage> {
 
   @override
   Widget build(BuildContext context) {
+    // ... (build method logic up to Image.network remains the same) ...
     if (widget.storagePath.isEmpty) {
       _notifyOnce();
       return const Center(child: Icon(Icons.image_not_supported));
@@ -84,24 +92,20 @@ class _FirebaseImageState extends State<FirebaseImage> {
         }
 
         final url = snapshot.data!;
-        return Image.network(
+        
+        // ADD THIS: We need an Image widget to get the ImageInfo
+        final imageWidget = Image.network(
           url,
           fit: widget.fit,
-          // We no longer send the signal from here. This builder just
-          // handles showing the placeholder vs. the final image widget.
+          alignment: widget.alignment,
           loadingBuilder: (context, child, loadingProgress) {
             if (loadingProgress == null) return child;
             return placeholder;
           },
-          // THIS IS THE KEY FIX:
-          // The frameBuilder is called when Flutter is ready to draw the image.
-          // This is the perfect time to send the "loaded" signal.
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-            // If the frame is ready, notify the parent.
             if (frame != null) {
               _notifyOnce();
             }
-            // Return the image widget (or an empty container if not yet ready).
             return child;
           },
           errorBuilder: (context, error, stackTrace) {
@@ -109,6 +113,15 @@ class _FirebaseImageState extends State<FirebaseImage> {
             return const Center(child: Icon(Icons.error));
           },
         );
+
+        // ADD THIS: Logic to listen for when the image is loaded to get its info
+        imageWidget.image.resolve(const ImageConfiguration()).addListener(
+          ImageStreamListener((imageInfo, synchronousCall) {
+            widget.onImageInfoLoaded?.call(imageInfo);
+          }),
+        );
+
+        return imageWidget;
       },
     );
   }
