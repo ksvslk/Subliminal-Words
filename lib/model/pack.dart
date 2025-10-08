@@ -2,6 +2,8 @@
 // This model is tailored for the player's view, containing essential
 // display information like name, description, and thumbnail.
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Pack {
   final String id;
   final String name;
@@ -9,6 +11,8 @@ class Pack {
   final String thumbnailUrl;
   final String categoryId;
   final int order;
+  final DateTime lastUpdated;
+  final int totalLevels;
 
   Pack({
     required this.id,
@@ -17,6 +21,8 @@ class Pack {
     required this.thumbnailUrl,
     required this.categoryId,
     required this.order,
+    required this.lastUpdated,
+    required this.totalLevels
   });
 
   // Factory constructor to parse data from a database (like Firestore).
@@ -27,9 +33,11 @@ class Pack {
       id: id,
       name: data['name'] ?? 'Unnamed Pack',
       description: data['description'] ?? '',
-      thumbnailUrl: data['thumbnailPath'] ?? '',
+      thumbnailUrl: data['imagePath'] ?? '',
       categoryId: data['categoryId'] ?? '',
       order: data['order'] ?? 0,
+      lastUpdated: (data['modifiedAt'] as Timestamp).toDate(),
+      totalLevels: data['totalLevels'] ?? 100
     );
   }
 }

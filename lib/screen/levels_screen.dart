@@ -5,7 +5,6 @@ import 'package:operation_hermes/model/level.dart';
 import 'package:operation_hermes/model/pack.dart';
 import 'package:provider/provider.dart';
 
-
 class LevelsScreen extends StatefulWidget {
   final Pack pack;
   const LevelsScreen({super.key, required this.pack});
@@ -20,7 +19,8 @@ class _LevelsScreenState extends State<LevelsScreen> {
   @override
   void initState() {
     super.initState();
-    final firebaseService = Provider.of<FirebaseService>(context, listen: false);
+    final firebaseService =
+        Provider.of<FirebaseService>(context, listen: false);
     _levelsFuture = firebaseService.getLevels(widget.pack.id);
   }
 
@@ -31,7 +31,6 @@ class _LevelsScreenState extends State<LevelsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.pack.name),
-        backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
       ),
       body: FutureBuilder<List<Level>>(
         future: _levelsFuture,
@@ -61,10 +60,14 @@ class _LevelsScreenState extends State<LevelsScreen> {
             itemBuilder: (context, index) {
               final level = levels[index];
               return Card(
-                elevation: 4,
+                elevation: 2, // Slightly increased elevation
                 color: Theme.of(context).colorScheme.tertiaryContainer,
+                clipBehavior: Clip.antiAlias,
                 child: InkWell(
-                  onTap: () {
+                  onTap: () async {
+                    await Future.delayed(const Duration(milliseconds: 100));
+                    if (!context.mounted) return;
+
                     levelModel.loadLevelFromSelection(level);
                     Navigator.of(context).popUntil((route) => route.isFirst);
                   },
@@ -86,4 +89,3 @@ class _LevelsScreenState extends State<LevelsScreen> {
     );
   }
 }
-

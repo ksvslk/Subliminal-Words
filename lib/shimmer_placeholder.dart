@@ -1,0 +1,36 @@
+import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
+
+class ShimmerLoadingPlaceholder extends StatelessWidget {
+  const ShimmerLoadingPlaceholder({
+    super.key,
+    required this.width,
+    required this.height,
+    this.borderRadius = 12.0,
+  });
+
+  final double width;
+  final double height;
+  final double borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    // Access the color scheme from the theme
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Shimmer.fromColors(
+      // Use theme-aware colors
+      baseColor: colorScheme.surfaceContainer,
+      highlightColor: colorScheme.surface,
+      direction: ShimmerDirection.btt,
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: Colors.white, // This color is irrelevant, it's just for shape
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+      ),
+    );
+  }
+}

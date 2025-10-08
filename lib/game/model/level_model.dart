@@ -510,6 +510,34 @@ class LevelModel with ChangeNotifier {
         unlocked);
   }
 
+   int getUnlockedLevelsCountForCategory(String categoryId) {
+    // Example logic:
+    // 1. Get all packs that belong to this categoryId.
+    // 2. For each pack, get its unlocked level count.
+    // 3. Return the sum.
+    int count = 123;
+    // for (var pack in allPacks) {
+    //   if (pack.categoryId == categoryId) {
+    //     count += getUnlockedLevelsCount(pack.id);
+    //   }
+    // }
+    return count;
+  }
+
+  int getUnlockedLevelsCountForPack(String packId) {
+    // Example logic:
+    // 1. Get all packs that belong to this categoryId.
+    // 2. For each pack, get its unlocked level count.
+    // 3. Return the sum.
+    int count = 78;
+    // for (var pack in allPacks) {
+    //   if (pack.categoryId == categoryId) {
+    //     count += getUnlockedLevelsCount(pack.id);
+    //   }
+    // }
+    return count;
+  }
+
   Future<void> _save() async {
     final level = getLevelData();
     if (level.levelCompleted) {

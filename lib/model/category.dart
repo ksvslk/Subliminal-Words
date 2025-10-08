@@ -7,12 +7,14 @@ class Category {
   final String name;
   final String thumbnailUrl;
   final int order;
+  final int totalLevels;
 
   Category({
     required this.id,
     required this.name,
     required this.thumbnailUrl,
     required this.order,
+    required this.totalLevels,
   });
 
   // This factory constructor creates a Category instance from a map.
@@ -24,6 +26,7 @@ class Category {
       name: data['name'] ?? 'Unnamed Category',
       thumbnailUrl: data['thumbnailPath'] ?? '',
       order: data['order'] ?? 0,
+      totalLevels: data['totalLevels'] ?? 250
     );
   }
 }
