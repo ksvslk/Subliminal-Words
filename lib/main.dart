@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_api_availability/google_api_availability.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +19,7 @@ import 'package:operation_hermes/controller/games_services.dart';
 import 'package:operation_hermes/controller/in_app_purchase_controller.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/persistence/level_persistence.dart';
+import 'package:operation_hermes/persistence/progress_persistence.dart';
 import 'package:operation_hermes/persistence/local_storage_level_persistence.dart';
 import 'package:operation_hermes/controller/notification_controller.dart';
 import 'dart:developer' as dev;
@@ -56,65 +60,72 @@ Future<void> main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize Firebase first.
   await Firebase.initializeApp();
-  await FirebaseAppCheck.instance.activate(
-    // Default provider for Android is the Play Integrity provider. You can use the "AndroidProvider" enum to choose
-    // your preferred provider. Choose from:
-    // 1. Debug provider
-    // 2. Safety Net provider
-    // 3. Play Integrity provider
-    androidProvider: AndroidProvider.debug,
-    // Default provider for iOS/macOS is the Device Check provider. You can use the "AppleProvider" enum to choose
-    // your preferred provider. Choose from:
-    // 1. Debug provider
-    // 2. Device Check provider
-    // 3. App Attest provider
-    // 4. App Attest provider with fallback to Device Check provider (App Attest provider is only available on iOS 14.0+, macOS 14.0+)
-    appleProvider: AppleProvider.appAttestWithDeviceCheckFallback,
-    providerAndroid: AndroidDebugProvider(debugToken: "745BF683-19DE-422F-8CF7-3053081175D2")
-  );
+
+  // Check for an active internet connection.
+  final connectivityResult = await (Connectivity().checkConnectivity());
+  final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+      connectivityResult.contains(ConnectivityResult.wifi);
+
+  // IMPORTANT: Only activate App Check if the device is online.
+  // Attempting to activate App Check offline will block the app's startup.
+  if (isOnline) {
+    try {
+      _log.info('Device is online, activating Firebase App Check.');
+      await FirebaseAppCheck.instance.activate(
+        androidProvider: AndroidProvider.debug,
+        appleProvider: AppleProvider.appAttestWithDeviceCheckFallback,
+      );
+    } catch (e) {
+      _log.severe('Firebase App Check activation failed.', e);
+    }
+  } else {
+    _log.warning(
+        'Device is offline. Skipping Firebase App Check activation to allow offline startup.');
+    // CRITICAL: Explicitly disable Firestore network to prevent the SDK
+    // from blocking the main thread with connection retries.
+    FirebaseFirestore.instance.disableNetwork();
+  }
 
   _log.info('Going full screen');
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
   AdsController? adsController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
     /// Prepare the google_mobile_ads plugin so that the first ad loads
     /// faster. This can be done later or with a delay if startup
     /// experience suffers.
     adsController = AdsController(MobileAds.instance);
-    adsController.requestTheLatestConsentInformation();
   }
-
   GamesServicesController? gamesServicesController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
-    gamesServicesController = GamesServicesController()
-      // Attempt to log the player in.
-      ..initialize();
+    gamesServicesController = GamesServicesController();
   }
-
   InAppPurchaseController? inAppPurchaseController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
-    inAppPurchaseController = InAppPurchaseController(InAppPurchase.instance)
-      // Subscribing to [InAppPurchase.instance.purchaseStream] as soon
-      // as possible in order not to miss any updates.
-      ..subscribe();
+    inAppPurchaseController = InAppPurchaseController(InAppPurchase.instance);
   }
-
   CompetitionController? competitionController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
     competitionController = CompetitionController();
   }
+  FirebaseService firebaseService;
+  firebaseService = FirebaseService();
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   runApp(
     MyApp(
+        progressPersistence: ProgressPersistence(),
         settingsPersistence: LocalStorageSettingsPersistence(),
         levelPersistence: globalLevelPersistence,
         adsController: adsController,
         inAppPurchaseController: inAppPurchaseController,
         gamesServicesController: gamesServicesController,
-        competitionController: competitionController),
+        competitionController: competitionController,
+        firebaseService: firebaseService,
+        isOnline: isOnline),
   );
 }
 
@@ -129,28 +140,37 @@ Logger _log = Logger('main.dart');
 
 class MyApp extends StatelessWidget {
   final SettingsPersistence settingsPersistence;
+  final ProgressPersistence progressPersistence;
   final LevelPersistence levelPersistence;
   final AdsController? adsController;
   final InAppPurchaseController? inAppPurchaseController;
   final GamesServicesController? gamesServicesController;
   final CompetitionController? competitionController;
+  final FirebaseService firebaseService;
+  final bool isOnline;
 
   const MyApp(
       {super.key,
       required this.settingsPersistence,
+      required this.progressPersistence,
       required this.levelPersistence,
       required this.adsController,
       required this.inAppPurchaseController,
       required this.gamesServicesController,
-      required this.competitionController});
+      required this.competitionController,
+      required this.firebaseService,
+      required this.isOnline});
 
   @override
   Widget build(BuildContext context) {
     return AppLifecycleObserver(
         child: MultiProvider(
       providers: [
+        Provider<ProgressPersistence>.value(
+          value: progressPersistence,
+        ),
         Provider<FirebaseService>(
-          create: (_) => FirebaseService(),
+          create: (_) => firebaseService,
         ),
         Provider<SettingsController>(
           lazy: false,
@@ -172,8 +192,11 @@ class MyApp extends StatelessWidget {
               gamesServicesController: gamesServicesController,
               persistence: levelPersistence,
               inAppPurchaseController: inAppPurchaseController,
-              adsController: adsController)
-            ..initialize(),
+              adsController: adsController, 
+              progressPersistence: context.read<ProgressPersistence>(),
+              settingsPersistence: context.read<SettingsController>().persistence,
+              firebaseService: firebaseService,
+              isOnline: isOnline, audioController: null),
           update: (BuildContext context,
               ValueNotifier<AppLifecycleState> lifecycleNotifier,
               LevelModel? levelModel) {

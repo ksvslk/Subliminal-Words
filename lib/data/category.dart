@@ -20,14 +20,13 @@ class Category {
   // This factory constructor creates a Category instance from a map.
   // In a real app, you would fetch only the 'enabled' categories
   // from your backend to display in the client app.
-  factory Category.fromMap(String id, Map<String, dynamic> data) {
+  factory Category.fromMap(String id, Map<String, dynamic> data, {int? totalLevels}) {
     return Category(
       id: id,
       name: data['name'] ?? 'Unnamed Category',
       thumbnailUrl: data['thumbnailPath'] ?? '',
       order: data['order'] ?? 0,
-      totalLevels: data['totalLevels'] ?? 250
+      totalLevels: totalLevels ?? data['totalLevels'] ?? 0
     );
   }
 }
-

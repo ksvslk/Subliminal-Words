@@ -131,31 +131,33 @@ class InAppPurchaseController extends ChangeNotifier {
   */
 
   Future<void> _loadPurchases() async {
-    if (!await inAppPurchaseInstance.isAvailable()) {
-      _reportError('InAppPurchase.instance not available');
-      //_test_unlock_purchases();
-      return;
+    // It's crucial to wrap this in a try-catch block to handle cases where
+    // the device is offline. Without this, the app can hang on startup.
+    try {
+      if (!await inAppPurchaseInstance.isAvailable()) {
+        _reportError('InAppPurchase.instance not available');
+        return;
+      }
+
+      final ids = <String>{
+        Platform.isAndroid ? C.ALL_IN_PACK : C.ALL_IN_PACK_IOS,
+        Platform.isAndroid ? C.HIGHLIGHT : C.HIGHLIGHT_IOS,
+        Platform.isAndroid ? C.MANIPULATE : C.MANIPULATE_IOS,
+        Platform.isAndroid ? C.REMOVE_3 : C.REMOVE_3_IOS,
+        Platform.isAndroid ? C.NO_AD_BREAKS : C.NO_AD_BREAKS_IOS,
+      };
+
+      final response = await inAppPurchaseInstance.queryProductDetails(ids);
+      for (var element in response.notFoundIDs) {
+        debugPrint('Purchase $element not found');
+      }
+      products =
+          response.productDetails.map((e) => PurchasableProduct(e)).toList();
+      _log.info('Loaded products:');
+    } catch (e) {
+      _log.severe('Failed to load IAP products (device might be offline).', e);
     }
 
-    final ids = <String>{
-      Platform.isAndroid ? C.ALL_IN_PACK : C.ALL_IN_PACK_IOS,
-      Platform.isAndroid ? C.HIGHLIGHT : C.HIGHLIGHT_IOS,
-      Platform.isAndroid ? C.MANIPULATE : C.MANIPULATE_IOS,
-      Platform.isAndroid ? C.REMOVE_3 : C.REMOVE_3_IOS,
-      Platform.isAndroid ? C.NO_AD_BREAKS : C.NO_AD_BREAKS_IOS,
-    };
-
-    final response = await inAppPurchaseInstance.queryProductDetails(ids);
-    for (var element in response.notFoundIDs) {
-      debugPrint('Purchase $element not found');
-    }
-    products =
-        response.productDetails.map((e) => PurchasableProduct(e)).toList();
-    _log.info('Loaded products:');
-    for (var element in products) {
-      _log.info('${element.id} - ${element.status.name}');
-    }
-    restorePurchases();
     notifyListeners();
   }
 

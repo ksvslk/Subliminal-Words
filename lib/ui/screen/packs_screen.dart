@@ -34,17 +34,20 @@ class _PacksScreenState extends State<PacksScreen> {
       body: FutureBuilder<List<Pack>>(
         future: _packsFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
           if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
           }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+
+          // While waiting for data, show shimmer placeholders.
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final packs = snapshot.data;
+          if (packs == null || packs.isEmpty) {
             return const Center(
                 child: Text('No packs found in this category.'));
           }
-          final packs = snapshot.data!;
           return ListView.builder(
             padding: const EdgeInsets.all(16.0),
             itemCount: packs.length,
@@ -60,69 +63,32 @@ class _PacksScreenState extends State<PacksScreen> {
 }
 
 class _PackListItem extends StatefulWidget {
-  const _PackListItem({required this.pack});
-  final Pack pack;
+  const _PackListItem({this.pack});
+  final Pack? pack;
   @override
   State<_PackListItem> createState() => _PackListItemState();
 }
 
 class _PackListItemState extends State<_PackListItem> {
-  bool _isLoaded = false;
 
   @override
   Widget build(BuildContext context) {
+    // If pack is null, this widget is being used as a pure placeholder.
+    final isPlaceholder = widget.pack == null;
     final colorScheme = Theme.of(context).colorScheme;
     final levelModel = context.watch<LevelModel>();
 
-    final int completedLevels =
-        levelModel.getUnlockedLevelsCountForPack(widget.pack.id);
-    final int totalLevels = widget.pack.totalLevels;
-
     const double itemHeight = 100.0;
 
-    final formattedDate = DateFormat.yMMMd().format(widget.pack.lastUpdated);
+    final formattedDate = isPlaceholder
+        ? ''
+        : DateFormat.yMMMd().format(widget.pack!.lastUpdated);
     final updateText = 'Last update $formattedDate';
-    
+
     // UPDATED: Using a cleaner theme color for subtitles
     final secondaryTextStyle = TextStyle(
         color: colorScheme.onSurfaceVariant,
         fontSize: 12);
-
-    final double progress =
-        (totalLevels > 0) ? completedLevels / totalLevels : 0.0;
-
-    final progressIndicator = SizedBox(
-      width: 44,
-      height: 44,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CircularProgressIndicator(
-            value: progress,
-            strokeWidth: 3.0,
-            backgroundColor: colorScheme.primary.withOpacity(0.2),
-            valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
-          ),
-          Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              color: colorScheme.secondaryContainer.withOpacity(0.7),
-              shape: BoxShape.circle,
-            ),
-          ),
-          Text(
-            '${(progress * 100).toInt()}%',
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
-              // UPDATED: Using correct theme color for text on this container
-              color: colorScheme.onSecondaryContainer,
-            ),
-          ),
-        ],
-      ),
-    );
 
     return Container(
       height: itemHeight,
@@ -194,19 +160,15 @@ class _PackListItemState extends State<_PackListItem> {
                   ],
                 ),
               ),
-            ),
-            AnimatedOpacity(
-              opacity: _isLoaded ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeIn,
-              child: InkWell(
+            ), // Removed AnimatedOpacity wrapper
+            InkWell(
                 onTap: () async {
                   await Future.delayed(const Duration(milliseconds: 50));
                   if (!context.mounted) return;
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => LevelsScreen(pack: widget.pack)),
+                        builder: (_) => LevelsScreen(pack: widget.pack!)),
                   );
                 },
                 child: Container(
@@ -219,11 +181,7 @@ class _PackListItemState extends State<_PackListItem> {
                         child: SizedBox(
                           width: 60,
                           height: 60,
-                          child: FirebaseImage(
-                            storagePath: widget.pack.thumbnailUrl,
-                            onLoaded: () =>
-                                setState(() => _isLoaded = true),
-                          ),
+                          child: FirebaseImage(storagePath: widget.pack?.thumbnailUrl ?? ''),
                         ),
                       ),
                       const SizedBox(width: 16.0),
@@ -231,8 +189,8 @@ class _PackListItemState extends State<_PackListItem> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(widget.pack.name,
+                          children: [ 
+                            Text(widget.pack?.name ?? '',
                                 style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color:
@@ -245,7 +203,7 @@ class _PackListItemState extends State<_PackListItem> {
                             ),
                             const SizedBox(height: 4.0),
                             Text(
-                              widget.pack.description,
+                              widget.pack?.description ?? '',
                               style: secondaryTextStyle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -254,15 +212,87 @@ class _PackListItemState extends State<_PackListItem> {
                         ),
                       ),
                       const SizedBox(width: 16.0),
-                      if (progress > 0) progressIndicator,
-                    ],
+                      if (widget.pack != null)
+                        _PackProgressIndicator(pack: widget.pack!)
+                      else // Placeholder for progress indicator
+                        const SizedBox(width: 44, height: 44),
+                    ], // Removed AnimatedOpacity wrapper
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PackProgressIndicator extends StatefulWidget {
+  final Pack pack;
+
+  const _PackProgressIndicator({required this.pack});
+
+  @override
+  State<_PackProgressIndicator> createState() => _PackProgressIndicatorState();
+}
+
+class _PackProgressIndicatorState extends State<_PackProgressIndicator> {
+  late Future<int> _completedLevelsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    final levelModel = context.read<LevelModel>();
+    _completedLevelsFuture =
+        levelModel.getUnlockedLevelsCountForPack(widget.pack.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return FutureBuilder<int>(
+      future: _completedLevelsFuture,
+      builder: (context, snapshot) {
+        final completedLevels = snapshot.data ?? 0;
+        final totalLevels = widget.pack.totalLevels;
+        final double progress =
+            (totalLevels > 0) ? completedLevels / totalLevels : 0.0;
+
+        if (progress <= 0) return const SizedBox.shrink();
+
+        return SizedBox(
+          width: 44,
+          height: 44,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CircularProgressIndicator(
+                value: progress,
+                strokeWidth: 3.0,
+                backgroundColor: colorScheme.primary.withOpacity(0.2),
+                valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+              ),
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: colorScheme.secondaryContainer.withOpacity(0.7),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              Text(
+                '${(progress * 100).toInt()}%',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSecondaryContainer,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

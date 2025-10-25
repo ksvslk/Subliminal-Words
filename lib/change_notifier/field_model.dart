@@ -5,65 +5,82 @@ import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/data/letter_box_data.dart';
 import 'package:operation_hermes/data/letter_box_state.dart';
-import 'package:operation_hermes/data/level_data.dart';
 
 class FieldModel with ChangeNotifier {
   static final _log = Logger('FieldModel');
 
   List<LetterBoxData> solution = [];
   List<LetterBoxData> field = [];
-  int disabledLettersCount = 0;
   String word = "";
 
-  FieldModel({required LevelData level}) {
-    initializeLevel(level);
+  FieldModel({required String levelWord}) {
+    initializeLevel(levelWord);
   }
 
-  void initializeLevel(LevelData level)
-  {
+  void initializeLevel(String levelWord) {
+    if (levelWord.isEmpty) return;
+
     solution = List.generate(
-        level.word.length, (index) => LetterBoxData.solutionSlot(),
+        levelWord.length, (index) => LetterBoxData.solutionSlot(),
         growable: false);
-    field = getFieldLetters(
-        solutionPick: level.word,
-        disabledLettersCount: level.disabledLettersCount);
-    disabledLettersCount = level.disabledLettersCount;
-    word = level.word;
-    notifyListeners();
+    field = getFieldLetters(solutionPick: levelWord, disabledLettersCount: 0);
+    // After creating the field, assign each letter its original index.
+    for (var i = 0; i < field.length; i++) {
+      field[i].originalFieldIndex = i;
+    }
+    word = levelWord.toUpperCase();
   }
 
-  void putLetter(int index, LetterBoxData data,
-      [LetterBoxState defaultEndState = LetterBoxState.solutionPick]) {
-    _putLetterPrecheck(data);
+  void putLetter(int fieldIndex, [LetterBoxState targetState = LetterBoxState.solutionPick]) {
+    _putLetterPrecheck(field[fieldIndex]);
     final preAllLetters = field.map((e) => e.letter).toList() +
         solution.map((e) => e.letter).toList();
     preAllLetters.sort();
 
     // add letter
-    var indexOfFreeSlot = solution
+    var indexOfFreeSolutionSlot = solution // This is correct
         .indexWhere((element) => element.state == LetterBoxState.solutionSlot);
-    if (indexOfFreeSlot != -1) {
-      solution[indexOfFreeSlot].letter = data.letter;
-      solution[indexOfFreeSlot].state = defaultEndState;
-      data.letter = '';
-      data.state = LetterBoxState.fieldSlot;
+    if (indexOfFreeSolutionSlot != -1) {
+      solution[indexOfFreeSolutionSlot].letter = field[fieldIndex].letter;
+      solution[indexOfFreeSolutionSlot].originalFieldIndex = field[fieldIndex].originalFieldIndex;
+      solution[indexOfFreeSolutionSlot].state = targetState; // Use the new targetState parameter
+      field[fieldIndex].letter = '';
+      field[fieldIndex].state = LetterBoxState.fieldSlot;
+      field[fieldIndex].originalFieldIndex = null; // Clear originalFieldIndex for the now empty field slot
+      notifyListeners(); // Notify FieldModel listeners that its state has changed
     }
     _postCheck(preAllLetters);
     _invariantCheck();
   }
 
-  void removeLetter(int index, LetterBoxData data) {
-    _removeLetterPrecheck(data);
+  void removeLetter(int index) {
+    _removeLetterPrecheck(solution[index]);
     final preAllLetters = field.map((e) => e.letter).toList() +
         solution.map((e) => e.letter).toList();
     preAllLetters.sort();
-    var indexOfFreeFieldSlot = field
-        .indexWhere((element) => element.state == LetterBoxState.fieldSlot);
-    if (indexOfFreeFieldSlot != -1) {
-      field[indexOfFreeFieldSlot].letter = data.letter;
-      field[indexOfFreeFieldSlot].state = LetterBoxState.fieldPick;
-      data.letter = '';
-      data.state = LetterBoxState.solutionSlot;
+
+    // Try to return the letter to its original home first.
+    final originalFieldIndexOfLetterInSolution = solution[index].originalFieldIndex;
+    int? targetFieldIndex;
+
+    if (originalFieldIndexOfLetterInSolution != null &&
+        originalFieldIndexOfLetterInSolution < field.length &&
+        field[originalFieldIndexOfLetterInSolution].state == LetterBoxState.fieldSlot) {
+      targetFieldIndex = originalFieldIndexOfLetterInSolution;
+    } else {
+      // If the original slot is occupied, find the next available empty slot.
+      targetFieldIndex = field.indexWhere((f) => f.state == LetterBoxState.fieldSlot);
+    }
+
+    if (targetFieldIndex != -1) {
+      field[targetFieldIndex].letter = solution[index].letter;
+      field[targetFieldIndex].state = LetterBoxState.fieldPick;
+      field[targetFieldIndex].originalFieldIndex = originalFieldIndexOfLetterInSolution; // Preserve original home
+
+      solution[index].letter = '';
+      solution[index].state = LetterBoxState.solutionSlot;
+      solution[index].originalFieldIndex = null;
+      notifyListeners();
     }
     _postCheck(preAllLetters);
     _invariantCheck();
@@ -71,34 +88,53 @@ class FieldModel with ChangeNotifier {
 
   List<LetterBoxData> getFieldLetters(
       {required String solutionPick, required int disabledLettersCount}) {
+    final solutionWord = solutionPick.toUpperCase();
     final random = Random();
     var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.characters;
 
     // find all letters that are not in solution
-    var lettersWithoutSolution =
-        alphabet.toSet().difference(solutionPick.characters.toSet());
+    var lettersWithoutSolution = alphabet
+        .toSet()
+        .difference(solutionWord.characters.toSet());
 
     // create a list that is shorter than the solution (exactly solution length shorter)
     var shuffledUnique14WithoutSolutionLetters = lettersWithoutSolution
-        .take(14 - solutionPick.length)
+        .take(14 - solutionWord.length)
         .mapIndexed((index, element) => (index < disabledLettersCount)
             ? LetterBoxData.removed(element)
             : LetterBoxData.fieldPick(element))
         .toList();
 
     // add the solution to the end of unique strings list and shuffle
-    shuffledUnique14WithoutSolutionLetters
-        .addAll(solutionPick.characters.map((e) => LetterBoxData.fieldPick(e)));
+    shuffledUnique14WithoutSolutionLetters.addAll(solutionWord.characters
+        .map((e) => LetterBoxData.fieldPick(e)));
     shuffledUnique14WithoutSolutionLetters.shuffle(random);
 
     assert(
-        solutionPick.characters.every((element) =>
+        solutionWord.characters.every((element) =>
             shuffledUnique14WithoutSolutionLetters
                 .map((e) => e.letter)
                 .contains(element)),
         "Field does not contain all required solution letters.");
 
     return shuffledUnique14WithoutSolutionLetters;
+  }
+
+  /// Returns a list of letters that are currently in the field and available to be picked.
+  List<String> getAvailableLetters() {
+    return field
+        .where((element) => element.state == LetterBoxState.fieldPick)
+        .map((e) => e.letter)
+        .toList();
+  }
+
+  /// Returns a list of all letters that are currently available to be picked,
+  /// both from the field and the solution area.
+  List<String> getAllPickableLetters() {
+    return (solution + field)
+        .where((element) => element.state == LetterBoxState.fieldPick || element.state == LetterBoxState.solutionPick)
+        .map((e) => e.letter)
+        .toList();
   }
 
   bool isRemoveLettersAvailable() {
@@ -110,38 +146,47 @@ class FieldModel with ChangeNotifier {
 
   void remove3ArbitaryLetters() {
     var count = 3;
-    var solutionWord = word.split('');
+    final solutionLetters = word.split('');
 
     var allPickableLetters = (solution + field).where((element) =>
         element.state == LetterBoxState.fieldPick ||
         element.state == LetterBoxState.solutionPick);
 
-    var candidateLetters = allPickableLetters.where((value) {
-      var isNotInSolution = !solutionWord.contains(value.letter);
-      if (isNotInSolution) solutionWord.remove(value.letter);
-      return isNotInSolution;
-    });
+    // Create a mutable copy of solution letters to correctly handle duplicates in the solution.
+    var solutionLettersCopy = List<String>.from(solutionLetters);
+    final candidateLetters = allPickableLetters.where((letterBox) {
+      // If the letter is part of the solution, it's not a candidate for removal.
+      if (solutionLettersCopy.contains(letterBox.letter)) {
+        solutionLettersCopy.remove(letterBox.letter); // Account for duplicate letters.
+        return false;
+      }
+      return true;
+    }).toList();
 
     if (candidateLetters.length < 3) {
       count = candidateLetters.length;
     }
     var lettersToRemove = candidateLetters.toList().sample(count, Random(1337));
-    disabledLettersCount = disabledLettersCount + lettersToRemove.length;
 
     for (var element in lettersToRemove) {
       if (element.state == LetterBoxState.fieldPick) {
-        element.state = LetterBoxState.removed;
+        element.state = LetterBoxState.removed; // This is a letter already in the field, just mark it removed.
       } else if (element.state == LetterBoxState.solutionPick) {
-        var indexOfFreeFieldSlot = field
-            .indexWhere((element) => element.state == LetterBoxState.fieldSlot);
-        if (indexOfFreeFieldSlot != -1) {
-          field[indexOfFreeFieldSlot].letter = element.letter;
-          field[indexOfFreeFieldSlot].state = LetterBoxState.removed;
+        // This is a letter in the solution that needs to be moved back to its original field slot as 'removed'.
+        final originalFieldIndex = element.originalFieldIndex;
+        if (originalFieldIndex != null && originalFieldIndex < field.length) {
+          // Move the letter back to its original field slot and mark it as removed.
+          field[originalFieldIndex].letter = element.letter;
+          field[originalFieldIndex].state = LetterBoxState.removed;
+          // The originalFieldIndex of field[originalFieldIndex] should already be correct (originalFieldIndex).
+          // Clear the solution slot.
           element.letter = '';
           element.state = LetterBoxState.solutionSlot;
+          element.originalFieldIndex = null; // This is the crucial fix
         }
       }
     }
+    notifyListeners(); // Notify FieldModel listeners after arbitrary letters are removed
     postLettersAvailableCanCreateSolution();
     postTotalLettersMoreOrEqualToSolutionLength();
   }
@@ -170,11 +215,11 @@ class FieldModel with ChangeNotifier {
   }
 
   void setLevelCompleted() {
-    word.characters.forEachIndexed((index, letter) {
-      final solutionLetter =
-          field.firstWhere((element) => element.letter == letter);
-      putLetter(index, solutionLetter, LetterBoxState.locked);
-    });
+    // When the level is completed, the solution should already be correct.
+    // We just need to lock the letters in the solution row.
+    for (var element in solution) {
+      element.state = LetterBoxState.locked;
+    }
   }
 
   void reset() {
@@ -182,9 +227,10 @@ class FieldModel with ChangeNotifier {
         word.length, (index) => LetterBoxData.solutionSlot(),
         growable: false);
     for (var element in solution) { element.state = LetterBoxState.solutionSlot; }
-    field = getFieldLetters(solutionPick: word, disabledLettersCount: 0);
-    for (var element in field) { element.state = LetterBoxState.fieldPick; }
-    disabledLettersCount = 0;
+    field = getFieldLetters(solutionPick: word, disabledLettersCount: 0);    
+    for (var i = 0; i < field.length; i++) {
+      field[i].originalFieldIndex = i;
+    }
     notifyListeners();
   }
 

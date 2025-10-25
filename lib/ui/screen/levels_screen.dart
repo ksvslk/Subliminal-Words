@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
-import 'package:operation_hermes/data/level.dart';
 import 'package:operation_hermes/data/pack.dart';
+import 'package:operation_hermes/data/sw_level.dart';
 import 'package:provider/provider.dart';
 
 class LevelsScreen extends StatefulWidget {
@@ -14,7 +14,7 @@ class LevelsScreen extends StatefulWidget {
 }
 
 class _LevelsScreenState extends State<LevelsScreen> {
-  late Future<List<Level>> _levelsFuture;
+  late Future<List<SWLevel>> _levelsFuture;
 
   @override
   void initState() {
@@ -32,7 +32,7 @@ class _LevelsScreenState extends State<LevelsScreen> {
       appBar: AppBar(
         title: Text(widget.pack.name),
       ),
-      body: FutureBuilder<List<Level>>(
+      body: FutureBuilder<List<SWLevel>>(
         future: _levelsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -59,12 +59,16 @@ class _LevelsScreenState extends State<LevelsScreen> {
             itemCount: levels.length,
             itemBuilder: (context, index) {
               final level = levels[index];
+              final bool isEnabled = level.isEnabled;
+
               return Card(
                 elevation: 2, // Slightly increased elevation
-                color: Theme.of(context).colorScheme.tertiaryContainer,
+                color: isEnabled
+                    ? Theme.of(context).colorScheme.tertiaryContainer
+                    : Theme.of(context).colorScheme.surfaceContainer,
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
-                  onTap: () async {
+                  onTap: !isEnabled ? null : () async {
                     await Future.delayed(const Duration(milliseconds: 100));
                     if (!context.mounted) return;
 
@@ -76,9 +80,11 @@ class _LevelsScreenState extends State<LevelsScreen> {
                         style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onTertiaryContainer)),
+                            color: isEnabled
+                                ? Theme.of(context).colorScheme.onTertiaryContainer
+                                : Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                        )
+                    ),
                   ),
                 ),
               );

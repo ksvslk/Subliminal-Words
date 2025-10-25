@@ -6,6 +6,7 @@ import 'package:operation_hermes/data/category.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'packs_screen.dart';
+import 'package:logging/logging.dart'; // Import the logging package
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
@@ -15,13 +16,21 @@ class CategoriesScreen extends StatefulWidget {
 
 class _CategoriesScreenState extends State<CategoriesScreen> {
   late Future<List<Category>> _categoriesFuture;
+  static final _log = Logger('CategoriesScreen'); // Initialize a logger for this class
 
   @override
   void initState() {
     super.initState();
+    _log.info('CategoriesScreen initState called.'); // Log when initState is called
     final firebaseService =
         Provider.of<FirebaseService>(context, listen: false);
     _categoriesFuture = firebaseService.getCategories();
+    // Add callbacks to log the outcome of the future
+    _categoriesFuture.then((data) {
+      _log.info('Categories loaded successfully: ${data.length} categories.');
+    }).catchError((error, stackTrace) {
+      _log.severe('Error loading categories: $error', error, stackTrace);
+    });
   }
 
   @override
@@ -30,17 +39,22 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       appBar: AppBar(title: const Text('Categories')),
       body: FutureBuilder<List<Category>>(
         future: _categoriesFuture,
+        // Add logging inside the builder to track connection state
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
           if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
           }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+
+          // While waiting for data, show shimmer placeholders.
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final categories = snapshot.data;
+          _log.info('CategoriesScreen FutureBuilder: ConnectionState.done with data.');
+          if (categories == null || categories.isEmpty) {
             return const Center(child: Text('No categories found.'));
           }
-          final categories = snapshot.data!;
           return ListView.builder(
             padding: const EdgeInsets.all(16.0),
             itemCount: categories.length,
@@ -56,25 +70,20 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 }
 
 class _CategoryListItem extends StatefulWidget {
-  const _CategoryListItem({required this.category});
-  final Category category;
+  const _CategoryListItem({this.category});
+  final Category? category;
   @override
   State<_CategoryListItem> createState() => _CategoryListItemState();
 }
 
 class _CategoryListItemState extends State<_CategoryListItem> {
-  bool _isLoaded = false;
 
   @override
   Widget build(BuildContext context) {
+    // If category is null, this widget is being used as a pure placeholder.
+    final isPlaceholder = widget.category == null;
     final colorScheme = Theme.of(context).colorScheme;
     final levelModel = context.watch<LevelModel>();
-
-    final int completedLevels =
-        levelModel.getUnlockedLevelsCountForCategory(widget.category.id);
-    final int totalLevels = widget.category.totalLevels;
-    final double progress =
-        (totalLevels > 0) ? completedLevels / totalLevels : 0.0;
 
     return AspectRatio(
       aspectRatio: 2 / 1,
@@ -91,18 +100,14 @@ class _CategoryListItemState extends State<_CategoryListItem> {
               highlightColor: colorScheme.onSurface.withOpacity(0.2),
               child: Container(color: colorScheme.surfaceContainerHigh),
             ),
-            AnimatedOpacity(
-              opacity: _isLoaded ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeIn,
-              child: InkWell(
+            InkWell(
                 onTap: () async {
                   await Future.delayed(const Duration(milliseconds: 50));
                   if (!context.mounted) return;
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                        builder: (_) => PacksScreen(category: widget.category)),
+                    MaterialPageRoute(builder: (_) =>
+                        PacksScreen(category: widget.category!)),
                   );
                 },
                 child: Stack(
@@ -114,44 +119,51 @@ class _CategoryListItemState extends State<_CategoryListItem> {
                     ),
 
 // Layer 2a: The image that fades at its right edge
-Align(
-  alignment: Alignment.centerLeft,
-  child: ShaderMask(
-    shaderCallback: (bounds) {
-      return LinearGradient(
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
-        colors: [
-          colorScheme.surface,  // Changed from Colors.white
-          colorScheme.surface.withOpacity(0.0),  // Changed from Colors.transparent
-        ],
-        stops: const [0.5, 1.0],  // Image fades at its right edge
-      ).createShader(bounds);
-    },
-    blendMode: BlendMode.dstIn,
-    child: FirebaseImage(
-      storagePath: widget.category.thumbnailUrl,
-      onLoaded: () => setState(() => _isLoaded = true),
-      fit: BoxFit.fitHeight,
-      alignment: Alignment.centerLeft,
-    ),
-  ),
-),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: ShaderMask(
+                        shaderCallback: (bounds) {
+                          return LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              colorScheme.surface, // Changed from Colors.white
+                              colorScheme.surface.withOpacity(
+                                  0.0), // Changed from Colors.transparent
+                            ],
+                            stops: const [
+                              0.5,
+                              1.0
+                            ], // Image fades at its right edge
+                          ).createShader(bounds);
+                        },
+                        blendMode: BlendMode.dstIn,
+                        child: FirebaseImage(
+                          storagePath: widget.category?.thumbnailUrl ?? '',
+                          fit: BoxFit.fitHeight,
+                          alignment: Alignment.centerLeft,
+                        ),
+                      ),
+                    ),
 
 // Layer 2b: Extended gradient from image edge to card edge
-Container(
-  decoration: BoxDecoration(
-    gradient: LinearGradient(
-      begin: Alignment.centerLeft,
-      end: Alignment.topCenter,
-      colors: [
-        colorScheme.tertiaryContainer.withAlpha(0),  // Transparent
-        colorScheme.primaryContainer,  // Solid background
-      ],
-      stops: const [0.4, 1.0],  // Fade continues from ~image edge to card end
-    ),
-  ),
-),
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.topCenter,
+                          colors: [
+                            colorScheme.tertiaryContainer
+                                .withAlpha(0), // Transparent
+                            colorScheme.primaryContainer, // Solid background
+                          ],
+                          stops: const [
+                            0.4,
+                            1.0
+                          ], // Fade continues from ~image edge to card end
+                        ),
+                      ),
+                    ),
 
                     // Layer 3 (Top): Your UI.
                     GridTile(
@@ -160,58 +172,100 @@ Container(
                         padding: const EdgeInsets.all(8.0),
                         child: Align(
                           alignment: Alignment.topRight,
-                          child: SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                CircularProgressIndicator(
-                                  value: progress,
-                                  strokeWidth: 3.0,
-                                  backgroundColor:
-                                      colorScheme.primary.withOpacity(0.2),
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      colorScheme.primary),
-                                ),
-                                Container(
-                                  width: 30,
-                                  height: 30,
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.tertiaryContainer
-                                        .withOpacity(0.7),
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                Text(
-                                  '${(progress * 100).toInt()}%',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.onTertiaryContainer,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          child: isPlaceholder
+                              ? const SizedBox.shrink()
+                              : _CategoryProgressIndicator(
+                                  category: widget.category!),
                         ),
                       ),
                       footer: GridTileBar(
                         backgroundColor: colorScheme.surface.withAlpha(150),
-                        title: Text(widget.category.name,
+                        title: Text(widget.category?.name ?? '',
                             style: TextStyle(
                                 color: colorScheme.onSurface,
                                 fontWeight: FontWeight.bold)),
                       ),
-                      child: Container(),
+                      child:
+                          Container(), // This child is required, but can be empty.
                     ),
                   ],
-                ),
+                ), // Removed AnimatedOpacity wrapper
               ),
-            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CategoryProgressIndicator extends StatefulWidget {
+  final Category category;
+  const _CategoryProgressIndicator({required this.category});
+
+  @override
+  State<_CategoryProgressIndicator> createState() =>
+      _CategoryProgressIndicatorState();
+}
+
+class _CategoryProgressIndicatorState
+    extends State<_CategoryProgressIndicator> {
+  late Future<int> _completedLevelsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    final levelModel = context.read<LevelModel>();
+    _completedLevelsFuture =
+        levelModel.getUnlockedLevelsCountForCategory(widget.category.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return FutureBuilder<int>(
+      future: _completedLevelsFuture,
+      builder: (context, snapshot) {
+        final completedLevels = snapshot.data ?? 0;
+        final totalLevels = widget.category.totalLevels;
+        final double progress =
+            (totalLevels > 0) ? completedLevels / totalLevels : 0.0;
+
+        if (progress <= 0) {
+          return const SizedBox.shrink();
+        }
+
+        return SizedBox(
+          width: 44,
+          height: 44,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CircularProgressIndicator(
+                value: progress,
+                strokeWidth: 3.0,
+                backgroundColor: colorScheme.primary.withOpacity(0.2),
+                valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+              ),
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: colorScheme.tertiaryContainer.withOpacity(0.7),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              Text(
+                '${(progress * 100).toInt()}%',
+                style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onTertiaryContainer),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

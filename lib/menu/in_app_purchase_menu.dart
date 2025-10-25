@@ -12,15 +12,24 @@ class InAppPurchaseMenuDialog extends StatelessWidget {
 
   IconData _getIconForPurchase(String productId) {
     switch (productId) {
-      case C.ALL_IN_PACK || C.ALL_IN_PACK_IOS:
+      case C.ALL_IN_PACK:
+      case C.ALL_IN_PACK_IOS:
         return Icons.workspace_premium_outlined;
-      case C.REMOVE_3 || C.REMOVE_3_IOS:
+      case C.REMOVE_3:
+      case C.REMOVE_3_IOS:
         return Icons.looks_3_outlined;
-      case C.HIGHLIGHT || C.HIGHLIGHT_IOS:
+      case C.HIGHLIGHT:
+      case C.HIGHLIGHT_IOS:
         return Icons.highlight_alt_outlined;
-      case C.MANIPULATE || C.MANIPULATE_IOS:
+      // Since FACT is now the same as HIGHLIGHT, it will fall through to HIGHLIGHT's icon.
+      // case C.FACT:
+      // case C.FACT_IOS:
+      //   return Icons.lightbulb_outline;
+      case C.MANIPULATE:
+      case C.MANIPULATE_IOS:
         return Icons.zoom_out_outlined;
-      case C.NO_AD_BREAKS || C.NO_AD_BREAKS_IOS:
+      case C.NO_AD_BREAKS:
+      case C.NO_AD_BREAKS_IOS:
         return Icons.tv_off;
       default:
         return Icons.workspace_premium_outlined;
@@ -29,15 +38,24 @@ class InAppPurchaseMenuDialog extends StatelessWidget {
 
   String _getShortSubtitle(String productId) {
     switch (productId) {
-      case C.ALL_IN_PACK || C.ALL_IN_PACK_IOS:
+      case C.ALL_IN_PACK:
+      case C.ALL_IN_PACK_IOS:
         return "All items below";
-      case C.REMOVE_3 || C.REMOVE_3_IOS:
+      case C.REMOVE_3:
+      case C.REMOVE_3_IOS:
         return "Remove unneeded letters";
-      case C.HIGHLIGHT || C.HIGHLIGHT_IOS:
+      case C.HIGHLIGHT:
+      case C.HIGHLIGHT_IOS:
         return "Show letter in picture";
-      case C.MANIPULATE || C.MANIPULATE_IOS:
+      // Since FACT is now the same as HIGHLIGHT, it will fall through to HIGHLIGHT's subtitle.
+      // case C.FACT:
+      // case C.FACT_IOS:
+      //   return "Reveal a fun fact";
+      case C.MANIPULATE:
+      case C.MANIPULATE_IOS:
         return "Zoom and rotate";
-      case C.NO_AD_BREAKS || C.NO_AD_BREAKS_IOS:
+      case C.NO_AD_BREAKS:
+      case C.NO_AD_BREAKS_IOS:
         return "No ads between levels";
       default:
         return "";
@@ -120,7 +138,7 @@ class InAppPurchaseMenuDialog extends StatelessWidget {
                 if (Platform.isIOS)
                   TextButton(
                       onPressed: () {
-                        inAppPurchaseController.restorePurchases();
+                        inAppPurchaseController?.restorePurchases();
                       },
                       child: const Text(
                         "Restore purchases",

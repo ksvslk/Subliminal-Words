@@ -61,4 +61,18 @@ class LocalStorageSettingsPersistence extends SettingsPersistence {
     final prefs = await instanceFuture;
     await prefs.setString('fcmToken', value);
   }
+
+  static const String _lastPackIdKey = 'last_pack_id';
+
+  @override
+  Future<void> saveLastPackId(String packId) async {
+    final prefs = await instanceFuture;
+    await prefs.setString(_lastPackIdKey, packId);
+  }
+
+  @override
+  Future<String?> getLastPackId() async {
+    final prefs = await instanceFuture;
+    return prefs.getString(_lastPackIdKey);
+  }
 }

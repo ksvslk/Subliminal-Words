@@ -12,6 +12,9 @@ import '../persistence/settings_persistence.dart';
 class SettingsController {
   final SettingsPersistence _persistence;
 
+  /// The persistence store for settings.
+  SettingsPersistence get persistence => _persistence;
+
   /// Whether or not the sound is on at all. This overrides both music
   /// and sound.
 

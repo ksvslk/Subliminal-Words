@@ -4,28 +4,34 @@ import 'package:operation_hermes/data/letter_box_state.dart';
 class LetterBoxData with ChangeNotifier {
   LetterBoxState _state;
   String _letter;
+  int? originalFieldIndex;
 
   LetterBoxData.solutionSlot() 
     : _state = LetterBoxState.solutionSlot,
-      _letter = '';
+      _letter = '',
+      originalFieldIndex = null;
 
   LetterBoxData.fieldSlot() 
     : _state = LetterBoxState.fieldSlot,
-      _letter = '';
+      _letter = '',
+      originalFieldIndex = null;
 
   LetterBoxData.solutionPick(String letter) 
       : _state = LetterBoxState.solutionPick,
-        _letter = letter;
+        _letter = letter,
+        originalFieldIndex = null;
 
   LetterBoxData.fieldPick(String letter) 
     : _state = LetterBoxState.fieldPick,
-      _letter = letter;
+      _letter = letter,
+      originalFieldIndex = null;
 
   LetterBoxData.removed(String letter) 
     : _state = LetterBoxState.removed,
-      _letter = letter;
+      _letter = letter,
+      originalFieldIndex = null;
 
-  LetterBoxData({LetterBoxState? state, String? letter}) 
+  LetterBoxData({LetterBoxState? state, String? letter, this.originalFieldIndex}) 
     : _state = state ?? LetterBoxState.fieldSlot,
       _letter = letter ?? '';
 
@@ -47,6 +53,7 @@ class LetterBoxData with ChangeNotifier {
   set letter(String value) {
     if(_letter != value) {
       _letter = value;
+      notifyListeners();
     }
   }
 }

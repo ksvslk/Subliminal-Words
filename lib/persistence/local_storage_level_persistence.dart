@@ -1,5 +1,5 @@
 import 'package:logging/logging.dart';
-import 'package:operation_hermes/data/level_data.dart';
+import 'package:operation_hermes/data/sw_level.dart';
 import 'package:operation_hermes/persistence/level_persistence.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -32,7 +32,7 @@ class LocalStorageLevelPersistence extends LevelPersistence {
   }
 
   @override
-  Future<LevelData> getLatestLevelData() {
+  Future<SWLevel> getLatestLevelData() {
     throw UnimplementedError();
   }
 

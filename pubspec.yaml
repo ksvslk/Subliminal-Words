@@ -60,6 +60,7 @@ dependencies:
   firebase_storage: ^13.0.2
   path_provider: ^2.1.5
   cached_network_image: ^3.4.1
+  connectivity_plus: ^6.0.3
   google_api_availability: ^5.0.0
   shimmer: ^3.0.0
   intl: ^0.20.2
@@ -89,9 +90,18 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-    - assets/levels/
-    - assets/levels2/
-    - assets/levels3/
+    - assets/data/words/
+    - assets/data/faces/
+    - assets/data/characters/
+    - assets/levels/characters/italian_brainrot/
+    - assets/levels/faces/player_focus/
+    - assets/levels/faces/red_carpet/
+    - assets/levels/faces/spotlight/
+    - assets/levels/words/first_look/
+    - assets/levels/words/hidden_goals/
+    - assets/levels/words/secret_forms/
+    - assets/levels/words/subtle_deceit/
+    - assets/data/
     - assets/music/
     - assets/sfx/
     - assets/other/

@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Add this import for ImageInfo
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
 
 class FirebaseImage extends StatefulWidget {
   final String storagePath;
   final BoxFit fit;
   final Alignment alignment;
-  final VoidCallback? onLoaded;
   final ValueChanged<ImageInfo>? onImageInfoLoaded; // ADD THIS CALLBACK
 
   const FirebaseImage({
@@ -16,7 +14,6 @@ class FirebaseImage extends StatefulWidget {
     required this.storagePath,
     this.fit = BoxFit.cover,
     this.alignment = Alignment.center,
-    this.onLoaded,
     this.onImageInfoLoaded, // ADD THIS TO CONSTRUCTOR
   });
 
@@ -26,7 +23,7 @@ class FirebaseImage extends StatefulWidget {
 
 class _FirebaseImageState extends State<FirebaseImage> {
   late Future<String> _urlFuture;
-  bool _isLoadNotified = false;
+  bool _isImageLoaded = false; // Internal state for the image itself
 
   @override
   void initState() {
@@ -39,7 +36,7 @@ class _FirebaseImageState extends State<FirebaseImage> {
     final service = Provider.of<FirebaseService>(context, listen: false);
     _urlFuture = service.getDownloadUrl(widget.storagePath)
       ..catchError((error) {
-        _notifyOnce();
+        _setImageLoaded(); // Notify even on error to fade in the error icon
       });
   }
 
@@ -47,81 +44,77 @@ class _FirebaseImageState extends State<FirebaseImage> {
   void didUpdateWidget(covariant FirebaseImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.storagePath != oldWidget.storagePath) {
-      _isLoadNotified = false;
+      _isImageLoaded = false; // Reset loaded state for new image
       setState(() {
         _loadUrl();
       });
     }
   }
 
-
-  void _notifyOnce() {
-    if (!_isLoadNotified) {
-      _isLoadNotified = true;
+  // This method is called when the image is fully loaded or an error occurs.
+  // It triggers the AnimatedOpacity to fade in the content.
+  void _setImageLoaded() {
+    if (!_isImageLoaded) {
+      // Use addPostFrameCallback to ensure setState is called after the current build phase,
+      // preventing "setState during build" errors and allowing AnimatedOpacity to animate.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        widget.onLoaded?.call();
+        if (mounted) setState(() => _isImageLoaded = true);
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // ... (build method logic up to Image.network remains the same) ...
     if (widget.storagePath.isEmpty) {
-      _notifyOnce();
-      return const Center(child: Icon(Icons.image_not_supported));
+      return Container(); // Return an empty container if there's no path
     }
-
-    final colorScheme = Theme.of(context).colorScheme;
-    final placeholder = Shimmer.fromColors(
-      baseColor: colorScheme.onSurface.withOpacity(0.1),
-      highlightColor: colorScheme.onSurface.withOpacity(0.2),
-      child: Container(color: Colors.white),
-    );
 
     return FutureBuilder<String>(
       future: _urlFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return placeholder;
+          return Container(); // Be transparent while URL is being fetched
         }
 
         if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
-          _notifyOnce();
-          return const Center(child: Icon(Icons.error));
+          _setImageLoaded(); // Notify to fade in the error icon
+          return Container(); // Be transparent on error
         }
 
         final url = snapshot.data!;
         
         // ADD THIS: We need an Image widget to get the ImageInfo
-        final imageWidget = Image.network(
+        final imageContent = Image.network(
           url,
           fit: widget.fit,
           alignment: widget.alignment,
           loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return placeholder;
-          },
-          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-            if (frame != null) {
-              _notifyOnce();
-            }
-            return child;
+            if (loadingProgress == null) return child; // Image is ready, show it.
+            return Container(); // Be transparent while image data is downloading
           },
           errorBuilder: (context, error, stackTrace) {
-            _notifyOnce();
-            return const Center(child: Icon(Icons.error));
+            _setImageLoaded(); // Notify to fade in the error icon
+            return Container(); // Be transparent on error, this will be wrapped by AnimatedOpacity
           },
         );
 
         // ADD THIS: Logic to listen for when the image is loaded to get its info
-        imageWidget.image.resolve(const ImageConfiguration()).addListener(
+        imageContent.image.resolve(const ImageConfiguration()).addListener(
           ImageStreamListener((imageInfo, synchronousCall) {
             widget.onImageInfoLoaded?.call(imageInfo);
+            _setImageLoaded(); // Notify when image is fully resolved
+          }, onError: (exception, stackTrace) {
+            _setImageLoaded(); // Notify on error as well, so the error icon fades in
           }),
         );
 
-        return imageWidget;
+        // Wrap the actual image content (or error icon) with AnimatedOpacity
+        return AnimatedOpacity(
+          opacity: _isImageLoaded ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeIn,
+          child: imageContent,
+        );
       },
     );
   }

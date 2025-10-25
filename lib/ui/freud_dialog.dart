@@ -23,7 +23,8 @@ class FreudDialog extends StatelessWidget {
         if (levelModel.variousTooltip.isNotEmpty) {
           showTooltip = (true, levelModel.variousTooltip);
         } else if (!levelModel.levelCompleted &&
-            levelModel.tooltipStart.isNotEmpty) {
+            levelModel.tooltipStart.isNotEmpty &&
+            !levelModel.isInitialTooltipDismissed) {
           showTooltip = (true, levelModel.tooltipStart);
         } else if (levelModel.levelCompleted &&
             levelModel.tooltipEnd.isNotEmpty) {

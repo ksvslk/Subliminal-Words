@@ -28,7 +28,7 @@ class Pack {
   // Factory constructor to parse data from a database (like Firestore).
   // The client app's query would filter out any packs that are not
   // enabled, so no 'isEnabled' flag is needed here.
-  factory Pack.fromMap(String id, Map<String, dynamic> data) {
+  factory Pack.fromMap(String id, Map<String, dynamic> data, {int? totalLevels}) {
     return Pack(
       id: id,
       name: data['name'] ?? 'Unnamed Pack',
@@ -37,8 +37,7 @@ class Pack {
       categoryId: data['categoryId'] ?? '',
       order: data['order'] ?? 0,
       lastUpdated: (data['modifiedAt'] as Timestamp).toDate(),
-      totalLevels: data['totalLevels'] ?? 100
+      totalLevels: totalLevels ?? data['totalLevels'] ?? 0
     );
   }
 }
-
