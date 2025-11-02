@@ -9,11 +9,12 @@ class ProgressPersistence {
   /// Saves a level as completed.
   ///
   /// The [levelId] should be a unique identifier, e.g., 'packId__levelNr'.
-  Future<void> saveCompletedLevel(String levelId) async {
+  Future<void> saveCompletedLevel(String levelNr, String packId) async {
     final prefs = await SharedPreferences.getInstance();
     final completed = prefs.getStringList(_completedLevelsKey) ?? [];
-    if (!completed.contains(levelId)) {
-      completed.add(levelId);
+    final newKey = '${packId}__$levelNr';
+    if (!completed.contains(newKey)) {
+      completed.add(newKey);
       await prefs.setStringList(_completedLevelsKey, completed);
     }
   }
@@ -22,6 +23,7 @@ class ProgressPersistence {
   Future<Set<String>> getCompletedLevels() async {
     final prefs = await SharedPreferences.getInstance();
     final completed = prefs.getStringList(_completedLevelsKey) ?? [];
+    print(completed);
     return completed.toSet();
   }
 

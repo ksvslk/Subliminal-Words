@@ -1,10 +1,14 @@
 
+import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 
+import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/config/C.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/controller/shimmer_placeholders.dart';
+import 'package:operation_hermes/data/progress_achievement.dart';
 import 'package:operation_hermes/ui/ad_button.dart';
 import 'package:provider/provider.dart';
 
@@ -13,16 +17,18 @@ class HintBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
+    final jsonString = FirebaseRemoteConfig.instance.getString(C.progressAchievemetns);
+    final list = jsonDecode(jsonString) as List<dynamic>;
+    list.forEach((element) {
+      final c = ProgressAchievement.fromMap(element);
+      print(c.name);
+    });
+
     return Consumer<LevelModel>(builder: (context, levelModel, child) {
       if (levelModel.networkRequestActive) {
         return const ActionButtonsPlaceholder();
       }
-
-      final remove3ProductId = Platform.isAndroid ? C.REMOVE_3 : C.REMOVE_3_IOS;
-      final manipulateProductId =
-          Platform.isAndroid ? C.MANIPULATE : C.MANIPULATE_IOS;
-      final highlightProductId =
-          Platform.isAndroid ? C.HIGHLIGHT : C.HIGHLIGHT_IOS;
 
       return Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -30,14 +36,14 @@ class HintBar extends StatelessWidget {
           Flexible(
             flex: 1,
             child: AdButton(
-              productId: remove3ProductId,
+              entitlementId: C.entitlementRemove3Id,
               onReward: levelModel.remove3Action,
             ),
           ),
           Flexible(
             flex: 1,
             child: AdButton(
-              productId: manipulateProductId,
+              entitlementId: C.entitlementManipulateId,
               onReward: levelModel.manipulationAction,
             ),
           ),
@@ -46,11 +52,11 @@ class HintBar extends StatelessWidget {
             // Conditionally show the correct hint button based on the level type
             child: levelModel.currentLevel?.hintType == 'fact'
                 ? AdButton(
-                    productId: highlightProductId,
+                    entitlementId: C.entitlementHighlightId,
                     overrideTitle: 'Fact',
                     onReward: levelModel.showFactAction)
                 : AdButton(
-                    productId: highlightProductId,
+                    entitlementId: C.entitlementHighlightId,
                     overrideTitle: 'Highlight',
                     onReward: levelModel.highlightAction),
           ),

@@ -16,13 +16,13 @@ class FirebaseService {
   static const Map<String, String> bundledPackAssets = {
     // words category
     'first-look': 'assets/data/words/first_look.json',
-    //'secret_forms': 'assets/data/words/secret_forms.json',
-    //'subtle_deceit': 'assets/data/words/random_faces.json',
-    //'hidden_goals': 'assets/data/words/hidden_goals.json',
+    'secret-forms': 'assets/data/words/secret_forms.json',
+    'subtle-deceit': 'assets/data/words/subtle_deceit.json',
+    'hidden-goals': 'assets/data/words/hidden_goals.json',
     // faces category
-    //'red_carpet': 'assets/data/faces/red_carpet.json',
-    //'spotlight': 'assets/data/faces/spotlight.json',
-    //'player_focus': 'assets/data/faces/player_focus.json',
+    'red-carpet': 'assets/data/faces/red_carpet.json',
+    'spotlight': 'assets/data/faces/spotlight.json',
+    'player-focus': 'assets/data/faces/player_focus.json',
     // characters category
     'italian-brainrot': 'assets/data/characters/italian_brainrot.json',
     // Add new bundled packs here, e.g.:
@@ -32,6 +32,11 @@ class FirebaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instanceFor(
       bucket: DefaultFirebaseOptions.currentPlatform.storageBucket!);
+
+  
+  FirebaseService() {
+    _db.settings = const Settings(persistenceEnabled: true);
+  }
 
   final Map<String, String> _urlCache = {};
 
@@ -61,52 +66,111 @@ class FirebaseService {
     }
   }
 
-  Future<List<Category>> getCategories() async {
-    final snapshot = await _db
+  // --- 💡 STREAM METHODS (for UI) ---
+
+  /// Gets a live stream of categories.
+  /// REQUIRES: 'totalLevels' (number) field on each category document.
+  Stream<List<Category>> getCategoriesStream() {
+    return _db
         .collection('categories')
         .where('isEnabled', isEqualTo: true)
         .orderBy('order')
-        .get();
-    return snapshot.docs
-        .map((doc) => Category.fromMap(doc.id, doc.data()))
-        .toList();
+        .snapshots() // This is cached and instant
+        .map((categoriesSnapshot) { // This is synchronous
+      
+      final categories = <Category>[];
+      for (final doc in categoriesSnapshot.docs) {
+        final categoryData = doc.data();
+        
+        // 💡 Read totalLevels directly from the document.
+        final totalLevels = categoryData['totalLevels'] as int? ?? 0;
+
+        categories.add(
+            Category.fromMap(doc.id, categoryData, totalLevels: totalLevels));
+      }
+      return categories;
+    });
   }
 
-  Future<List<Pack>> getPacks(String categoryId) async {
-    final snapshot = await _db
+  /// Gets a live stream of packs for a category.
+  /// REQUIRES: 'totalLevels' (number) field on each pack document.
+  Stream<List<Pack>> getPacksStream(String categoryId) {
+    return _db
         .collection('packs')
         .where('categoryId', isEqualTo: categoryId)
         .where('isEnabled', isEqualTo: true)
         .orderBy('order')
-        .get();
+        .snapshots() // This is cached and instant
+        .map((snapshot) { // This is synchronous
 
-    final packs = <Pack>[];
-    for (final doc in snapshot.docs) {
-      final packData = doc.data();
-      final packId = doc.id;
+      final packs = <Pack>[];
+      for (final doc in snapshot.docs) {
+        final packData = doc.data();
+        final packId = doc.id;
 
-      // Dynamically get the true count of enabled levels for this pack.
-      final levelsSnapshot = await _db
-          .collection('packs')
-          .doc(packId)
-          .collection('levels')
-          .where('isEnabled', isEqualTo: true)
-          .count()
-          .get();
-      final totalLevels = levelsSnapshot.count ?? 0;
+        // 💡 Read totalLevels directly from the document.
+        final totalLevels = packData['totalLevels'] as int? ?? 0;
 
-      packs.add(Pack.fromMap(packId, packData, totalLevels: totalLevels));
-    }
-    return packs;
+        packs.add(Pack.fromMap(packId, packData, totalLevels: totalLevels));
+      }
+      return packs;
+    });
   }
 
-  /// Gets level data for a specific pack.
-  ///
-  /// This method uses a hybrid approach:
-  /// 1. For the initial pack, it loads bundled levels from a local JSON asset.
-  /// 2. It then fetches the corresponding levels from Firestore.
-  /// 3. Firestore data overwrites local data, allowing for remote updates/hotfixes.
-  /// 4. For other packs, it fetches directly from Firestore.
+  /// Gets a live stream of levels for a pack (Hybrid Approach)
+  /// This will still have a brief load as it awaits local assets.
+  Stream<List<SWLevel>> getLevelsStream(String packId) {
+    // 1. Load local bundled levels (this is a Future)
+    final localLevelsFuture = () async {
+      final Map<int, SWLevel> levelsMap = {};
+      if (bundledPackAssets.containsKey(packId)) {
+        try {
+          final String jsonString =
+              await rootBundle.loadString(bundledPackAssets[packId]!);
+          final List<dynamic> jsonList = json.decode(jsonString);
+          for (var levelJson in jsonList) {
+            final level =
+                SWLevel.fromJson(packId, levelJson as Map<String, dynamic>);
+            levelsMap[level.nr] = level;
+          }
+          debugPrint(
+              "[FirebaseService] Loaded ${levelsMap.length} bundled levels for pack '$packId'.");
+        } catch (e) {
+          debugPrint(
+              "[FirebaseService] !!! FAILED to load bundled levels for pack '$packId'. Error: $e");
+        }
+      }
+      return levelsMap;
+    }();
+
+    // 2. Get the live stream of remote levels
+    final remoteLevelsStream = _db
+        .collection('packs')
+        .doc(packId)
+        .collection('levels')
+        .where('isEnabled', isEqualTo: true)
+        .snapshots();
+
+    // 3. Combine them
+    // This asyncMap is necessary to wait for localLevelsFuture
+    return remoteLevelsStream.asyncMap((remoteSnapshot) async {
+      final levelsMap = await localLevelsFuture;
+
+      for (final doc in remoteSnapshot.docs) {
+        final remoteLevel = SWLevel.fromFirestore(doc.id, packId, doc.data());
+        levelsMap[remoteLevel.nr] = remoteLevel;
+      }
+
+      final sortedLevels = levelsMap.values.toList();
+      sortedLevels.sort((a, b) => a.nr.compareTo(b.nr));
+      return sortedLevels;
+    });
+  }
+
+  // --- 💡 FUTURE-BASED METHODS (for LevelModel logic) ---
+
+  /// 💡 ADDED THIS METHOD BACK
+  /// Gets level data for a specific pack (one-time fetch).
   Future<List<SWLevel>> getLevels(String packId, {bool offline = false}) async {
     final Map<int, SWLevel> levelsMap = {};
 
@@ -128,10 +192,7 @@ class FirebaseService {
       }
     }
 
-    // 2. Fetch levels from Firestore. This will overwrite bundled levels if they exist,
-    // allowing for hotfixes. For other packs, this is the primary data source.
-    // If we are starting offline, we do not want to fetch from Firestore,
-    // as it might serve stale cached data with remote paths.
+    // 2. Fetch levels from Firestore.
     if (!offline) {
       try {
         final snapshot = await _db
@@ -147,8 +208,6 @@ class FirebaseService {
           levelsMap[remoteLevel.nr] = remoteLevel;
         }
       } on FirebaseException catch (e) {
-        // This is not a critical error if we have bundled levels.
-        // Log the failure but allow the app to proceed with the local data.
         debugPrint(
             "[FirebaseService] Could not fetch remote level updates for pack '$packId' (user might be offline). Proceeding with local data. Error: $e");
       }
@@ -159,6 +218,29 @@ class FirebaseService {
     sortedLevels.sort((a, b) => a.nr.compareTo(b.nr));
 
     return sortedLevels;
+  }
+
+  /// One-time fetch for packs in a category.
+  /// Relies on denormalized `totalLevels` field.
+  Future<List<Pack>> getPacks(String categoryId) async {
+    final snapshot = await _db
+        .collection('packs')
+        .where('categoryId', isEqualTo: categoryId)
+        .where('isEnabled', isEqualTo: true)
+        .orderBy('order')
+        .get(); // <-- One-time fetch
+
+    final packs = <Pack>[];
+    for (final doc in snapshot.docs) {
+      final packData = doc.data();
+      final packId = doc.id;
+      
+      // 💡 Read denormalized data, just like in the stream
+      final totalLevels = packData['totalLevels'] as int? ?? 0;
+      
+      packs.add(Pack.fromMap(packId, packData, totalLevels: totalLevels));
+    }
+    return packs;
   }
 
   /// Get a single level from Firestore
@@ -177,7 +259,6 @@ class FirebaseService {
       return null;
     } on FirebaseException catch (e) {
       debugPrint("[FirebaseService] Failed to get level $packId/$levelNr: $e");
-      // Re-throw the exception so the UI layer can handle it.
       rethrow;
     }
   }
@@ -193,15 +274,9 @@ class FirebaseService {
       
       if (doc.exists && doc.data() != null) {
         debugPrint("[FirebaseService] getPack: Successfully fetched pack $packId.");
-        // Also calculate the correct total levels for this single pack.
-        final levelsSnapshot = await _db
-            .collection('packs')
-            .doc(packId)
-            .collection('levels')
-            .where('isEnabled', isEqualTo: true)
-            .count()
-            .get();
-        final totalLevels = levelsSnapshot.count ?? 0;
+        
+        // 💡 Read totalLevels directly from the document.
+        final totalLevels = doc.data()?['totalLevels'] as int? ?? 0;
 
         return Pack.fromMap(doc.id, doc.data()!, totalLevels: totalLevels);
       }
@@ -209,7 +284,7 @@ class FirebaseService {
       return null;
     } on FirebaseException catch (e) {
       debugPrint("[FirebaseService] Failed to get pack $packId: $e");
-      return null; // Return null on error, or rethrow if you want calling code to handle it.
+      return null;
     }
   }
 }

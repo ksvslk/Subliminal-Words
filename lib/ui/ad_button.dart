@@ -1,24 +1,22 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/config/C.dart';
 import 'package:operation_hermes/config/sounds.dart';
 import 'package:operation_hermes/controller/ads_controller.dart';
 import 'package:operation_hermes/controller/audio_controller.dart';
-import 'package:operation_hermes/controller/in_app_purchase_controller.dart';
-import 'package:operation_hermes/data/purchasable_product.dart';
+import 'package:operation_hermes/controller/money_controller.dart';
 import 'package:provider/provider.dart';
 
 class AdButton extends StatelessWidget {
   static final _log = Logger('AdButton');
 
   const AdButton(
-      {super.key, required this.productId, this.overrideTitle, required this.onReward});
+      {super.key, required this.entitlementId, this.overrideTitle, required this.onReward});
 
-  final String productId;
+  final String entitlementId;
   final String? overrideTitle;
   final VoidCallback onReward;
 
@@ -27,7 +25,7 @@ class AdButton extends StatelessWidget {
     (String, Icon, bool),
   ) getCallbackAndText(
       BuildContext context,
-      InAppPurchaseController iapController,
+      MoneyController iapController,
       AdsController adsController,
       bool manipulationExhausted,
       bool remove3Available,
@@ -36,72 +34,36 @@ class AdButton extends StatelessWidget {
     // ✔︎ Erandid:
     // MANIPULATION - Kui zoom juba avatud - DISABLED, Exhausted
     // REMOVE_3 - Kui rohkem tähti enam ei saa eemaldada - DISABLED, Exhausted
-    if (((productId == C.MANIPULATE || productId == C.MANIPULATE_IOS) &&
+    if (((entitlementId == C.entitlementManipulateId) &&
             manipulationExhausted) ||
-        ((productId == C.REMOVE_3 || productId == C.REMOVE_3_IOS) &&
+        ((entitlementId == C.entitlementRemove3Id) &&
             !remove3Available)) {
-      _log.log(Level.INFO, "Applied - $productId");
+      _log.log(Level.INFO, "Applied - $entitlementId");
       return (null, ('Applied', const Icon(Icons.done_rounded), false));
     }
 
     // ✔︎ Kui pole products nimekirjas - Disabled, loading.
-    var product = iapController.products
-        .firstWhereOrNull((element) => element.id == productId);
-    if (product == null) {
-      _log.log(Level.INFO, "Loading (empty products) - $productId");
-
-      // Create placeholder product if not found in iapController.products
-      if (overrideTitle == 'Remove 3' || productId == C.REMOVE_3 || productId == C.REMOVE_3_IOS) {
-        product = PurchasableProduct(ProductDetails(
-            id: productId,
-            title: "Remove 3",
-            description: "",
-            price: "",
-            rawPrice: -1,
-            currencyCode: ""));
-        product.status = ProductStatus.purchasable;
-      } else if (productId == C.MANIPULATE || productId == C.MANIPULATE_IOS) {
-        product = PurchasableProduct(ProductDetails(
-            id: productId,
-            title: "Manipulate",
-            description: "",
-            price: "",
-            rawPrice: -1,
-            currencyCode: ""));
-        product.status = ProductStatus.purchasable;
-      } else if (productId == C.HIGHLIGHT || productId == C.HIGHLIGHT_IOS) {
-        product = PurchasableProduct(ProductDetails(
-            id: productId,
-            title: overrideTitle ?? "Highlight",
-            description: "",
-            price: "",
-            rawPrice: -1,
-            currencyCode: ""));
-        product.status = ProductStatus.purchasable;
-      }
-    }
+    var productName = iapController.getEntitlementName(entitlementId);
 
     // ✔︎ Kui on ostetud või on ALL IN ostetud - ENABLED, Product name ✪
-    final allInPack = iapController.products.firstWhereOrNull((element) =>
-        element.id == C.ALL_IN_PACK || element.id == C.ALL_IN_PACK_IOS);
-    if (product?.status == ProductStatus.purchased ||
-        allInPack?.status == ProductStatus.purchased) {
+    if (iapController.hasEntitlement(entitlementId) ||
+        iapController.hasAllAccess()) {
       _log.log(Level.INFO,
-          "Purchased (or all in ${allInPack?.status.name}) - $productId");
+          "Purchased (or has all access)");
       return (
         onReward,
-        (overrideTitle ?? product?.productName ?? "", const Icon(Icons.touch_app), false)
+        (overrideTitle ?? productName, const Icon(Icons.touch_app), false)
       );
     }
 
     // ✔︎ Kui pole ostetud ja kui pole reklaami näidata - DISABLED, product name
-    if (product?.status != ProductStatus.purchased &&
+    if (iapController.hasEntitlement(entitlementId) == false &&
         !adsController.isAdAvailable()) {
-      _log.log(Level.INFO, "No purchase, no ads - $productId");
+      _log.log(Level.INFO, "No purchase, no ads - $entitlementId");
       return (
         null,
         (
-          overrideTitle ?? product?.productName ?? "",
+          overrideTitle ?? productName,
           const Icon(Icons.hourglass_top_outlined),
           false
         )
@@ -109,9 +71,9 @@ class AdButton extends StatelessWidget {
     }
 
     // ✔︎ Kui pole ostetud ja ON reklaami näidata - ENABLED, Product name ▷
-    if (product?.status != ProductStatus.purchased &&
+    if (iapController.hasEntitlement(entitlementId) == false &&
         adsController.isAdAvailable()) {
-      _log.log(Level.INFO, "No purchase, ADS available! - $productId");
+      _log.log(Level.INFO, "No purchase, ADS available! - $entitlementId");
       callback() => {
             adsController.showRewardedAd(() {
               onReward();
@@ -119,12 +81,12 @@ class AdButton extends StatelessWidget {
           };
       return (
         callback,
-        (overrideTitle ?? product?.productName ?? "", const Icon(Icons.slideshow_rounded), true)
+        (overrideTitle ?? productName, const Icon(Icons.slideshow_rounded), true)
       );
     }
 
     // Fallback: If none of the above conditions are met, return a default disabled state.
-    _log.warning("AdButton: No matching state found for productId: $productId. Returning default disabled state.");
+    _log.warning("AdButton: No matching state found for productId: $entitlementId. Returning default disabled state.");
     return (
       null, // No action
       ('Unavailable', const Icon(Icons.error_outline), false) // Default disabled state
@@ -136,7 +98,7 @@ class AdButton extends StatelessWidget {
     final audioController = context.read<AudioController>();
     return Consumer<AdsController>(builder: (context, adsController, _) {
       _log.log(Level.INFO, "Building AdsController");
-      return Consumer<InAppPurchaseController>(
+      return Consumer<MoneyController>(
           builder: (context, iapController, _) {
         _log.log(Level.INFO, "Building InAppPurchaseController");
         return Consumer<LevelModel>(builder: (context, levelModel, _) {

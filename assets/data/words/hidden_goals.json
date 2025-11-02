@@ -1,0 +1,377 @@
+[
+    {
+        "nr": 1,
+        "packId": "hidden_goals",
+        "name": "goal",
+        "hintType": "fact",
+        "hints": {
+            "fact": "The act of scoring a point"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/1.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/1_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/1_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 2,
+        "packId": "hidden_goals",
+        "name": "fan",
+        "hintType": "fact",
+        "hints": {
+            "fact": "The passionate group that supports a team"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/2.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/2_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/2_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 3,
+        "packId": "hidden_goals",
+        "name": "var",
+        "hintType": "fact",
+        "hints": {
+            "fact": "Video Assistant Referee used to review decisions"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/3.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/3_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/3_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "Excellent work!",
+        "isEnabled": true
+    },
+    {
+        "nr": 4,
+        "packId": "hidden_goals",
+        "name": "team",
+        "hintType": "fact",
+        "hints": {
+            "fact": "A group of players representing a club or nation"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/4.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/4_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/4_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 5,
+        "packId": "hidden_goals",
+        "name": "save",
+        "hintType": "fact",
+        "hints": {
+            "fact": "Preventing the ball from entering the goal"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/5.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/5_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/5_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 6,
+        "packId": "hidden_goals",
+        "name": "shot",
+        "hintType": "fact",
+        "hints": {
+            "fact": "An attempt to score by kicking the ball towards the goal"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/6.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/6_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/6_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "Well played!",
+        "isEnabled": true
+    },
+    {
+        "nr": 7,
+        "packId": "hidden_goals",
+        "name": "pass",
+        "hintType": "fact",
+        "hints": {
+            "fact": "Moving the ball to a teammate by kicking or heading"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/7.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/7_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/7_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 8,
+        "packId": "hidden_goals",
+        "name": "foul",
+        "hintType": "fact",
+        "hints": {
+            "fact": "A violation of the rules, often resulting in a free kick"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/8.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/8_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/8_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 9,
+        "packId": "hidden_goals",
+        "name": "dive",
+        "hintType": "fact",
+        "hints": {
+            "fact": "Pretending to be fouled to deceive the referee"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/9.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/9_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/9_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 10,
+        "packId": "hidden_goals",
+        "name": "penalty",
+        "hintType": "fact",
+        "hints": {
+            "fact": "A kick awarded for a foul, taken from a marked spot"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/10.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/10_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/10_so.jpg",
+        "tooltipStart": "Complete level in the range 10-100 or 110-200 without using hints, and earn a hint. What a paradox!",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 11,
+        "packId": "hidden_goals",
+        "name": "injury",
+        "hintType": "fact",
+        "hints": {
+            "fact": "An occurrence that causes a player to be unable to continue"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/11.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/11_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/11_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 12,
+        "packId": "hidden_goals",
+        "name": "win",
+        "hintType": "fact",
+        "hints": {
+            "fact": "Emerging victorious from a match or tournament"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/12.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/12_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/12_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "Superb work!",
+        "isEnabled": true
+    },
+    {
+        "nr": 13,
+        "packId": "hidden_goals",
+        "name": "ball",
+        "hintType": "fact",
+        "hints": {
+            "fact": "The spherical object used in the game, typically made of leather"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/13.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/13_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/13_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 14,
+        "packId": "hidden_goals",
+        "name": "foul",
+        "hintType": "fact",
+        "hints": {
+            "fact": "A violation of the rules, often resulting in a free kick"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/14.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/14_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/14_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 15,
+        "packId": "hidden_goals",
+        "name": "player",
+        "hintType": "fact",
+        "hints": {
+            "fact": "An individual member of a team who competes on the field"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/15.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/15_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/15_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 16,
+        "packId": "hidden_goals",
+        "name": "referee",
+        "hintType": "fact",
+        "hints": {
+            "fact": "The authority figure who enforces the rules during a match"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/16.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/16_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/16_so.jpg",
+        "tooltipStart": "You can also play the Faces level pack under settings",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 17,
+        "packId": "hidden_goals",
+        "name": "match",
+        "hintType": "fact",
+        "hints": {
+            "fact": "A single instance of the game being played"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/17.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/17_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/17_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 18,
+        "packId": "hidden_goals",
+        "name": "offside",
+        "hintType": "fact",
+        "hints": {
+            "fact": "A violation where a player is ahead of the last defender"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/18.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/18_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/18_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 19,
+        "packId": "hidden_goals",
+        "name": "coach",
+        "hintType": "fact",
+        "hints": {
+            "fact": "The individual who guides and instructs the team's strategy"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/19.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/19_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/19_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 20,
+        "packId": "hidden_goals",
+        "name": "red card",
+        "hintType": "fact",
+        "hints": {
+            "fact": "A card issued to expel a player from the match"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/20.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/20_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/20_so.jpg",
+        "tooltipStart": "You've got this! Keep pushing forward.",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 21,
+        "packId": "hidden_goals",
+        "name": "handball",
+        "hintType": "fact",
+        "hints": {
+            "fact": "Illegally contacting the ball with the arm or hand"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/21.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/21_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/21_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 22,
+        "packId": "hidden_goals",
+        "name": "loss",
+        "hintType": "fact",
+        "hints": {
+            "fact": "Failing to emerge victorious in a match or tournament"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/22.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/22_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/22_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 23,
+        "packId": "hidden_goals",
+        "name": "whistle",
+        "hintType": "fact",
+        "hints": {
+            "fact": "The instrument used by the referee to signal play to start/stop"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/23.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/23_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/23_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 24,
+        "packId": "hidden_goals",
+        "name": "score",
+        "hintType": "fact",
+        "hints": {
+            "fact": "The act of successfully putting the ball into the goal"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/24.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/24_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/24_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    },
+    {
+        "nr": 25,
+        "packId": "hidden_goals",
+        "name": "free kick",
+        "hintType": "fact",
+        "hints": {
+            "fact": "A kick awarded for a foul, taken from the spot of the foul"
+        },
+        "puzzlePath": "assets/levels/words/hidden_goals/25.jpg",
+        "puzzleThumbnailPath": "assets/levels/words/hidden_goals/25_thumb.webp",
+        "solutionPath": "assets/levels/words/hidden_goals/25_so.jpg",
+        "tooltipStart": "",
+        "tooltipEnd": "",
+        "isEnabled": true
+    }
+]

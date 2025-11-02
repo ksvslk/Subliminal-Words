@@ -3,72 +3,53 @@ import 'package:operation_hermes/ui/firebase_image.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/data/category.dart';
+import 'package:operation_hermes/data/pack.dart'; // Import Pack
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'packs_screen.dart';
 import 'package:logging/logging.dart'; // Import the logging package
 
-class CategoriesScreen extends StatefulWidget {
+/// Displays a list of categories.
+///
+/// This screen reads the list of categories from a global [StreamProvider]
+/// and automatically updates when the data changes.
+class CategoriesScreen extends StatelessWidget {
   const CategoriesScreen({super.key});
-  @override
-  State<CategoriesScreen> createState() => _CategoriesScreenState();
-}
-
-class _CategoriesScreenState extends State<CategoriesScreen> {
-  late Future<List<Category>> _categoriesFuture;
-  static final _log = Logger('CategoriesScreen'); // Initialize a logger for this class
-
-  @override
-  void initState() {
-    super.initState();
-    _log.info('CategoriesScreen initState called.'); // Log when initState is called
-    final firebaseService =
-        Provider.of<FirebaseService>(context, listen: false);
-    _categoriesFuture = firebaseService.getCategories();
-    // Add callbacks to log the outcome of the future
-    _categoriesFuture.then((data) {
-      _log.info('Categories loaded successfully: ${data.length} categories.');
-    }).catchError((error, stackTrace) {
-      _log.severe('Error loading categories: $error', error, stackTrace);
-    });
-  }
+  
+  static final _log = Logger('CategoriesScreen');
 
   @override
   Widget build(BuildContext context) {
+    // This is CORRECT. It watches the value from the global StreamProvider.
+    final categories = context.watch<List<Category>>();
+    _log.info('CategoriesScreen build called.');
+
     return Scaffold(
       appBar: AppBar(title: const Text('Categories')),
-      body: FutureBuilder<List<Category>>(
-        future: _categoriesFuture,
-        // Add logging inside the builder to track connection state
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
+      body: () {
+        // `initialData: []` in main.dart means `categories`
+        // will be an empty list while loading for the first time.
+        if (categories.isEmpty) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-          // While waiting for data, show shimmer placeholders.
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final categories = snapshot.data;
-          _log.info('CategoriesScreen FutureBuilder: ConnectionState.done with data.');
-          if (categories == null || categories.isEmpty) {
-            return const Center(child: Text('No categories found.'));
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(16.0),
-            itemCount: categories.length,
-            itemBuilder: (context, index) {
-              final category = categories[index];
-              return _CategoryListItem(category: category);
-            },
-          );
-        },
-      ),
+        // We have data! Just build the list.
+        _log.info(
+            'CategoriesStream: Rebuilt with ${categories.length} categories.');
+        return ListView.builder(
+          padding: const EdgeInsets.all(16.0),
+          itemCount: categories.length,
+          itemBuilder: (context, index) {
+            final category = categories[index];
+            return _CategoryListItem(category: category);
+          },
+        );
+      }(), // Using () runs this logic block
     );
   }
 }
 
+/// A single item in the category list.
 class _CategoryListItem extends StatefulWidget {
   const _CategoryListItem({this.category});
   final Category? category;
@@ -77,13 +58,10 @@ class _CategoryListItem extends StatefulWidget {
 }
 
 class _CategoryListItemState extends State<_CategoryListItem> {
-
   @override
   Widget build(BuildContext context) {
-    // If category is null, this widget is being used as a pure placeholder.
     final isPlaceholder = widget.category == null;
     final colorScheme = Theme.of(context).colorScheme;
-    final levelModel = context.watch<LevelModel>();
 
     return AspectRatio(
       aspectRatio: 2 / 1,
@@ -101,14 +79,24 @@ class _CategoryListItemState extends State<_CategoryListItem> {
               child: Container(color: colorScheme.surfaceContainerHigh),
             ),
             InkWell(
-                onTap: () async {
-                  await Future.delayed(const Duration(milliseconds: 50));
-                  if (!context.mounted) return;
+                onTap: () {
+                  // 💡 --- THIS IS THE FIX FOR NAVIGATION ---
+                  if (!context.mounted || widget.category == null) return;
+                  
+                  final service = context.read<FirebaseService>();
+
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) =>
-                        PacksScreen(category: widget.category!)),
+                        // 1. Use Provider<Stream<...>> to provide the stream object
+                        Provider<Stream<List<Pack>>>(
+                          create: (ctx) => service.getPacksStream(widget.category!.id),
+                          // 2. No initialData
+                          child: PacksScreen(category: widget.category!),
+                        )
+                    ),
                   );
+                  // 💡 --- END OF FIX ---
                 },
                 child: Stack(
                   fit: StackFit.expand,
@@ -118,7 +106,7 @@ class _CategoryListItemState extends State<_CategoryListItem> {
                       color: colorScheme.tertiaryContainer,
                     ),
 
-// Layer 2a: The image that fades at its right edge
+                    // Layer 2a: The image
                     Align(
                       alignment: Alignment.centerLeft,
                       child: ShaderMask(
@@ -127,14 +115,10 @@ class _CategoryListItemState extends State<_CategoryListItem> {
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                             colors: [
-                              colorScheme.surface, // Changed from Colors.white
-                              colorScheme.surface.withOpacity(
-                                  0.0), // Changed from Colors.transparent
+                              colorScheme.surface, 
+                              colorScheme.surface.withOpacity(0.0),
                             ],
-                            stops: const [
-                              0.5,
-                              1.0
-                            ], // Image fades at its right edge
+                            stops: const [ 0.5, 1.0 ],
                           ).createShader(bounds);
                         },
                         blendMode: BlendMode.dstIn,
@@ -146,28 +130,23 @@ class _CategoryListItemState extends State<_CategoryListItem> {
                       ),
                     ),
 
-// Layer 2b: Extended gradient from image edge to card edge
+                    // Layer 2b: Extended gradient
                     Container(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.centerLeft,
                           end: Alignment.topCenter,
                           colors: [
-                            colorScheme.tertiaryContainer
-                                .withAlpha(0), // Transparent
-                            colorScheme.primaryContainer, // Solid background
+                            colorScheme.tertiaryContainer.withAlpha(0),
+                            colorScheme.primaryContainer,
                           ],
-                          stops: const [
-                            0.4,
-                            1.0
-                          ], // Fade continues from ~image edge to card end
+                          stops: const [ 0.4, 1.0 ],
                         ),
                       ),
                     ),
 
                     // Layer 3 (Top): Your UI.
                     GridTile(
-                      // ... (GridTile code remains the same)
                       header: Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: Align(
@@ -185,11 +164,10 @@ class _CategoryListItemState extends State<_CategoryListItem> {
                                 color: colorScheme.onSurface,
                                 fontWeight: FontWeight.bold)),
                       ),
-                      child:
-                          Container(), // This child is required, but can be empty.
+                      child: Container(),
                     ),
                   ],
-                ), // Removed AnimatedOpacity wrapper
+                ),
               ),
           ],
         ),
@@ -198,6 +176,7 @@ class _CategoryListItemState extends State<_CategoryListItem> {
   }
 }
 
+/// A widget that shows the user's progress for a specific category.
 class _CategoryProgressIndicator extends StatefulWidget {
   final Category category;
   const _CategoryProgressIndicator({required this.category});
@@ -210,13 +189,26 @@ class _CategoryProgressIndicator extends StatefulWidget {
 class _CategoryProgressIndicatorState
     extends State<_CategoryProgressIndicator> {
   late Future<int> _completedLevelsFuture;
+  static final _log = Logger('_CategoryProgressIndicatorState');
 
   @override
   void initState() {
     super.initState();
+    _fetchCompletedLevels();
+  }
+  
+  void _fetchCompletedLevels() {
     final levelModel = context.read<LevelModel>();
     _completedLevelsFuture =
         levelModel.getUnlockedLevelsCountForCategory(widget.category.id);
+  }
+
+  @override
+  void didUpdateWidget(covariant _CategoryProgressIndicator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.category.id != widget.category.id) {
+      _fetchCompletedLevels();
+    }
   }
 
   @override
@@ -227,13 +219,14 @@ class _CategoryProgressIndicatorState
       future: _completedLevelsFuture,
       builder: (context, snapshot) {
         final completedLevels = snapshot.data ?? 0;
-        final totalLevels = widget.category.totalLevels;
+        // 💡 Use the totalLevels from the widget, which came from the denormalized field
+        final totalLevels = widget.category.totalLevels; 
         final double progress =
             (totalLevels > 0) ? completedLevels / totalLevels : 0.0;
 
-        if (progress <= 0) {
-          return const SizedBox.shrink();
-        }
+        _log.info('Category "${widget.category.name}": '
+            'calculating progress with completedLevels=$completedLevels, totalLevels=$totalLevels');
+
 
         return SizedBox(
           width: 44,
@@ -242,7 +235,7 @@ class _CategoryProgressIndicatorState
             alignment: Alignment.center,
             children: [
               CircularProgressIndicator(
-                value: progress,
+                value: progress < 0 ? 0.0 : progress,
                 strokeWidth: 3.0,
                 backgroundColor: colorScheme.primary.withOpacity(0.2),
                 valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),

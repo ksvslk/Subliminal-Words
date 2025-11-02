@@ -41,7 +41,6 @@ dependencies:
   xml: ^6.3.0
   path_drawing: ^1.0.1
   google_mobile_ads: ^6.0.0
-  in_app_purchase: ^3.1.11
   url_launcher: ^6.2.1
   auto_size_text: ^3.0.0
   animated_text_kit: ^4.2.2
@@ -64,6 +63,12 @@ dependencies:
   google_api_availability: ^5.0.0
   shimmer: ^3.0.0
   intl: ^0.20.2
+  purchases_flutter: ^9.9.1
+  purchases_ui_flutter: ^9.9.1
+  image: ^4.5.4
+  flutter_soloud: ^3.4.1
+  real_volume: ^1.0.9
+  firebase_remote_config: ^6.1.0
 
 
 dev_dependencies:

@@ -3,25 +3,28 @@ import 'dart:io';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:google_api_availability/google_api_availability.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/config/C.dart';
 import 'package:operation_hermes/controller/ads_controller.dart';
 import 'package:operation_hermes/controller/competition_controller.dart';
+import 'package:operation_hermes/controller/money_controller.dart';
 import 'package:operation_hermes/ui/screen/game_field_screen.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/controller/games_services.dart';
-import 'package:operation_hermes/controller/in_app_purchase_controller.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/persistence/level_persistence.dart';
 import 'package:operation_hermes/persistence/progress_persistence.dart';
 import 'package:operation_hermes/persistence/local_storage_level_persistence.dart';
 import 'package:operation_hermes/controller/notification_controller.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 import 'dart:developer' as dev;
 import 'persistence/settings_persistence.dart';
 import 'persistence/local_storage_settings_persistence.dart';
@@ -30,8 +33,10 @@ import 'package:provider/provider.dart';
 import 'controller/settings_controller.dart';
 import 'controller/audio_controller.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:operation_hermes/data/category.dart';
 
-final LocalStorageLevelPersistence globalLevelPersistence = LocalStorageLevelPersistence();
+final LocalStorageLevelPersistence globalLevelPersistence =
+    LocalStorageLevelPersistence();
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -39,6 +44,34 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // make sure you call `initializeApp` before using other Firebase services.
   await Firebase.initializeApp();
   //globalLevelPersistence.tryAddingNotificationLevel(message);
+}
+
+Future<void> initPurchases() async {
+  await Purchases.setLogLevel(LogLevel.verbose);
+  PurchasesConfiguration configuration;
+  if (Platform.isAndroid) {
+    configuration = PurchasesConfiguration("goog_WYNwAFMjoBMCxqKqdGpqsWmqcft");
+  } else {
+    configuration = PurchasesConfiguration("appl_OzsUYLHSwWLHXbRWclOKXSiGzYY");
+  }
+  await Purchases.configure(configuration);
+}
+
+Future<void> setUpRemoteConfig() async {
+  final remoteConfig = FirebaseRemoteConfig.instance;
+  await remoteConfig.setConfigSettings(
+    RemoteConfigSettings(
+      fetchTimeout: const Duration(minutes: 1),
+      minimumFetchInterval: const Duration(seconds: 30) // TODO: 6 hours production,
+    ),
+  );
+  await remoteConfig.setDefaults(const {
+    C.progressAchievemetns: "",
+  });
+  remoteConfig.onConfigUpdated.listen((event) async {
+    await remoteConfig.activate();
+  });
+  await remoteConfig.fetchAndActivate();
 }
 
 Future<void> main() async {
@@ -57,7 +90,7 @@ Future<void> main() async {
       );
     }
   });
-
+  Provider.debugCheckInvalidValueType = null;
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase first.
@@ -73,9 +106,15 @@ Future<void> main() async {
   if (isOnline) {
     try {
       _log.info('Device is online, activating Firebase App Check.');
-      await FirebaseAppCheck.instance.activate(
-        androidProvider: AndroidProvider.debug,
-        appleProvider: AppleProvider.appAttestWithDeviceCheckFallback,
+
+      await FirebaseAppCheck.instance
+          .activate(
+        providerAndroid: kReleaseMode
+            ? const AndroidPlayIntegrityProvider()
+            : const AndroidDebugProvider(),
+        providerApple: kReleaseMode
+            ? const AppleAppAttestProvider()
+            : const AppleDebugProvider(),
       );
     } catch (e) {
       _log.severe('Firebase App Check activation failed.', e);
@@ -91,6 +130,9 @@ Future<void> main() async {
   _log.info('Going full screen');
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
+  await initPurchases();
+  await setUpRemoteConfig();
+
   AdsController? adsController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
     /// Prepare the google_mobile_ads plugin so that the first ad loads
@@ -102,9 +144,9 @@ Future<void> main() async {
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
     gamesServicesController = GamesServicesController();
   }
-  InAppPurchaseController? inAppPurchaseController;
+  MoneyController? inAppPurchaseController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
-    inAppPurchaseController = InAppPurchaseController(InAppPurchase.instance);
+    inAppPurchaseController = MoneyController();
   }
   CompetitionController? competitionController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
@@ -143,7 +185,7 @@ class MyApp extends StatelessWidget {
   final ProgressPersistence progressPersistence;
   final LevelPersistence levelPersistence;
   final AdsController? adsController;
-  final InAppPurchaseController? inAppPurchaseController;
+  final MoneyController? inAppPurchaseController;
   final GamesServicesController? gamesServicesController;
   final CompetitionController? competitionController;
   final FirebaseService firebaseService;
@@ -172,6 +214,12 @@ class MyApp extends StatelessWidget {
         Provider<FirebaseService>(
           create: (_) => firebaseService,
         ),
+        StreamProvider<List<Category>>(
+          create: (context) =>
+              context.read<FirebaseService>().getCategoriesStream(),
+          // 💡 2. ADD initialData. This is required.
+          initialData: [],
+        ),
         Provider<SettingsController>(
           lazy: false,
           create: (context) => SettingsController(
@@ -182,7 +230,7 @@ class MyApp extends StatelessWidget {
             value: gamesServicesController),
         ChangeNotifierProvider<AdsController?>.value(value: adsController),
         Provider<CompetitionController?>.value(value: competitionController),
-        ChangeNotifierProvider<InAppPurchaseController?>.value(
+        ChangeNotifierProvider<MoneyController?>.value(
             value: inAppPurchaseController),
         ChangeNotifierProxyProvider<ValueNotifier<AppLifecycleState>,
             LevelModel>(
@@ -192,11 +240,13 @@ class MyApp extends StatelessWidget {
               gamesServicesController: gamesServicesController,
               persistence: levelPersistence,
               inAppPurchaseController: inAppPurchaseController,
-              adsController: adsController, 
+              adsController: adsController,
               progressPersistence: context.read<ProgressPersistence>(),
-              settingsPersistence: context.read<SettingsController>().persistence,
+              settingsPersistence:
+                  context.read<SettingsController>().persistence,
               firebaseService: firebaseService,
-              isOnline: isOnline, audioController: null),
+              isOnline: isOnline,
+              audioController: null),
           update: (BuildContext context,
               ValueNotifier<AppLifecycleState> lifecycleNotifier,
               LevelModel? levelModel) {
@@ -241,6 +291,7 @@ class MyApp extends StatelessWidget {
               DeviceOrientation.portraitUp,
               DeviceOrientation.portraitDown,
             ]);
+
             return MaterialApp(
                 title: 'Subliminal Words',
                 debugShowCheckedModeBanner: false,

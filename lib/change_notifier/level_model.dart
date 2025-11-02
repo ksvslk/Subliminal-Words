@@ -6,12 +6,14 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:collection/collection.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:logging/logging.dart';
+import 'package:operation_hermes/config/C.dart';
 import 'package:operation_hermes/config/sounds.dart';
 import 'package:operation_hermes/controller/ads_controller.dart';
 import 'package:operation_hermes/controller/audio_controller.dart' show AudioController;
@@ -22,8 +24,9 @@ import 'package:operation_hermes/change_notifier/field_model.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/change_notifier/picture_model.dart';
 import 'package:operation_hermes/controller/games_services.dart';
-import 'package:operation_hermes/controller/in_app_purchase_controller.dart';
+import 'package:operation_hermes/controller/money_controller.dart';
 import 'package:operation_hermes/data/pack.dart';
+import 'package:operation_hermes/data/progress_achievement.dart';
 import 'package:operation_hermes/persistence/level_persistence.dart';
 import 'package:operation_hermes/persistence/progress_persistence.dart';
 import 'package:operation_hermes/persistence/settings_persistence.dart';
@@ -38,7 +41,7 @@ class LevelModel with ChangeNotifier {
   final LevelPersistence persistence;
   final GamesServicesController? gamesServicesController;
   final AdsController? adsController;
-  final InAppPurchaseController? inAppPurchaseController;
+  final MoneyController? inAppPurchaseController;
   final FirebaseService firebaseService;
   final ProgressPersistence progressPersistence;
   final AudioController? audioController;
@@ -71,6 +74,8 @@ class LevelModel with ChangeNotifier {
 
   bool networkRequestActive = false;
   bool isLevelReady = false; // New state to control content fade-in
+
+  List<ProgressAchievement> progressAchievements = [];
 
 
   LevelModel(
@@ -151,6 +156,8 @@ class LevelModel with ChangeNotifier {
       variousTooltip = "New level added to the 'Quest' chapter!";
       notifyListeners();
     });
+
+    _loadProgressAchievements();
   }
 
   int get levelNr => currentLevel?.nr ?? -1;
@@ -172,7 +179,6 @@ class LevelModel with ChangeNotifier {
     _log.info('Device is online. Initializing online services...');
     adsController?.requestTheLatestConsentInformation();
     gamesServicesController?.initialize();
-    inAppPurchaseController?.subscribe();
     gamesServicesController?.signedIn.then((_) => updateProgressFromCloud());
   }
 
@@ -181,6 +187,25 @@ class LevelModel with ChangeNotifier {
   void showMessageFromMascot(String message) {
     variousTooltip = message;
     notifyListeners();
+  }
+
+  void _loadProgressAchievements() {
+    final jsonString = FirebaseRemoteConfig.instance.getString(C.progressAchievemetns);
+    if (jsonString.isEmpty) {
+      _log.warning('Progress achievements string from Remote Config is empty.');
+      return;
+    }
+    try {
+      final jsonList = jsonDecode(jsonString) as List<dynamic>;
+      progressAchievements = jsonList.map((e) => ProgressAchievement.fromMap(e)).toList();
+      _log.info(progressAchievements.length);
+      final yep = progressAchievements.where((a) => a.levelsToUnlock == 50 && a.packId == 'first-look');
+      for (var element in yep) {
+        _log.info(element);
+      }
+    } catch (e, st) {
+      _log.severe('Failed to parse progress achievements from Remote Config.', e, st);
+    }
   }
 
   Future<void> _createModels(SWLevel? level) async {
@@ -407,7 +432,7 @@ class LevelModel with ChangeNotifier {
   }
 
   void showAds(int levelWhereToShow) {
-    if (inAppPurchaseController?.isNoAdsPurchased() == false) {
+    if (inAppPurchaseController?.hasEntitlement(C.entitlementNoAdBreaksId) == false) {
       adsController?.showInterstitialAd();
     }
   }
@@ -474,7 +499,7 @@ class LevelModel with ChangeNotifier {
   
   Future<void> _saveProgress() async {
     if (currentLevel != null) {
-      await progressPersistence.saveCompletedLevel(currentLevel!.id);
+      await progressPersistence.saveCompletedLevel(currentLevel!.nr.toString(), currentLevel!.packId);
       // After saving, notify listeners so UI can update progress indicators.
       notifyListeners();
     }

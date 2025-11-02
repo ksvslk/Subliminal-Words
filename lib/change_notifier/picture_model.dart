@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math';
 import 'dart:async'; // Import for Timer
+import 'dart:typed_data'; // Import for Uint8List
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
@@ -28,6 +29,8 @@ class PictureModel with ChangeNotifier {
   List<SvgLetter> highlightLetters = [];
   bool isFactTypeLevel = false; // Made public to be used by PictureWidget
   bool isFactLevelComplete = false; // New flag to indicate completion
+  
+  Uint8List? puzzleImageBytes; // Will hold the pre-loaded image data
 
   // Animation properties for solution image looping opacity
   double solutionOpacity = 0.0;
@@ -71,7 +74,16 @@ class PictureModel with ChangeNotifier {
     isFactLevelComplete = false; // Reset completion flag
     solutionOpacity = 0.0; // Reset opacity for new level
     _isFadingIn = true; // Reset animation direction
-    _solutionAnimationTimer?.cancel(); // Cancel any previous animation
+    _solutionAnimationTimer?.cancel(); // Cancel any previous animation.
+    _solutionAnimationTimer = null; // CRITICAL: Set timer to null after cancelling.
+
+    // Pre-load the puzzle image bytes
+    try {
+      puzzleImageBytes = await _loadPuzzleImageBytes(this.picturePath);
+    } catch (e) {
+      _log.severe('Failed to load puzzle image bytes for display/sharing', e);
+      puzzleImageBytes = null; // Ensure it's null on failure
+    }
 
     if (level.isHighlightType) {
       highlightLetters = await _loadSvgLetters(svgPath: this.svgPath);
@@ -79,6 +91,24 @@ class PictureModel with ChangeNotifier {
       highlightLetters = []; // No SVG letters for 'fact' type levels
     }
     notifyListeners(); // Notify once after all properties are set
+  }
+
+  /// Helper method to load image bytes from either network or assets
+  Future<Uint8List> _loadPuzzleImageBytes(String path) async {
+    if (path.isEmpty) return Uint8List(0); // Return empty list if no path
+
+    if (path.startsWith('http')) {
+      final response = await http.get(Uri.parse(path));
+      if (response.statusCode == 200) {
+        return response.bodyBytes;
+      } else {
+        throw Exception('Failed to download image: ${response.statusCode}');
+      }
+    } else {
+      // Load from assets
+      final byteData = await rootBundle.load(path);
+      return byteData.buffer.asUint8List();
+    }
   }
 
   Future<List<SvgLetter>> _loadSvgLetters({required String svgPath}) async {
@@ -232,6 +262,4 @@ class PictureModel with ChangeNotifier {
     quarterTurn = 0;
     notifyListeners();
   }
-
- 
 }

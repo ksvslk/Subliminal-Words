@@ -3,17 +3,14 @@
 import 'dart:ui';
 
 class C {
-  static const String ALL_IN_PACK = "all_in_pack";
-  static const String HIGHLIGHT = "highlight";
-  static const String MANIPULATE = "manipulate";
-  static const String NO_AD_BREAKS = "no_ad_breaks";
-  static const String REMOVE_3 = "remove_3";
+  static const String entitlementPropassId = 'propass';
+  static const String entitlementLifetimeUnlockId = 'lifetime_unlock';
+  static const String entitlementRemove3Id = 'remove3';
+  static const String entitlementManipulateId = 'manipulate';
+  static const String entitlementHighlightId = 'highlight_fact';
+  static const String entitlementNoAdBreaksId = 'no_ad_breaks';
 
-  static const String ALL_IN_PACK_IOS = "com.indest.subliminalwords.all_in_pack";
-  static const String HIGHLIGHT_IOS = "com.indest.subliminalwords.highlight";
-  static const String MANIPULATE_IOS = "com.indest.subliminalwords.manipulate";
-  static const String NO_AD_BREAKS_IOS = "com.indest.subliminalwords.no_ad_breaks";
-  static const String REMOVE_3_IOS = "com.indest.subliminalwords.remove_3";
+  static const String progressAchievemetns = 'progress_achievements';
 
   static const Color DEFAULT_THEME_COLOR = Color.fromARGB(255, 0, 255, 0);
 

@@ -11,9 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 
 enum MenuItem {
-  levels, // Added
   achievements,
-  competition,
   theme,
   faces,
   sound,
@@ -89,15 +87,6 @@ class _SettingsMenuState extends State<SettingsMenu> {
       },
       menuChildren: MenuItem.values.map((item) {
         switch (item) {
-          case MenuItem.levels: // Added case
-            return MenuItemButton(
-                onPressed: () {
-                  Navigator.of(mainContext).push(MaterialPageRoute(
-                    builder: (context) => CategoriesScreen(),
-                  ));
-                },
-                leadingIcon: const Icon(Icons.apps_outlined),
-                child: Text(item.name));
           case MenuItem.achievements:
             return MenuItemButton(
                 onPressed: () {
@@ -105,14 +94,6 @@ class _SettingsMenuState extends State<SettingsMenu> {
                 },
                 leadingIcon: const Icon(Icons.leaderboard_outlined),
                 child: Text(item.name));
-          case MenuItem.competition:
-            return MenuItemButton(
-              onPressed: () {
-                showInfoCompetitionDialog(mainContext);
-              },
-              leadingIcon: const Icon(Icons.star_outline_outlined),
-              child: Text(item.name),
-            );
           case MenuItem.theme:
             return ValueListenableBuilder(
                 valueListenable: settings.seedColor,
