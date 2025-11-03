@@ -1,24 +1,27 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/widgets.dart';
 
 /// Defines the data model for a Level.
 /// This is the content data for a single level - what the player sees and interacts with.
 /// Player progress (completed/unlocked status) is tracked separately.
 class SWLevel {
-  final String id;              // Firestore document ID (e.g., 'packId__levelNr')
-  final int nr;                 // Level number within the pack
-  final String packId;          // Which pack this level belongs to
-  final String name;            // Level display name
-  final String hintType;        // 'fact' or 'highlight'
-  final Map<String, dynamic> hints; // For 'fact': {'fact': 'text'}, for 'highlight': {}
-  final String puzzlePath;      // URL or asset path to puzzle image
+  final String id; // Firestore document ID (e.g., 'packId__levelNr')
+  final int nr; // Level number within the pack
+  final String packId; // Which pack this level belongs to
+  final String name; // Level display name
+  final String hintType; // 'fact' or 'highlight'
+  final Map<String, dynamic>
+      hints; // For 'fact': {'fact': 'text'}, for 'highlight': {}
+  final String puzzlePath; // URL or asset path to puzzle image
   final String puzzleThumbnailPath; // URL or asset path to thumbnail
-  final String solutionPath;    // URL or asset path to solution (SVG for highlight)
-  final String tooltipStart;    // Story/intro text
-  final String tooltipEnd;      // Story/outro text
-  final bool isEnabled;         // Whether this level is active
+  final String
+      solutionPath; // URL or asset path to solution (SVG for highlight)
+  final String tooltipStart; // Story/intro text
+  final String tooltipEnd; // Story/outro text
+  final bool isEnabled; // Whether this level is active
   final DateTime createdAt;
   final DateTime modifiedAt;
-  final bool isBundled;         // True if the level is loaded from local assets
+  final bool isBundled; // True if the level is loaded from local assets
 
   SWLevel({
     required this.id,
@@ -39,7 +42,8 @@ class SWLevel {
   });
 
   /// Factory constructor for Firestore documents
-  factory SWLevel.fromFirestore(String id, String packId, Map<String, dynamic> data) {
+  factory SWLevel.fromFirestore(
+      String id, String packId, Map<String, dynamic> data) {
     return SWLevel(
       id: id,
       nr: data['nr'] ?? 0,
@@ -54,7 +58,8 @@ class SWLevel {
       tooltipEnd: data['tooltipEnd'] ?? '',
       isEnabled: data['isEnabled'] ?? true,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      modifiedAt: (data['modifiedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      modifiedAt:
+          (data['modifiedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isBundled: false, // Levels from Firestore are not bundled
     );
   }
@@ -64,13 +69,17 @@ class SWLevel {
     return SWLevel(
       id: '${packId}__${json['nr']}',
       nr: json['nr'] ?? 0,
-      packId: packId, // Always use the packId passed to the constructor for bundled levels.
+      packId:
+          packId, // Always use the packId passed to the constructor for bundled levels.
       name: json['name'] ?? 'Unnamed Level', // Deprecated 'word' field removed
       hintType: json['hintType'] ?? 'fact',
       hints: json['hints'] ?? {},
-      puzzlePath: json['puzzlePath'] ?? '', // Deprecated 'imagePath' field removed
-      puzzleThumbnailPath: json['puzzleThumbnailPath'] ?? '', // No old equivalent
-      solutionPath: json['solutionPath'] ?? '', // Deprecated 'svgPath' field removed
+      puzzlePath:
+          json['puzzlePath'] ?? '', // Deprecated 'imagePath' field removed
+      puzzleThumbnailPath:
+          json['puzzleThumbnailPath'] ?? '', // No old equivalent
+      solutionPath:
+          json['solutionPath'] ?? '', // Deprecated 'svgPath' field removed
       tooltipStart: json['tooltipStart'] ?? '',
       tooltipEnd: json['tooltipEnd'] ?? '',
       isEnabled: json['isEnabled'] ?? true,
@@ -102,10 +111,10 @@ class SWLevel {
   }
 
   // Convenience getters
-  
+
   /// Returns the fact hint text if this is a 'fact' type level
-  String? get factHint => (hintType == 'fact' && hints.containsKey('fact')) 
-      ? hints['fact'] as String? 
+  String? get factHint => (hintType == 'fact' && hints.containsKey('fact'))
+      ? hints['fact'] as String?
       : null;
 
   /// Whether this level has a fact hint available
@@ -119,4 +128,9 @@ class SWLevel {
 
   /// Whether this level has an end tooltip/story
   bool get hasEndTooltip => tooltipEnd.isNotEmpty;
+
+  String get packNameSanitized => packId
+      .split('-')
+      .map((word) => word[0].toUpperCase() + word.substring(1))
+      .join(' ');
 }

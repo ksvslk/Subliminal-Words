@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'dart:typed_data'; // Import for Uint8List
 
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:logging/logging.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/config/C.dart';
 import 'package:operation_hermes/controller/money_controller.dart';
@@ -154,37 +156,40 @@ class _TopBarState extends State<TopBar> {
 
   @override
   Widget build(BuildContext context) {
-    final levelSelectGlowColor = Theme.of(context).colorScheme.secondary;
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
-        const Flexible(flex: 1, child: SettingsMenu()),
-        Flexible(
-          flex: 1,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(25),
-              boxShadow: [
-                BoxShadow(
-                  color: levelSelectGlowColor.withAlpha(50),
-                  blurRadius: 5.0,
-                  spreadRadius: 1.0,
-                ),
-              ],
-            ),
-            child: IconButton(
-              onPressed: () {
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (context) => CategoriesScreen(),
-                ));
-              },
-              icon: const Icon(Icons.apps_outlined),
-            ),
-          ),
-        ),
-        Flexible(
+        Consumer<LevelModel>(builder: (context, levelModel, _) {
+          return Flexible(
             flex: 1,
+            child: Center(
+              child: Tooltip(
+                message: levelModel.currentLevel?.packNameSanitized ??
+                    'Current Level',
+                child: CircleAvatar(
+                  backgroundColor:
+                      Theme.of(context).colorScheme.surfaceContainer,
+                  radius: 15,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: AutoSizeText(
+                      levelModel.currentLevel?.nr.toString() ?? "",
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      minFontSize: 6.0, // Prevents text from becoming tiny
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+        const Flexible(flex: 2, child: SettingsMenu()),
+        Flexible(
+            flex: 2,
             child: LayoutBuilder(
               builder: (currentContext, constraints) {
                 // --- Here's the logic swap ---
@@ -245,19 +250,51 @@ class _TopBarState extends State<TopBar> {
                 // --- End of logic swap ---
               },
             )),
+        Flexible(
+          flex: 2,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(25),
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .tertiaryContainer
+                      .withAlpha(200),
+                  blurRadius: 10.0,
+                  spreadRadius: 2.0,
+                ),
+              ],
+            ),
+            child: IconButton(
+              onPressed: () {
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (context) => CategoriesScreen(),
+                ));
+              },
+              icon: const Icon(Icons.apps_outlined),
+            ),
+          ),
+        ),
         Consumer<MoneyController>(builder: (context, iapController, _) {
           return Expanded(
-            flex: iapController.hasAllAccess() == true ? 1 : 2,
+            flex: iapController.hasAllAccess() == true ? 2 : 3,
             child: iapController.hasAllAccess() == true
                 ? FilledButton.tonalIcon(
-                  label: Text('Pro'),
-                    onPressed: () {}, icon: Icon(Icons.verified))
+                    label: Text('Pro'),
+                    onPressed: () {},
+                    icon: Icon(Icons.verified))
                 : FilledButton.icon(
                     onPressed: () {
                       RevenueCatUI.presentPaywall(displayCloseButton: true);
                     },
                     icon: Icon(Icons.sunny),
-                    label: Text('Get Pro!'),
+                    label: AutoSizeText(
+                      'Get Pro',
+                      maxLines: 1,
+                      stepGranularity: 1,
+                      minFontSize: 5.0,
+                    ),
                     iconAlignment: IconAlignment.start,
                   ),
           );

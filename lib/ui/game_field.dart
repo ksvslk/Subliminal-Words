@@ -11,7 +11,6 @@ import 'package:operation_hermes/data/letter_box_data.dart';
 import 'package:operation_hermes/data/letter_box_state.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/controller/shimmer_placeholders.dart';
-import 'package:operation_hermes/ui/competition/won_competition_dialog.dart';
 import 'package:operation_hermes/controller/games_services.dart';
 import 'package:provider/provider.dart';
 
@@ -145,7 +144,6 @@ class _FieldRow extends StatelessWidget {
                 if (levelModel.checkForWin()) {
                   HapticFeedback.mediumImpact();
                   audioController.playSfx(SfxType.win);
-                  gamesServices.unlockAchievementForLevel(levelModel.levelNr);
                 }
               }
             },

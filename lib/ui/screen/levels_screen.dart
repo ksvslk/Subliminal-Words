@@ -32,9 +32,8 @@ class _LevelsScreenState extends State<LevelsScreen> {
   Widget build(BuildContext context) {
     final levelModel = context.read<LevelModel>();
     final colorScheme = Theme.of(context).colorScheme;
-
-    // 1. Watch for the Stream itself.
-    final levelsStream = context.watch<Stream<List<SWLevel>>>();
+    final service = context.read<FirebaseService>();
+    final levelsStream = service.getLevelsStream(widget.pack.id);
 
     return Scaffold(
       appBar: AppBar(

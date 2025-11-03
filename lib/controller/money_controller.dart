@@ -17,6 +17,7 @@ class MoneyController extends ChangeNotifier {
   void _queryCustomerInfo() async {
     try {
       _customerInfo = await Purchases.getCustomerInfo();
+      _log.info("Customer info: $_customerInfo");
       notifyListeners();
     } on PlatformException catch (e) {
       _log.log(Level.SEVERE, "Error getting customer info: $e");

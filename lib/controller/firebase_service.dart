@@ -2,15 +2,19 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' hide Category;
+import 'package:logging/logging.dart';
 import 'package:operation_hermes/config/firebase_options.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:operation_hermes/data/pack.dart';
 import 'package:operation_hermes/data/category.dart';
 
 class FirebaseService {
+  static final _log = Logger('FirebaseService');
+
   // Define the ID of the pack that has bundled levels.
   // Map of bundled pack IDs to their respective asset paths.
   static const Map<String, String> bundledPackAssets = {
@@ -33,7 +37,6 @@ class FirebaseService {
   final FirebaseStorage _storage = FirebaseStorage.instanceFor(
       bucket: DefaultFirebaseOptions.currentPlatform.storageBucket!);
 
-  
   FirebaseService() {
     _db.settings = const Settings(persistenceEnabled: true);
   }
@@ -41,7 +44,8 @@ class FirebaseService {
   final Map<String, String> _urlCache = {};
 
   Future<String> getDownloadUrl(String storagePath) async {
-    debugPrint("[FirebaseService] Requesting URL for storagePath: '$storagePath'");
+    debugPrint(
+        "[FirebaseService] Requesting URL for storagePath: '$storagePath'");
 
     if (storagePath.isEmpty) {
       debugPrint("[FirebaseService] Path is empty, returning empty URL.");
@@ -60,7 +64,8 @@ class FirebaseService {
       _urlCache[storagePath] = url;
       return url;
     } catch (e) {
-      debugPrint("[FirebaseService] !!! FAILED to get download URL for '$storagePath'. Error: $e");
+      debugPrint(
+          "[FirebaseService] !!! FAILED to get download URL for '$storagePath'. Error: $e");
       // This is often a permissions error. Check your Firebase Storage Rules from Step 1.
       return '';
     }
@@ -76,12 +81,13 @@ class FirebaseService {
         .where('isEnabled', isEqualTo: true)
         .orderBy('order')
         .snapshots() // This is cached and instant
-        .map((categoriesSnapshot) { // This is synchronous
-      
+        .map((categoriesSnapshot) {
+      // This is synchronous
+
       final categories = <Category>[];
       for (final doc in categoriesSnapshot.docs) {
         final categoryData = doc.data();
-        
+
         // 💡 Read totalLevels directly from the document.
         final totalLevels = categoryData['totalLevels'] as int? ?? 0;
 
@@ -101,7 +107,8 @@ class FirebaseService {
         .where('isEnabled', isEqualTo: true)
         .orderBy('order')
         .snapshots() // This is cached and instant
-        .map((snapshot) { // This is synchronous
+        .map((snapshot) {
+      // This is synchronous
 
       final packs = <Pack>[];
       for (final doc in snapshot.docs) {
@@ -181,7 +188,8 @@ class FirebaseService {
             await rootBundle.loadString(bundledPackAssets[packId]!);
         final List<dynamic> jsonList = json.decode(jsonString);
         for (var levelJson in jsonList) {
-          final level = SWLevel.fromJson(packId, levelJson as Map<String, dynamic>);
+          final level =
+              SWLevel.fromJson(packId, levelJson as Map<String, dynamic>);
           levelsMap[level.nr] = level;
         }
         debugPrint(
@@ -234,10 +242,10 @@ class FirebaseService {
     for (final doc in snapshot.docs) {
       final packData = doc.data();
       final packId = doc.id;
-      
+
       // 💡 Read denormalized data, just like in the stream
       final totalLevels = packData['totalLevels'] as int? ?? 0;
-      
+
       packs.add(Pack.fromMap(packId, packData, totalLevels: totalLevels));
     }
     return packs;
@@ -252,8 +260,12 @@ class FirebaseService {
           .collection('levels')
           .doc(levelNr.toString())
           .get();
-      
+
+      _log.info("doc: $doc");
+      _log.info("doc info: ${doc.id} : $packId");
+
       if (doc.exists && doc.data() != null) {
+        _log.info("doc data: ${doc.data()}");
         return SWLevel.fromFirestore(doc.id, packId, doc.data()!);
       }
       return null;
@@ -266,25 +278,27 @@ class FirebaseService {
   /// Get a single pack from Firestore by its ID.
   Future<Pack?> getPack(String packId) async {
     try {
-      debugPrint("[FirebaseService] getPack: Attempting to fetch pack with ID: $packId");
-      final doc = await _db
-          .collection('packs')
-          .doc(packId)
-          .get();
-      
+      debugPrint(
+          "[FirebaseService] getPack: Attempting to fetch pack with ID: $packId");
+      final doc = await _db.collection('packs').doc(packId).get();
+
       if (doc.exists && doc.data() != null) {
-        debugPrint("[FirebaseService] getPack: Successfully fetched pack $packId.");
-        
+        debugPrint(
+            "[FirebaseService] getPack: Successfully fetched pack $packId.");
+
         // 💡 Read totalLevels directly from the document.
         final totalLevels = doc.data()?['totalLevels'] as int? ?? 0;
 
         return Pack.fromMap(doc.id, doc.data()!, totalLevels: totalLevels);
       }
-      debugPrint("[FirebaseService] getPack: Pack $packId does not exist or data is null.");
+      debugPrint(
+          "[FirebaseService] getPack: Pack $packId does not exist or data is null.");
       return null;
     } on FirebaseException catch (e) {
       debugPrint("[FirebaseService] Failed to get pack $packId: $e");
       return null;
     }
   }
+
+
 }

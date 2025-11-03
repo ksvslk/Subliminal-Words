@@ -21,8 +21,8 @@ class PacksScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Watch for the Stream itself, not the list.
-    final packsStream = context.watch<Stream<List<Pack>>>();
+    final service = context.read<FirebaseService>();
+    final packsStream = service.getPacksStream(category.id);
 
     return Scaffold(
       appBar: AppBar(title: Text(category.name)),

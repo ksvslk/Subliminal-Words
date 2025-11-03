@@ -51,8 +51,10 @@ class CategoriesScreen extends StatelessWidget {
 
 /// A single item in the category list.
 class _CategoryListItem extends StatefulWidget {
+  
   const _CategoryListItem({this.category});
   final Category? category;
+
   @override
   State<_CategoryListItem> createState() => _CategoryListItemState();
 }

@@ -16,10 +16,9 @@ import 'package:logging/logging.dart';
 import 'package:operation_hermes/config/C.dart';
 import 'package:operation_hermes/config/sounds.dart';
 import 'package:operation_hermes/controller/ads_controller.dart';
-import 'package:operation_hermes/controller/audio_controller.dart' show AudioController;
-import 'package:operation_hermes/controller/competition_controller.dart';
+import 'package:operation_hermes/controller/audio_controller.dart'
+    show AudioController;
 import 'package:operation_hermes/config/firebase_options.dart';
-import 'package:operation_hermes/change_notifier/competition_data.dart';
 import 'package:operation_hermes/change_notifier/field_model.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/change_notifier/picture_model.dart';
@@ -33,11 +32,7 @@ import 'package:operation_hermes/persistence/settings_persistence.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// This top-level function runs in a separate isolate to prevent UI jank.
-/// It fetches URLs and loads file contents without blocking the main thread.
 class LevelModel with ChangeNotifier {
- 
-  final CompetitionController? competitionController;
   final LevelPersistence persistence;
   final GamesServicesController? gamesServicesController;
   final AdsController? adsController;
@@ -59,7 +54,6 @@ class LevelModel with ChangeNotifier {
   bool levelCompleted = false;
   late PictureModel pictureModel;
   late FieldModel fieldModel;
-  CompetitionData? competitionData;
   FirebaseAnalytics analytics = FirebaseAnalytics.instance;
 
   bool remove3Available = false;
@@ -77,10 +71,11 @@ class LevelModel with ChangeNotifier {
 
   List<ProgressAchievement> progressAchievements = [];
 
+  String? _pendingPackId;
+  int? _pendingLevelNumber;
 
   LevelModel(
-      {required this.competitionController,
-      required this.adsController,
+      {required this.adsController,
       required this.inAppPurchaseController,
       required this.gamesServicesController,
       required this.persistence,
@@ -113,8 +108,10 @@ class LevelModel with ChangeNotifier {
           nr: 1,
           packId: initialPackId,
           name: 'No Levels Available',
-          hintType: '', hints: {}, puzzlePath: '', puzzleThumbnailPath: '', solutionPath: '',
-          tooltipStart: 'No levels could be loaded. Please check your internet connection.',
+          hintType: '', hints: {}, puzzlePath: '', puzzleThumbnailPath: '',
+          solutionPath: '',
+          tooltipStart:
+              'No levels could be loaded. Please check your internet connection.',
           tooltipEnd: '', isEnabled: false,
           createdAt: DateTime.now(), modifiedAt: DateTime.now(),
           isBundled: true, // Treat as bundled to avoid network calls for assets
@@ -128,8 +125,10 @@ class LevelModel with ChangeNotifier {
         nr: 1,
         packId: 'error',
         name: 'Error Loading Levels',
-        hintType: '', hints: {}, puzzlePath: '', puzzleThumbnailPath: '', solutionPath: '',
-        tooltipStart: 'Could not load game data. Please check your internet connection and restart the app.',
+        hintType: '', hints: {}, puzzlePath: '', puzzleThumbnailPath: '',
+        solutionPath: '',
+        tooltipStart:
+            'Could not load game data. Please check your internet connection and restart the app.',
         tooltipEnd: '', isEnabled: false,
         createdAt: DateTime.now(), modifiedAt: DateTime.now(),
         isBundled: true, // Treat as bundled
@@ -151,30 +150,21 @@ class LevelModel with ChangeNotifier {
     // Initialize online services regardless, if online.
     // This ensures ads, IAP, etc., can still function even if the first level failed to load.
     _initializeOnlineServices();
-
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      variousTooltip = "New level added to the 'Quest' chapter!";
-      notifyListeners();
-    });
-
+    await setupFCMListeners();
     _loadProgressAchievements();
+    await _loadPendingLevel();
   }
 
   int get levelNr => currentLevel?.nr ?? -1;
   String get tooltipStart => currentLevel?.tooltipStart ?? "";
   String get tooltipEnd => currentLevel?.tooltipEnd ?? "";
-  // Getter for the UI to check if the initial tooltip has been dismissed.
   bool get isInitialTooltipDismissed => _initialTooltipDismissed;
 
-  /// Initializes online-only services after the app has started.
-  /// This prevents them from blocking the UI on startup, especially when offline.
   Future<void> _initializeOnlineServices() async {
-    // Use the reliable 'isOnline' status passed from main.dart
     if (!isOnline) {
       _log.info('Device is offline. Skipping online service initialization.');
       return;
     }
-
 
     _log.info('Device is online. Initializing online services...');
     adsController?.requestTheLatestConsentInformation();
@@ -182,7 +172,10 @@ class LevelModel with ChangeNotifier {
     gamesServicesController?.signedIn.then((_) => updateProgressFromCloud());
   }
 
-  Future<void> updateProgressFromCloud() async {}
+  Future<void> updateProgressFromCloud() async {
+    final cloudGameData = await gamesServicesController?.loadGame();
+    progressPersistence.saveLoadedLevels(cloudGameData);
+  }
 
   void showMessageFromMascot(String message) {
     variousTooltip = message;
@@ -190,21 +183,39 @@ class LevelModel with ChangeNotifier {
   }
 
   void _loadProgressAchievements() {
-    final jsonString = FirebaseRemoteConfig.instance.getString(C.progressAchievemetns);
+    final jsonString =
+        FirebaseRemoteConfig.instance.getString(C.progressAchievemetns);
     if (jsonString.isEmpty) {
       _log.warning('Progress achievements string from Remote Config is empty.');
       return;
     }
     try {
       final jsonList = jsonDecode(jsonString) as List<dynamic>;
-      progressAchievements = jsonList.map((e) => ProgressAchievement.fromMap(e)).toList();
-      _log.info(progressAchievements.length);
-      final yep = progressAchievements.where((a) => a.levelsToUnlock == 50 && a.packId == 'first-look');
-      for (var element in yep) {
-        _log.info(element);
-      }
+      progressAchievements =
+          jsonList.map((e) => ProgressAchievement.fromMap(e)).toList();
     } catch (e, st) {
-      _log.severe('Failed to parse progress achievements from Remote Config.', e, st);
+      _log.severe(
+          'Failed to parse progress achievements from Remote Config.', e, st);
+    }
+  }
+
+  void _unlockAchievement() async {
+    final achievementToUnlock = progressAchievements.firstWhereOrNull(
+        (achievement) =>
+            achievement.levelsToUnlock == currentLevel?.nr &&
+            achievement.packId == currentLevel?.packId);
+
+    if (achievementToUnlock == null) return;
+
+    final isRangeOfLevelsCompleted =
+        await progressPersistence.isRangeOfLevelsCompleted(
+            1, achievementToUnlock.levelsToUnlock, achievementToUnlock.packId);
+
+    if (isRangeOfLevelsCompleted) {
+      _log.info("Unlocking achievement: ${achievementToUnlock.name}");
+      gamesServicesController?.awardAchievement(
+          iOS: achievementToUnlock.achievementIdAppstore,
+          android: achievementToUnlock.achievementIdGoogleplay);
     }
   }
 
@@ -257,8 +268,8 @@ class LevelModel with ChangeNotifier {
     // from the local JSON first. This is much faster and works offline.
     if (FirebaseService.bundledPackAssets.containsKey(packId)) {
       try {
-        final String jsonString =
-            await rootBundle.loadString(FirebaseService.bundledPackAssets[packId]!);
+        final String jsonString = await rootBundle
+            .loadString(FirebaseService.bundledPackAssets[packId]!);
         final List<dynamic> jsonList = json.decode(jsonString);
         final nextLevelJson = jsonList.firstWhere(
             (level) => level['nr'] == nextLevelNr,
@@ -293,6 +304,7 @@ class LevelModel with ChangeNotifier {
     // If there's no next level, you could navigate back to the level select screen
     // or show a "Pack Complete" message. For now, it does nothing.
   }
+
   void askForReview(int levelNr) async {
     if (levelNr == 15 || levelNr == 115) {
       final InAppReview inAppReview = InAppReview.instance;
@@ -335,8 +347,7 @@ class LevelModel with ChangeNotifier {
     }
   }
 
-  Future<void> assignInitialLevelValues(
-      SWLevel level,
+  Future<void> assignInitialLevelValues(SWLevel level,
       {bool fromLevelSelect = false}) async {
     final minLoadingTime = Future.delayed(const Duration(milliseconds: 300));
 
@@ -388,24 +399,28 @@ class LevelModel with ChangeNotifier {
   /// If a "last played pack" is stored, it navigates directly to that
   /// pack's level list. Otherwise, it navigates to the main categories screen.
   Future<void> navigateToLevelSelection(BuildContext context) async {
-    _log.info('navigateToLevelSelection: Attempting to navigate to level selection.');
+    _log.info(
+        'navigateToLevelSelection: Attempting to navigate to level selection.');
     final lastPackId = await settingsPersistence.getLastPackId();
     _log.info('navigateToLevelSelection: Retrieved last pack ID: $lastPackId');
 
     if (lastPackId != null && lastPackId.isNotEmpty) {
       Pack? pack;
-      _log.info('navigateToLevelSelection: lastPackId is valid ($lastPackId). Attempting to get pack from Firebase.');
-      
+      _log.info(
+          'navigateToLevelSelection: lastPackId is valid ($lastPackId). Attempting to get pack from Firebase.');
+
       // Try to fetch the full Pack object from Firebase.
       // This will use cache if available and network is disabled/offline.
       pack = await firebaseService.getPack(lastPackId);
-      _log.info('navigateToLevelSelection: FirebaseService.getPack returned: ${pack?.id ?? "null"}');
+      _log.info(
+          'navigateToLevelSelection: FirebaseService.getPack returned: ${pack?.id ?? "null"}');
 
       if (pack == null) {
         // If the full Pack object couldn't be retrieved (e.g., offline and not in cache, or pack deleted),
         // create a minimal Pack object to still attempt navigation to the levels screen.
         // The levels screen will then try to load levels using this packId, potentially from cache/bundled.
-        _log.warning('navigateToLevelSelection: Could not retrieve full Pack object for ID: $lastPackId. Creating a placeholder Pack.');
+        _log.warning(
+            'navigateToLevelSelection: Could not retrieve full Pack object for ID: $lastPackId. Creating a placeholder Pack.');
         pack = Pack(
           id: lastPackId,
           name: 'Last Played Pack', // Generic name
@@ -418,60 +433,57 @@ class LevelModel with ChangeNotifier {
         );
       }
 
-      if (pack != null && context.mounted) {
-        _log.info('navigateToLevelSelection: Pack found. Navigating to /levels with pack: ${pack.id}');
+      if (context.mounted) {
+        _log.info(
+            'navigateToLevelSelection: Pack found. Navigating to /levels with pack: ${pack.id}');
         Navigator.of(context).pushNamed('/levels', arguments: pack);
         return;
       }
     }
     // If no pack is found or something goes wrong, default to the categories screen.
     if (context.mounted) {
-      _log.info('navigateToLevelSelection: No last pack found or pack not available. Navigating to /categories.');
+      _log.info(
+          'navigateToLevelSelection: No last pack found or pack not available. Navigating to /categories.');
       Navigator.of(context).pushNamed('/categories');
     }
   }
 
   void showAds(int levelWhereToShow) {
-    if (inAppPurchaseController?.hasEntitlement(C.entitlementNoAdBreaksId) == false) {
+    if (inAppPurchaseController?.hasEntitlement(C.entitlementNoAdBreaksId) ==
+        false) {
       adsController?.showInterstitialAd();
     }
-  }
-
-  void _setLevelCompleted() {
-    levelCompleted = true;
-    fieldModel.setLevelCompleted();
-    pictureModel.setLevelComplete();
-    notifyListeners();
   }
 
   void remove3Action() {
     fieldModel.remove3ArbitaryLetters();
     final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
+    audioController?.playSfx(SfxType.wrong);
     setLettersCanBeRemoved(canLettersBeRemovedMore);
   }
 
   void highlightAction() {
-    // Get the letters currently available in the field to be picked.
+    _log.info('HighlightAction with $audioController');
     final availableLetters = fieldModel.getAvailableLetters();
+    audioController?.playSfx(SfxType.rewardGiven);
     pictureModel.highlightLetter(availableLetters);
   }
 
   void showFactAction() {
-    // Ensure this action is only called for fact-type levels with an actual fact
     if (currentLevel == null || !currentLevel!.hasFactHint) {
-      _log.warning('showFactAction called for non-fact type level or no fact hint available.');
-      this.audioController?.playSfx(SfxType.notAllowed);
+      _log.warning(
+          'showFactAction called for non-fact type level or no fact hint available.');
+      audioController?.playSfx(SfxType.notAllowed);
       return;
     }
-    // Set the tooltip text to the fact hint. The FreudDialog will display it.
     variousTooltip = currentLevel!.factHint!;
+    audioController?.playSfx(SfxType.rewardGiven);
     notifyListeners();
-    // Play a rewarding sound effect.
-    this.audioController?.playSfx(SfxType.rewardGiven);
   }
 
   void manipulationAction() {
     manipulationEnabled = true;
+    audioController?.playSfx(SfxType.rewardGiven);
     notifyListeners();
   }
 
@@ -489,87 +501,134 @@ class LevelModel with ChangeNotifier {
         levelCompleted = true;
         notifyListeners(); // Notify listeners to update UI for the completed state.
       });
-
       _saveProgress();
-      checkForCompetitionWin();
-      logLevelEnd();
     }
     return win;
   }
-  
+
   Future<void> _saveProgress() async {
     if (currentLevel != null) {
-      await progressPersistence.saveCompletedLevel(currentLevel!.nr.toString(), currentLevel!.packId);
-      // After saving, notify listeners so UI can update progress indicators.
+      await progressPersistence.saveCompletedLevel(
+          currentLevel!.nr.toString(), currentLevel!.packId);
+      _unlockAchievement();
+      final completedLevels = await progressPersistence.getCompletedLevels();
+      gamesServicesController?.saveGame(completedLevels);
       notifyListeners();
     }
   }
 
-  void checkForCompetitionWin() {
-    _log.info("checkForCompetitionWin");
-    if (levelNr == CompetitionController.competitionGoalLevel) {
-      competitionController?.getCompetitionData().then((r) {
-        if (r?.finished == false) {
-          competitionController?.updatePlayerLevel(levelNr).then((result) {
-            if (result?.finished == true && result?.promoCode != "") {
-              competitionData = result;
-              notifyListeners();
-            }
-          });
-        }
-      });
-    }
-  }
-
-  Future<void> logLevelEnd() async {
-    if ([
-      1,
-      3,
-      10,
-      20,
-      30,
-      40,
-      50,
-      60,
-      70,
-      80,
-      90,
-      100,
-      110,
-      120,
-      130,
-      140,
-      150,
-      175,
-      200
-    ].contains(levelNr)) {
-      await analytics.logLevelEnd(
-        levelName: levelNr.toString(),
-      );
-    }
-  }
-
-  /// Asynchronously gets the number of completed levels for a category.
-  /// The UI should use a FutureBuilder to display this value.
   Future<int> getCompletedLevelsCountForCategory(String categoryId) async {
-    // 1. Get all packs that belong to this categoryId.
     final packsInCategory = await firebaseService.getPacks(categoryId);
     final packIds = packsInCategory.map((pack) => pack.id).toList();
-
-    // 2. Get the completed count for that list of pack IDs.
-    return await progressPersistence.getCompletedLevelsCountForCategory(packIds);
+    return await progressPersistence
+        .getCompletedLevelsCountForCategory(packIds);
   }
 
-  /// Asynchronously gets the number of completed levels for a pack.
-  /// The UI should use a FutureBuilder to display this value.
   Future<int> getCompletedLevelsCountForPack(String packId) async {
     return await progressPersistence.getCompletedLevelsCountForPack(packId);
   }
 
-  // Note: The old method names are kept for compatibility with existing UI code,
-  // but they now return Futures. The UI will need to be updated.
-  Future<int> getUnlockedLevelsCountForCategory(String categoryId) => getCompletedLevelsCountForCategory(categoryId);
-  Future<int> getUnlockedLevelsCountForPack(String packId) => getCompletedLevelsCountForPack(packId);
+  Future<int> getUnlockedLevelsCountForCategory(String categoryId) =>
+      getCompletedLevelsCountForCategory(categoryId);
+
+  Future<int> getUnlockedLevelsCountForPack(String packId) =>
+      getCompletedLevelsCountForPack(packId);
+
+  Future<void> setupFCMListeners() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission();
+
+    // This handles a tap on a notification when the app is TERMINATED
+    RemoteMessage? initialMessage = await messaging.getInitialMessage();
+    if (initialMessage != null) {
+      _log.info("Handling initial notification message.");
+      _handleNotificationTap(initialMessage);
+    }
+
+    // This handles a tap on a notification when the app is in the BACKGROUND
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+
+    // This handles messages that arrive when the app is in the FOREGROUND
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      try {
+        final packName = message.data['packId']
+            .toString()
+            .split('-')
+            .map((word) => word[0].toUpperCase() + word.substring(1))
+            .join(' ');
+        final levelNumber = message.data['levelNumber'].toString();
+        showMessageFromMascot('Level $levelNumber added to "$packName"');
+      } catch (e) {
+        showMessageFromMascot('New level added!');
+      }
+    });
+    await messaging.subscribeToTopic('sw_plus_levels');
+  }
+
+  void _handleNotificationTap(RemoteMessage message) {
+    _log.info("Notification tapped. Data: ${message.data}");
+    final packId = message.data['packId'];
+    final levelNumberString = message.data['levelNumber'];
+
+    if (packId != null && levelNumberString != null) {
+      final levelNumber = int.tryParse(levelNumberString);
+      if (levelNumber != null) {
+        _log.info("Setting pending level: Pack $packId, Level $levelNumber");
+        _pendingPackId = packId;
+        _pendingLevelNumber = levelNumber;
+        _log.info(
+            "Notification: _pendingPackId: $_pendingPackId, _pendingLevelNumber: $_pendingLevelNumber");
+        _loadPendingLevel();
+      } else {
+        _log.warning(
+            "Could not parse levelNumber from notification: $levelNumberString");
+      }
+    } else {
+      _log.warning("Notification data is missing 'packId' or 'levelNumber'.");
+    }
+  }
+
+  /// Checks if a level was requested from a notification and loads it.
+  Future<void> _loadPendingLevel() async {
+    if (_pendingPackId == null || _pendingLevelNumber == null) {
+      return;
+    }
+
+    if (currentLevel == null) {
+      _log.info(
+          'Pending level detected, but model is not ready. Will retry after init.');
+      return;
+    }
+
+    _log.info(
+        'Model is ready. Loading pending level: Pack $_pendingPackId, Level $_pendingLevelNumber');
+
+    try {
+      final String packId = _pendingPackId!;
+      final int levelNr = _pendingLevelNumber!;
+
+      _log.info("Notification: pack Id: $packId, Level Nr: $levelNr");
+
+      _pendingPackId = null;
+      _pendingLevelNumber = null;
+
+      final SWLevel? levelToLoad =
+          await firebaseService.getLevel(packId, levelNr);
+
+      _log.info("Notification: levelToLoad: $levelToLoad");
+
+      if (levelToLoad != null && levelToLoad.isEnabled) {
+        await loadLevelFromSelection(levelToLoad);
+        _log.info('Successfully loaded level from notification.');
+      } else {
+        _log.warning('Could not load pending level. Not found or not enabled.');
+        showMessageFromMascot('Could not load the requested level.');
+      }
+    } catch (e, st) {
+      _log.severe('Error loading pending level from notification', e, st);
+      showMessageFromMascot('An error occurred loading the level.');
+    }
+  }
 
   void attachLifecycleNotifier(
       ValueNotifier<AppLifecycleState> lifecycleNotifier) {
@@ -594,5 +653,4 @@ class LevelModel with ChangeNotifier {
     super.dispose();
     _lifecycleNotifier?.removeListener(_handleAppLifecycle);
   }
-  
 }

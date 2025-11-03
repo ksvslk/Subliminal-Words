@@ -14,7 +14,10 @@ class AdButton extends StatelessWidget {
   static final _log = Logger('AdButton');
 
   const AdButton(
-      {super.key, required this.entitlementId, this.overrideTitle, required this.onReward});
+      {super.key,
+      required this.entitlementId,
+      this.overrideTitle,
+      required this.onReward});
 
   final String entitlementId;
   final String? overrideTitle;
@@ -36,8 +39,7 @@ class AdButton extends StatelessWidget {
     // REMOVE_3 - Kui rohkem tähti enam ei saa eemaldada - DISABLED, Exhausted
     if (((entitlementId == C.entitlementManipulateId) &&
             manipulationExhausted) ||
-        ((entitlementId == C.entitlementRemove3Id) &&
-            !remove3Available)) {
+        ((entitlementId == C.entitlementRemove3Id) && !remove3Available)) {
       _log.log(Level.INFO, "Applied - $entitlementId");
       return (null, ('Applied', const Icon(Icons.done_rounded), false));
     }
@@ -48,8 +50,7 @@ class AdButton extends StatelessWidget {
     // ✔︎ Kui on ostetud või on ALL IN ostetud - ENABLED, Product name ✪
     if (iapController.hasEntitlement(entitlementId) ||
         iapController.hasAllAccess()) {
-      _log.log(Level.INFO,
-          "Purchased (or has all access)");
+      _log.log(Level.INFO, "Purchased (or has all access)");
       return (
         onReward,
         (overrideTitle ?? productName, const Icon(Icons.touch_app), false)
@@ -81,15 +82,24 @@ class AdButton extends StatelessWidget {
           };
       return (
         callback,
-        (overrideTitle ?? productName, const Icon(Icons.slideshow_rounded), true)
+        (
+          overrideTitle ?? productName,
+          const Icon(Icons.slideshow_rounded),
+          true
+        )
       );
     }
 
     // Fallback: If none of the above conditions are met, return a default disabled state.
-    _log.warning("AdButton: No matching state found for productId: $entitlementId. Returning default disabled state.");
+    _log.warning(
+        "AdButton: No matching state found for productId: $entitlementId. Returning default disabled state.");
     return (
       null, // No action
-      ('Unavailable', const Icon(Icons.error_outline), false) // Default disabled state
+      (
+        'Unavailable',
+        const Icon(Icons.error_outline),
+        false
+      ) // Default disabled state
     );
   }
 
@@ -98,8 +108,7 @@ class AdButton extends StatelessWidget {
     final audioController = context.read<AudioController>();
     return Consumer<AdsController>(builder: (context, adsController, _) {
       _log.log(Level.INFO, "Building AdsController");
-      return Consumer<MoneyController>(
-          builder: (context, iapController, _) {
+      return Consumer<MoneyController>(builder: (context, iapController, _) {
         _log.log(Level.INFO, "Building InAppPurchaseController");
         return Consumer<LevelModel>(builder: (context, levelModel, _) {
           const minFontSize = 2.0;
@@ -112,67 +121,72 @@ class AdButton extends StatelessWidget {
               levelModel.remove3Available,
               audioController,
               levelModel);
-          return levelModel.levelCompleted ? const SizedBox.expand() : Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2.0),
-              child: Card(
-                clipBehavior: Clip.hardEdge,
-                child: InkWell(
-                  splashColor:
-                      Theme.of(context).colorScheme.tertiary.withAlpha(30),
-                  onTap: !levelModel.levelCompleted ? callbackAndText.$1 : null,
-                  child: SizedBox(
-                    child: Padding(
-                      padding: const EdgeInsets.all(4.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          callbackAndText.$2.$3
-                              ? Flexible(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 2.0, vertical: 2.0),
-                                    decoration: BoxDecoration(
-                                      border: const Border.symmetric(),
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .tertiaryContainer,
-                                      borderRadius: BorderRadius.circular(8.0),
-                                    ),
-                                    child: AutoSizeText(
-                                      "WATCH AD",
-                                      style: TextStyle(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onTertiaryContainer,
+          return levelModel.levelCompleted
+              ? const SizedBox.expand()
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                  child: Card(
+                    clipBehavior: Clip.hardEdge,
+                    child: InkWell(
+                      splashColor:
+                          Theme.of(context).colorScheme.tertiary.withAlpha(30),
+                      onTap: !levelModel.levelCompleted
+                          ? callbackAndText.$1
+                          : null,
+                      child: SizedBox(
+                        child: Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              callbackAndText.$2.$3
+                                  ? Flexible(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 2.0, vertical: 2.0),
+                                        decoration: BoxDecoration(
+                                          border: const Border.symmetric(),
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .tertiaryContainer,
+                                          borderRadius:
+                                              BorderRadius.circular(8.0),
+                                        ),
+                                        child: AutoSizeText(
+                                          "WATCH AD",
+                                          style: TextStyle(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onTertiaryContainer,
+                                          ),
+                                          maxLines: 1,
+                                          textAlign: TextAlign.center,
+                                          minFontSize: minFontSize,
+                                        ),
                                       ),
+                                    )
+                                  : const SizedBox.shrink(),
+                              callbackAndText.$2.$3
+                                  ? const SizedBox.shrink()
+                                  : Flexible(
+                                      child: SizedBox.expand(
+                                        child: FittedBox(
+                                          child: callbackAndText.$2.$2,
+                                        ),
+                                      ),
+                                    ),
+                              Flexible(
+                                  child: AutoSizeText(callbackAndText.$2.$1,
                                       maxLines: 1,
                                       textAlign: TextAlign.center,
-                                      minFontSize: minFontSize,
-                                    ),
-                                  ),
-                                )
-                              : const SizedBox.shrink(),
-                          callbackAndText.$2.$3
-                              ? const SizedBox.shrink()
-                              : Flexible(
-                                  child: SizedBox.expand(
-                                    child: FittedBox(
-                                      child: callbackAndText.$2.$2,
-                                    ),
-                                  ),
-                                ),
-                          Flexible(
-                              child: AutoSizeText(callbackAndText.$2.$1,
-                                  maxLines: 1,
-                                  textAlign: TextAlign.center,
-                                  minFontSize: minFontSize)),
-                        ],
+                                      minFontSize: minFontSize)),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              ));
+                  ));
         });
       });
     });

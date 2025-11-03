@@ -18,18 +18,11 @@ class HintBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
 
-    final jsonString = FirebaseRemoteConfig.instance.getString(C.progressAchievemetns);
-    final list = jsonDecode(jsonString) as List<dynamic>;
-    list.forEach((element) {
-      final c = ProgressAchievement.fromMap(element);
-      print(c.name);
-    });
-
     return Consumer<LevelModel>(builder: (context, levelModel, child) {
       if (levelModel.networkRequestActive) {
         return const ActionButtonsPlaceholder();
       }
-
+      
       return Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [

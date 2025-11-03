@@ -133,6 +133,8 @@ class AudioController {
   }
 
   void playSfx(SfxType type) async {
+    _log.info('Now trying to play $type.');
+
     final soundsOn = _settings?.soundsOn.value ?? false;
     if (isSoundMutedNotifier.value ||
         !soundsOn ||
@@ -143,7 +145,7 @@ class AudioController {
     final sound = _sfxs[type];
     if (sound != null) {
       try {
-        final handle = await SoLoud.instance.play(sound);
+        final handle = await SoLoud.instance.play(sound, volume: 0.2);
         _activeSfxHandles.add(handle);
         sound.allInstancesFinished.first.then((_) {
           _activeSfxHandles.remove(handle);
@@ -185,7 +187,7 @@ class AudioController {
     _log.info('Playing music');
     _musicHandle = await SoLoud.instance.play(
       _musicSource!,
-      volume: 0.2,
+      volume: 0.1,
       looping: true,
     );
   }

@@ -13,7 +13,6 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/config/C.dart';
 import 'package:operation_hermes/controller/ads_controller.dart';
-import 'package:operation_hermes/controller/competition_controller.dart';
 import 'package:operation_hermes/controller/money_controller.dart';
 import 'package:operation_hermes/ui/screen/game_field_screen.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
@@ -22,7 +21,6 @@ import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/persistence/level_persistence.dart';
 import 'package:operation_hermes/persistence/progress_persistence.dart';
 import 'package:operation_hermes/persistence/local_storage_level_persistence.dart';
-import 'package:operation_hermes/controller/notification_controller.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 import 'dart:developer' as dev;
@@ -47,7 +45,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 Future<void> initPurchases() async {
-  await Purchases.setLogLevel(LogLevel.verbose);
+  await Purchases.setLogLevel(LogLevel.debug);
   PurchasesConfiguration configuration;
   if (Platform.isAndroid) {
     configuration = PurchasesConfiguration("goog_WYNwAFMjoBMCxqKqdGpqsWmqcft");
@@ -148,10 +146,7 @@ Future<void> main() async {
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
     inAppPurchaseController = MoneyController();
   }
-  CompetitionController? competitionController;
-  if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
-    competitionController = CompetitionController();
-  }
+
   FirebaseService firebaseService;
   firebaseService = FirebaseService();
 
@@ -165,7 +160,6 @@ Future<void> main() async {
         adsController: adsController,
         inAppPurchaseController: inAppPurchaseController,
         gamesServicesController: gamesServicesController,
-        competitionController: competitionController,
         firebaseService: firebaseService,
         isOnline: isOnline),
   );
@@ -187,7 +181,6 @@ class MyApp extends StatelessWidget {
   final AdsController? adsController;
   final MoneyController? inAppPurchaseController;
   final GamesServicesController? gamesServicesController;
-  final CompetitionController? competitionController;
   final FirebaseService firebaseService;
   final bool isOnline;
 
@@ -199,7 +192,6 @@ class MyApp extends StatelessWidget {
       required this.adsController,
       required this.inAppPurchaseController,
       required this.gamesServicesController,
-      required this.competitionController,
       required this.firebaseService,
       required this.isOnline});
 
@@ -217,7 +209,6 @@ class MyApp extends StatelessWidget {
         StreamProvider<List<Category>>(
           create: (context) =>
               context.read<FirebaseService>().getCategoriesStream(),
-          // 💡 2. ADD initialData. This is required.
           initialData: [],
         ),
         Provider<SettingsController>(
@@ -229,32 +220,11 @@ class MyApp extends StatelessWidget {
         Provider<GamesServicesController?>.value(
             value: gamesServicesController),
         ChangeNotifierProvider<AdsController?>.value(value: adsController),
-        Provider<CompetitionController?>.value(value: competitionController),
         ChangeNotifierProvider<MoneyController?>.value(
             value: inAppPurchaseController),
-        ChangeNotifierProxyProvider<ValueNotifier<AppLifecycleState>,
-            LevelModel>(
-          lazy: false,
-          create: (context) => LevelModel(
-              competitionController: competitionController,
-              gamesServicesController: gamesServicesController,
-              persistence: levelPersistence,
-              inAppPurchaseController: inAppPurchaseController,
-              adsController: adsController,
-              progressPersistence: context.read<ProgressPersistence>(),
-              settingsPersistence:
-                  context.read<SettingsController>().persistence,
-              firebaseService: firebaseService,
-              isOnline: isOnline,
-              audioController: null),
-          update: (BuildContext context,
-              ValueNotifier<AppLifecycleState> lifecycleNotifier,
-              LevelModel? levelModel) {
-            if (levelModel == null) throw ArgumentError.notNull();
-            levelModel.attachLifecycleNotifier(lifecycleNotifier);
-            return levelModel;
-          },
-        ),
+        
+        // --- AudioController Provider (MOVED UP) ---
+        // This must come BEFORE LevelModel, which depends on it.
         ProxyProvider2<SettingsController, ValueNotifier<AppLifecycleState>,
             AudioController>(
           // Ensures that the AudioController is created on startup,
@@ -270,14 +240,30 @@ class MyApp extends StatelessWidget {
           },
           dispose: (context, audio) => audio.dispose(),
         ),
-        ProxyProvider2<SettingsController, ValueNotifier<AppLifecycleState>,
-            NotificationController>(
+
+        // --- LevelModel Provider (MODIFIED) ---
+        // It now reads the AudioController from the context in its 'create' method.
+        ChangeNotifierProxyProvider<ValueNotifier<AppLifecycleState>,
+            LevelModel>(
           lazy: false,
-          create: (context) => NotificationController()..initialize(),
-          update: (context, settings, lifecycleNotifier, nc) {
-            if (nc == null) throw ArgumentError.notNull();
-            nc.attachSettings(settings);
-            return nc;
+          create: (context) => LevelModel(
+              gamesServicesController: gamesServicesController,
+              persistence: levelPersistence,
+              inAppPurchaseController: inAppPurchaseController,
+              adsController: adsController,
+              progressPersistence: context.read<ProgressPersistence>(),
+              settingsPersistence:
+                  context.read<SettingsController>().persistence,
+              firebaseService: firebaseService,
+              isOnline: isOnline,
+              // *** FIX: Read the AudioController from the context ***
+              audioController: context.read<AudioController>()),
+          update: (BuildContext context,
+              ValueNotifier<AppLifecycleState> lifecycleNotifier,
+              LevelModel? levelModel) {
+            if (levelModel == null) throw ArgumentError.notNull();
+            levelModel.attachLifecycleNotifier(lifecycleNotifier);
+            return levelModel;
           },
         ),
       ],

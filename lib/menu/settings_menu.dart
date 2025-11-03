@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:operation_hermes/ui/competition/info_competition_dialog.dart';
 import 'package:operation_hermes/ui/letter_box.dart';
 import 'package:operation_hermes/controller/games_services.dart';
 import 'package:operation_hermes/menu/credits_dialog.dart';
