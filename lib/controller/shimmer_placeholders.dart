@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
-/// A shimmer placeholder that mimics the layout of the hint buttons.
 class ActionButtonsPlaceholder extends StatelessWidget {
   const ActionButtonsPlaceholder({super.key});
 
@@ -28,7 +27,6 @@ class ActionButtonsPlaceholder extends StatelessWidget {
   }
 }
 
-/// A shimmer placeholder that mimics the layout of the letter input fields.
 class GameFieldPlaceholder extends StatelessWidget {
   const GameFieldPlaceholder({super.key});
 
@@ -42,17 +40,15 @@ class GameFieldPlaceholder extends StatelessWidget {
       child: Column(
         children: [
           const Flexible(child: FractionallySizedBox(heightFactor: 0.5)),
-          // Mimics the solution row
           Flexible(
             flex: 10,
-            child: _buildShimmerRow(7), // Average solution length
+            child: _buildShimmerRow(7),
           ),
           const Flexible(child: FractionallySizedBox(heightFactor: 0.5)),
-          // Mimics the two rows of selectable letters
           ...List.generate(2, (rowIndex) {
             return Flexible(
               flex: 10,
-              child: _buildShimmerRow(7), // Field rows always have 7 letters
+              child: _buildShimmerRow(7),
             );
           }),
         ],
@@ -60,7 +56,6 @@ class GameFieldPlaceholder extends StatelessWidget {
     );
   }
 
-  /// Builds a single shimmering row of boxes to represent letter fields.
   Widget _buildShimmerRow(int count) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -84,7 +79,6 @@ class GameFieldPlaceholder extends StatelessWidget {
   }
 }
 
-/// A shimmer placeholder that mimics a single level button in the level grid.
 class LevelButtonPlaceholder extends StatelessWidget {
   const LevelButtonPlaceholder({super.key});
 

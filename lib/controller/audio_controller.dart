@@ -12,13 +12,20 @@ class AudioController {
 
   SettingsController? _settings;
   ValueNotifier<AppLifecycleState>? _lifecycleNotifier;
-  final ValueNotifier<bool> isSoundMutedNotifier = ValueNotifier(false);
-  final ValueNotifier<bool> isMusicMutedNotifier = ValueNotifier(false);
+
+  /// A Notifier that broadcasts the system mute state to the rest of the app.
+  /// `true` if the system is muted (silent/vibrate), `false` otherwise.
+  final ValueNotifier<bool> isMutedNotifier = ValueNotifier(false);
+
   StreamSubscription? _ringerModeSubscription;
+
+  /// A mapping of sound effects to their preloaded audio sources.
   final Map<SfxType, AudioSource> _sfxs = {};
   final List<SoundHandle> _activeSfxHandles = [];
+
   AudioSource? _musicSource;
   SoundHandle? _musicHandle;
+
   AudioController();
 
   void attachLifecycleNotifier(
@@ -42,6 +49,8 @@ class AudioController {
     _settings = settingsController;
     settingsController.soundsOn.addListener(_soundsOnHandler);
     settingsController.musicOn.addListener(_musicOnHandler);
+    
+    // Ensure music state is correct on attachment
     _updateMusicState();
   }
 
@@ -91,16 +100,16 @@ class AudioController {
   }
 
   Future<void> _loadMusic() async {
+    // Dispose old source if it exists, to prevent memory leaks
     if (_musicSource != null) {
       SoLoud.instance.disposeSource(_musicSource!);
       _musicSource = null;
     }
 
     try {
-      _log.info('Loading music...');
       _musicSource = await SoLoud.instance.loadAsset(
         'assets/music/cubedcanada.wav',
-        mode: LoadMode.disk,
+        mode: LoadMode.disk, // Use disk mode for large files
       );
     } catch (e) {
       _log.severe('Failed to load music: $e');
@@ -112,17 +121,21 @@ class AudioController {
 
     try {
       final initialMode = await RealVolume.getRingerMode();
-      final isMuted = (initialMode == RingerMode.SILENT ||
-          initialMode == RingerMode.VIBRATE);
-      isSoundMutedNotifier.value = isMuted;
-      isMusicMutedNotifier.value = isMuted;
+      isMutedNotifier.value =
+          (initialMode == RingerMode.SILENT || initialMode == RingerMode.VIBRATE);
 
       _ringerModeSubscription = RealVolume.onRingerModeChanged.listen((mode) {
         final bool isMuted =
             (mode == RingerMode.SILENT || mode == RingerMode.VIBRATE);
-        isSoundMutedNotifier.value = isMuted;
-        isMusicMutedNotifier.value = isMuted;
+
+        if (isMutedNotifier.value != isMuted) {
+          isMutedNotifier.value = isMuted;
+        }
+
+        // Update music state (will stop it if muted)
         _updateMusicState();
+
+        // If the system is now muted, stop all currently playing sound effects.
         if (isMuted) {
           _stopAllSfx();
         }
@@ -133,23 +146,18 @@ class AudioController {
   }
 
   void playSfx(SfxType type) async {
-    _log.info('Now trying to play $type.');
-
     final soundsOn = _settings?.soundsOn.value ?? false;
-    if (isSoundMutedNotifier.value ||
-        !soundsOn ||
-        !SoLoud.instance.isInitialized) {
+
+    if (isMutedNotifier.value || !soundsOn || !SoLoud.instance.isInitialized) {
       return;
     }
 
     final sound = _sfxs[type];
     if (sound != null) {
       try {
-        final handle = await SoLoud.instance.play(sound, volume: 0.2);
+        final volume = soundTypeToVolume(type);
+        final handle = await SoLoud.instance.play(sound, volume: volume);
         _activeSfxHandles.add(handle);
-        sound.allInstancesFinished.first.then((_) {
-          _activeSfxHandles.remove(handle);
-        });
       } catch (e) {
         _log.severe('Error playing sound $type: $e');
       }
@@ -162,8 +170,9 @@ class AudioController {
     if (!SoLoud.instance.isInitialized) return;
 
     final musicOn = _settings?.musicOn.value ?? false;
-    final systemMuted = isMusicMutedNotifier.value;
+    final systemMuted = isMutedNotifier.value;
     final shouldBePlaying = musicOn && !systemMuted;
+
     final bool isCurrentlyPlaying = _musicHandle != null &&
         SoLoud.instance.getIsValidVoiceHandle(_musicHandle!);
 
@@ -183,46 +192,46 @@ class AudioController {
         return;
       }
     }
-
-    _log.info('Playing music');
     _musicHandle = await SoLoud.instance.play(
       _musicSource!,
       volume: 0.1,
-      looping: true,
+      looping: true
     );
   }
 
   void _stopMusic() {
-    if (_musicHandle != null &&
+    if (SoLoud.instance.isInitialized &&
+        _musicHandle != null &&
         SoLoud.instance.getIsValidVoiceHandle(_musicHandle!)) {
-      _log.info('Stopping music');
       SoLoud.instance.stop(_musicHandle!);
     }
     _musicHandle = null;
   }
 
   void _stopAllSfx() {
-    if (!SoLoud.instance.isInitialized) return;
-
-    for (final handle in _activeSfxHandles) {
-      if (SoLoud.instance.getIsValidVoiceHandle(handle)) {
-        SoLoud.instance.stop(handle);
+    if (SoLoud.instance.isInitialized) {
+      for (final handle in _activeSfxHandles) {
+        if (SoLoud.instance.getIsValidVoiceHandle(handle)) {
+          SoLoud.instance.stop(handle);
+        }
       }
     }
+    // ALWAYS clear the list of handles.
     _activeSfxHandles.clear();
   }
 
+  /// Stops all audio and disposes of all loaded sources.
   void _cleanupAudio() {
     if (!SoLoud.instance.isInitialized) return;
-    _log.info('Cleaning up audio: Stopping all sounds...');
+
     _stopMusic();
     _stopAllSfx();
-    _log.info('Disposing SFX sources...');
+
     for (final source in _sfxs.values) {
       SoLoud.instance.disposeSource(source);
     }
     _sfxs.clear();
-    _log.info('Disposing music source...');
+
     if (_musicSource != null) {
       SoLoud.instance.disposeSource(_musicSource!);
       _musicSource = null;
@@ -230,49 +239,24 @@ class AudioController {
   }
 
   void _handleAppLifecycle() async {
-    if (_lifecycleNotifier == null) return;
     switch (_lifecycleNotifier!.value) {
       case AppLifecycleState.paused:
-      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
+      case AppLifecycleState.inactive:
         if (SoLoud.instance.isInitialized) {
-          _log.info('App backgrounded, pausing audio.');
-          if (_musicHandle != null &&
-              SoLoud.instance.getIsValidVoiceHandle(_musicHandle!)) {
-            SoLoud.instance.setPause(_musicHandle!, true);
-          }
-          for (final handle in _activeSfxHandles) {
-            if (SoLoud.instance.getIsValidVoiceHandle(handle)) {
-              SoLoud.instance.setPause(handle, true);
-            }
-          }
+          SoLoud.instance.deinit();
         }
         break;
       case AppLifecycleState.resumed:
-        if (SoLoud.instance.isInitialized) {
-          _log.info('App resumed, unpausing audio.');
-          if (_musicHandle != null &&
-              SoLoud.instance.getIsValidVoiceHandle(_musicHandle!)) {
-            SoLoud.instance.setPause(_musicHandle!, false);
-          }
-          for (final handle in _activeSfxHandles) {
-            if (SoLoud.instance.getIsValidVoiceHandle(handle)) {
-              SoLoud.instance.setPause(handle, false);
-            }
-          }
-        } else {
-          _log.warning('Audio engine lost. Re-initializing...');
+        if (!SoLoud.instance.isInitialized) {
+          _log.info('App resumed, re-initializing audio...');
           await SoLoud.instance.init();
+          // Reload all assets
           await _loadAllSfx();
           await _loadMusic();
+          // Restore music state
           _updateMusicState();
-        }
-        break;
-      case AppLifecycleState.detached:
-        _log.info('App detaching, cleaning up audio.');
-        _cleanupAudio();
-        if (SoLoud.instance.isInitialized) {
-          SoLoud.instance.deinit();
         }
         break;
     }

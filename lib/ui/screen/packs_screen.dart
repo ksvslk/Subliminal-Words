@@ -1,20 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:logging/logging.dart';
 import 'package:operation_hermes/ui/firebase_image.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/data/category.dart';
 import 'package:operation_hermes/data/pack.dart';
-import 'package:operation_hermes/data/sw_level.dart'; // Import SWLevel
+import 'package:operation_hermes/data/sw_level.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'levels_screen.dart';
 
-/// Displays a list of packs for a given category.
-///
-/// This screen reads a Stream<List<Pack>> from a Provider and
-/// uses a StreamBuilder to display the data. This avoids the "loading flash".
 class PacksScreen extends StatelessWidget {
   final Category category;
   const PacksScreen({super.key, required this.category});
@@ -26,14 +21,11 @@ class PacksScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: Text(category.name)),
-      // 2. Use a StreamBuilder
       body: StreamBuilder<List<Pack>>(
         stream: packsStream,
         builder: (context, snapshot) {
-          
-          // 3. This check correctly handles the cached stream.
-          // It will only show 'waiting' if the cache is empty.
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -46,8 +38,7 @@ class PacksScreen extends StatelessWidget {
             return const Center(
                 child: Text('No packs found in this category.'));
           }
-          
-          // 4. We have data! Build the list.
+
           return ListView.builder(
             padding: const EdgeInsets.all(16.0),
             itemCount: packs.length,
@@ -62,7 +53,6 @@ class PacksScreen extends StatelessWidget {
   }
 }
 
-/// A single item in the pack list.
 class _PackListItem extends StatefulWidget {
   const _PackListItem({this.pack});
   final Pack? pack;
@@ -75,14 +65,11 @@ class _PackListItemState extends State<_PackListItem> {
   Widget build(BuildContext context) {
     final isPlaceholder = widget.pack == null;
     final colorScheme = Theme.of(context).colorScheme;
-
     const double itemHeight = 100.0;
-
     final formattedDate = isPlaceholder
         ? ''
         : DateFormat.yMMMd().format(widget.pack!.lastUpdated);
     final updateText = 'Last update $formattedDate';
-
     final secondaryTextStyle =
         TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12);
 
@@ -105,11 +92,10 @@ class _PackListItemState extends State<_PackListItem> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Shimmer placeholder
             Shimmer.fromColors(
-              baseColor: colorScheme.onSurface.withOpacity(0.1),
-              highlightColor: colorScheme.onSurface.withOpacity(0.2),
-              enabled: isPlaceholder, // Only shimmer if it's a placeholder
+              baseColor: colorScheme.onSurface.withAlpha(26),
+              highlightColor: colorScheme.onSurface.withAlpha(51),
+              enabled: isPlaceholder,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12.0),
                 child: Row(
@@ -158,27 +144,20 @@ class _PackListItemState extends State<_PackListItem> {
                 ),
               ),
             ),
-            // Actual content
             InkWell(
               onTap: () {
-                // --- THIS IS THE NAVIGATION LOGIC FOR LEVELS ---
                 if (!context.mounted || widget.pack == null) return;
-
                 final service = context.read<FirebaseService>();
 
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) =>
-                          // 💡 Use Provider<Stream<...>> for levels too
-                          Provider<Stream<List<SWLevel>>>(
+                      builder: (_) => Provider<Stream<List<SWLevel>>>(
                             create: (ctx) =>
                                 service.getLevelsStream(widget.pack!.id),
-                            // No initialData
                             child: LevelsScreen(pack: widget.pack!),
                           )),
                 );
-                // --- END OF NAVIGATION LOGIC ---
               },
               child: Container(
                 color: isPlaceholder
@@ -238,7 +217,6 @@ class _PackListItemState extends State<_PackListItem> {
   }
 }
 
-/// A widget that shows the user's progress for a specific pack.
 class _PackProgressIndicator extends StatefulWidget {
   final Pack pack;
   const _PackProgressIndicator({required this.pack});
@@ -250,7 +228,6 @@ class _PackProgressIndicator extends StatefulWidget {
 class _PackProgressIndicatorState extends State<_PackProgressIndicator> {
   late Future<int> _completedLevelsFuture;
 
-  static final _log = Logger('_PackProgressIndicatorState');
   @override
   void initState() {
     super.initState();
@@ -263,7 +240,6 @@ class _PackProgressIndicatorState extends State<_PackProgressIndicator> {
         levelModel.getUnlockedLevelsCountForPack(widget.pack.id);
   }
 
-  // Refetch if the widget is rebuilt with a different pack
   @override
   void didUpdateWidget(covariant _PackProgressIndicator oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -280,14 +256,9 @@ class _PackProgressIndicatorState extends State<_PackProgressIndicator> {
       future: _completedLevelsFuture,
       builder: (context, snapshot) {
         final completedLevels = snapshot.data ?? 0;
-        // 💡 Use the totalLevels from the widget, which came from the denormalized field
         final totalLevels = widget.pack.totalLevels;
         final double progress =
             (totalLevels > 0) ? completedLevels / totalLevels : 0.0;
-
-        _log.info('Pack "${widget.pack.name}": '
-            'calculating progress with completedLevels=$completedLevels, totalLevels=$totalLevels');
-
         if (totalLevels <= 0 ||
             snapshot.connectionState != ConnectionState.done) {
           return const SizedBox(width: 44, height: 44);
@@ -302,14 +273,14 @@ class _PackProgressIndicatorState extends State<_PackProgressIndicator> {
               CircularProgressIndicator(
                 value: progress,
                 strokeWidth: 3.0,
-                backgroundColor: colorScheme.primary.withOpacity(0.2),
+                backgroundColor: colorScheme.primary.withAlpha(51),
                 valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
               ),
               Container(
                 width: 22,
                 height: 22,
                 decoration: BoxDecoration(
-                  color: colorScheme.secondaryContainer.withOpacity(0.7),
+                  color: colorScheme.secondaryContainer.withAlpha(179),
                   shape: BoxShape.circle,
                 ),
               ),

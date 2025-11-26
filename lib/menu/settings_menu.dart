@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:operation_hermes/controller/money_controller.dart';
 import 'package:operation_hermes/ui/letter_box.dart';
 import 'package:operation_hermes/controller/games_services.dart';
 import 'package:operation_hermes/menu/credits_dialog.dart';
 import 'package:operation_hermes/menu/licenses_dialog.dart';
-import 'package:operation_hermes/ui/screen/categories_screen.dart';
 import 'package:operation_hermes/controller/settings_controller.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,30 +12,26 @@ import 'dart:io';
 enum MenuItem {
   achievements,
   theme,
-  faces,
+  about,
   sound,
   music,
-  about
+  restoreXpurchases,
+  otherXgames,
 }
 
-enum AboutSubMenuItem {
-  follow,
-  licenses,
-  credits,
-  privacy,
-}
-
+enum AboutSubMenuItem { follow, licenses, credits, privacy, eula }
 enum ThemeSubMenuItem { red, yellow, green, blue, purple }
 
-Uri _getFeedbackUri() {
+Uri _getPortfolioUri() {
   return Platform.isAndroid
       ? Uri.parse(
-          'https://play.google.com/store/apps/details?id=com.indest.subliminalfaces')
-      : Uri.parse('https://apps.apple.com/app/subliminal-faces/id6476108606');
+          'https://play.google.com/store/apps/dev?id=7030085917427251773')
+      : Uri.parse('itms-apps://itunes.apple.com/developer/indest/id1471549991');
 }
 
 final Uri _followUri = Uri.parse('https://twitter.com/IndestGames');
 final Uri _privacyUri = Uri.parse('https://indest.ee/privacy-policy/');
+final Uri _eulaUri = Uri.parse('https://indest.ee/eula');
 
 Future<void> _launchUrl(Uri url) async {
   if (!await launchUrl(url)) {
@@ -48,7 +44,7 @@ MenuItemButton getMenuButton(Color color, SettingsController settings) {
       onPressed: () {
         settings.changeSeedColor(color);
       },
-      child: settings.seedColor.value == color.value
+      child: settings.seedColor.value == color.toARGB32()
           ? CircleAvatar(
               backgroundColor: color,
               child:
@@ -57,7 +53,7 @@ MenuItemButton getMenuButton(Color color, SettingsController settings) {
 }
 
 class SettingsMenu extends StatefulWidget {
-  const SettingsMenu({Key? key}) : super(key: key);
+  const SettingsMenu({super.key});
 
   @override
   State<SettingsMenu> createState() => _SettingsMenuState();
@@ -68,6 +64,7 @@ class _SettingsMenuState extends State<SettingsMenu> {
   Widget build(BuildContext mainContext) {
     final settings = mainContext.read<SettingsController>();
     final gamesServices = mainContext.read<GamesServicesController>();
+    final moneyController = mainContext.read<MoneyController>();
 
     return MenuAnchor(
       builder:
@@ -121,14 +118,14 @@ class _SettingsMenuState extends State<SettingsMenu> {
                     child: Text(item.name),
                   );
                 });
-          case MenuItem.faces:
+          case MenuItem.otherXgames:
             return MenuItemButton(
                 onPressed: () {
-                  final feedbackUri = _getFeedbackUri();
+                  final feedbackUri = _getPortfolioUri();
                   _launchUrl(feedbackUri);
                 },
                 leadingIcon: const Icon(Icons.games_outlined),
-                child: Text(item.name));
+                child: Text(item.name.replaceFirst("X", " ")));
           case MenuItem.sound:
             return ValueListenableBuilder(
                 valueListenable: settings.soundsOn,
@@ -137,11 +134,12 @@ class _SettingsMenuState extends State<SettingsMenu> {
                       onPressed: () {},
                       closeOnActivate: false,
                       leadingIcon: const Icon(Icons.music_note_outlined),
-                      child: Switch.adaptive(
+                      trailingIcon: Switch.adaptive(
                           onChanged: (newValue) {
                             settings.toggleSoundsOn();
                           },
-                          value: value));
+                          value: value),
+                      child: Text(item.name));
                 });
           case MenuItem.music:
             return ValueListenableBuilder(
@@ -151,11 +149,12 @@ class _SettingsMenuState extends State<SettingsMenu> {
                       onPressed: () {},
                       closeOnActivate: false,
                       leadingIcon: const Icon(Icons.speaker_outlined),
-                      child: Switch.adaptive(
+                      trailingIcon: Switch.adaptive(
                           onChanged: (newValue) {
                             settings.toggleMusicOn();
                           },
-                          value: value));
+                          value: value),
+                      child: Text(item.name));
                 });
           case MenuItem.about:
             return SubmenuButton(
@@ -197,13 +196,25 @@ class _SettingsMenuState extends State<SettingsMenu> {
                           _launchUrl(_privacyUri);
                         },
                         child: Text(item.name));
+                  case AboutSubMenuItem.eula:
+                    return MenuItemButton(
+                        onPressed: () {
+                          (Platform.isIOS || Platform.isMacOS) ? _launchUrl(_eulaUri) : _launchUrl(Uri.parse('https://www.indest.ee'));
+                        },
+                        child: Text((Platform.isIOS || Platform.isMacOS) ? item.name : "developer"));
                 }
               }).toList(),
               child: Text(item.name),
             );
+          case MenuItem.restoreXpurchases:
+            return MenuItemButton(
+                onPressed: () {
+                  moneyController.restorePurchases(context);
+                },
+                leadingIcon: const Icon(Icons.restore),
+                child: Text(item.name.replaceFirst("X", " ")));
         }
       }).toList(),
     );
   }
 }
-

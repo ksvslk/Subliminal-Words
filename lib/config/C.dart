@@ -1,6 +1,6 @@
-// Purchase store ids
-
 import 'dart:ui';
+
+import 'package:flutter/foundation.dart';
 
 class C {
   static const String entitlementPropassId = 'propass';
@@ -9,13 +9,9 @@ class C {
   static const String entitlementManipulateId = 'manipulate';
   static const String entitlementHighlightId = 'highlight_fact';
   static const String entitlementNoAdBreaksId = 'no_ad_breaks';
-
   static const String progressAchievemetns = 'progress_achievements';
-
-  static const Color DEFAULT_THEME_COLOR = Color.fromARGB(255, 0, 255, 0);
-
-  static const String APPSTORE_LINK = "https://apps.apple.com/app/subliminal-words/id6468366578";
-  static const String GOOGLE_PLAY_LINK = "https://play.google.com/store/apps/details?id=com.indest.subliminalwords";
-
+  static const String adsDisplayLevelLimit = 'ads_display_level_limit';
+  static const Color defaultThemeColor = Color.fromARGB(255, 0, 255, 0);
+  final ValueNotifier<bool> isAdShowingNotifier = ValueNotifier(false); 
 
 }

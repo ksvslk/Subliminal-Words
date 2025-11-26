@@ -1,10 +1,8 @@
 import 'package:auto_size_text/auto_size_text.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/config/C.dart';
-import 'package:operation_hermes/config/sounds.dart';
 import 'package:operation_hermes/controller/ads_controller.dart';
 import 'package:operation_hermes/controller/audio_controller.dart';
 import 'package:operation_hermes/controller/money_controller.dart';
@@ -40,7 +38,6 @@ class AdButton extends StatelessWidget {
     if (((entitlementId == C.entitlementManipulateId) &&
             manipulationExhausted) ||
         ((entitlementId == C.entitlementRemove3Id) && !remove3Available)) {
-      _log.log(Level.INFO, "Applied - $entitlementId");
       return (null, ('Applied', const Icon(Icons.done_rounded), false));
     }
 
@@ -50,7 +47,6 @@ class AdButton extends StatelessWidget {
     // ✔︎ Kui on ostetud või on ALL IN ostetud - ENABLED, Product name ✪
     if (iapController.hasEntitlement(entitlementId) ||
         iapController.hasAllAccess()) {
-      _log.log(Level.INFO, "Purchased (or has all access)");
       return (
         onReward,
         (overrideTitle ?? productName, const Icon(Icons.touch_app), false)
@@ -60,7 +56,6 @@ class AdButton extends StatelessWidget {
     // ✔︎ Kui pole ostetud ja kui pole reklaami näidata - DISABLED, product name
     if (iapController.hasEntitlement(entitlementId) == false &&
         !adsController.isAdAvailable()) {
-      _log.log(Level.INFO, "No purchase, no ads - $entitlementId");
       return (
         null,
         (
@@ -74,7 +69,6 @@ class AdButton extends StatelessWidget {
     // ✔︎ Kui pole ostetud ja ON reklaami näidata - ENABLED, Product name ▷
     if (iapController.hasEntitlement(entitlementId) == false &&
         adsController.isAdAvailable()) {
-      _log.log(Level.INFO, "No purchase, ADS available! - $entitlementId");
       callback() => {
             adsController.showRewardedAd(() {
               onReward();
@@ -107,12 +101,9 @@ class AdButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final audioController = context.read<AudioController>();
     return Consumer<AdsController>(builder: (context, adsController, _) {
-      _log.log(Level.INFO, "Building AdsController");
       return Consumer<MoneyController>(builder: (context, iapController, _) {
-        _log.log(Level.INFO, "Building InAppPurchaseController");
         return Consumer<LevelModel>(builder: (context, levelModel, _) {
           const minFontSize = 2.0;
-          _log.log(Level.INFO, "Building LevelModel");
           final callbackAndText = getCallbackAndText(
               context,
               iapController,

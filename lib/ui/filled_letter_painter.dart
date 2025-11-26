@@ -28,15 +28,11 @@ class FilledLetterPainter extends CustomPainter {
 
     // Glow
     final Paint neonGlow = Paint()
-      ..color = secondColor  // Adjust opacity for desired glow intensity
+      ..color = secondColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 8.0  // Adjust for desired glow spread
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0);  // Blur to soften the glow edges
-
-    // Draw the glow first
+      ..strokeWidth = 8.0
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0);
     canvas.drawPath(path, neonGlow);
-
-    // Draw the main stroke/path on top of the glow
     canvas.drawPath(path, neonBase);
   }
 }

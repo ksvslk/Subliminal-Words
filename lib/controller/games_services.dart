@@ -54,7 +54,6 @@ class GamesServicesController {
   }
 
   Future<UserCredential?> _getPlatformCredential() async {
-    
     try {
       if (Platform.isAndroid) {
           final authCode = await GameAuth.getAuthCode(
@@ -81,7 +80,7 @@ class GamesServicesController {
     try {
       await FirebaseAuth.instance.signInAnonymously();
     } catch (e) {
-      _log.log(Level.WARNING, 'Anonymous authentication failed: $e');
+      _log.warning('Anonymous authentication failed: $e');
     }
   }
 
@@ -115,7 +114,6 @@ class GamesServicesController {
   Future<void> saveGame(Set<String> completedLevels) async {
     if (await signedIn) {
       try {
-        _log.severe('Saving game with levels count: ${completedLevels.length}');
         final data = jsonEncode(completedLevels.toList());
         await gs.SaveGame.saveGame(data: data, name: saveGameName);
       } catch (e) {
@@ -133,13 +131,12 @@ class GamesServicesController {
           if (result != null) {
             final List<dynamic> completedLevels = jsonDecode(result);
             final loadedCompletedLevels = completedLevels.map((a) => a.toString()).toSet();
-            _log.severe('Loaded game with levels count: ${loadedCompletedLevels.length}');
             return loadedCompletedLevels;
           }
-          _log.log(Level.WARNING, "Could not load game.");
+          _log.warning("Could not load game.");
           return null;
         } catch (e) {
-          _log.log(Level.SEVERE, 'Could not load game: $e');
+          _log.warning('Could not load game: $e');
           return null;
         }
       }

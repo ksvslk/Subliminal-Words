@@ -1,4 +1,3 @@
-/// A class that handles saving and retrieving app settings.
 abstract class SettingsPersistence {
   Future<bool> getMusicOn();
   Future<void> saveMusicOn(bool value);

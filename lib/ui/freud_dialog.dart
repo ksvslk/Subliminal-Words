@@ -1,23 +1,21 @@
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:flutter/material.dart';
-import 'package:logging/logging.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:provider/provider.dart';
 
 class FreudDialog extends StatelessWidget {
   const FreudDialog({super.key});
-  static final _log = Logger('FreudDialog');
 
   @override
   Widget build(BuildContext context) {
     final levelModel = context.watch<LevelModel>();
     final currentTime = DateTime.now();
-    final isChristmas = (currentTime.month == 12 && currentTime.day >= 1) || (currentTime.month == 1 && currentTime.day <= 6);
+    final isChristmas = (currentTime.month == 12 && currentTime.day >= 1) ||
+        (currentTime.month == 1 && currentTime.day <= 6);
 
     return ChangeNotifierProvider<LevelModel>.value(
       value: levelModel,
       child: Consumer<LevelModel>(builder: (context, levelModel, child) {
-
         var showTooltip = (false, "");
 
         if (levelModel.variousTooltip.isNotEmpty) {
@@ -35,7 +33,7 @@ class FreudDialog extends StatelessWidget {
             ? GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onTap: () {
-                  if (levelModel.levelCompleted && levelModel.levelNr < 100) {
+                  if (levelModel.levelCompleted) {
                     levelModel.nextLevel();
                   } else {
                     levelModel.hideAllPossibleTooltips();
@@ -44,18 +42,13 @@ class FreudDialog extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      begin:
-                          Alignment.center, // Start the gradient from the top
-                      end: Alignment
-                          .bottomCenter, // End the gradient at the bottom
+                      begin: Alignment.center,
+                      end: Alignment.bottomCenter,
                       colors: [
+                        Theme.of(context).colorScheme.surface.withAlpha(0),
                         Theme.of(context)
                             .colorScheme
-                            .background
-                            .withOpacity(0.0), // The top color of the gradientf
-                        Theme.of(context)
-                            .colorScheme
-                            .background, // The bottom color of the gradient
+                            .surface, // The bottom color of the gradient
                       ],
                     ),
                   ),
@@ -114,7 +107,9 @@ class FreudDialog extends StatelessWidget {
                           child: Container(
                             margin: const EdgeInsets.all(8.0),
                             child: Image.asset(
-                              isChristmas ? 'assets/other/freud200_winter.png' : 'assets/other/freud200.png',
+                              isChristmas
+                                  ? 'assets/other/freud200_winter.png'
+                                  : 'assets/other/freud200.png',
                               fit: BoxFit.scaleDown,
                             ),
                           ),

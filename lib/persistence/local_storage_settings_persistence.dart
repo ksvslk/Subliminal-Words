@@ -28,7 +28,7 @@ class LocalStorageSettingsPersistence extends SettingsPersistence {
   @override
   Future<int> getSeedColor() async {
     final prefs = await instanceFuture;
-    return prefs.getInt('seedColor') ?? C.DEFAULT_THEME_COLOR.value;
+    return prefs.getInt('seedColor') ?? C.defaultThemeColor.toARGB32();
   }
 
   // SET

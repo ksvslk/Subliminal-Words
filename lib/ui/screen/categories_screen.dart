@@ -3,39 +3,24 @@ import 'package:operation_hermes/ui/firebase_image.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/data/category.dart';
-import 'package:operation_hermes/data/pack.dart'; // Import Pack
+import 'package:operation_hermes/data/pack.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'packs_screen.dart';
-import 'package:logging/logging.dart'; // Import the logging package
 
-/// Displays a list of categories.
-///
-/// This screen reads the list of categories from a global [StreamProvider]
-/// and automatically updates when the data changes.
 class CategoriesScreen extends StatelessWidget {
   const CategoriesScreen({super.key});
-  
-  static final _log = Logger('CategoriesScreen');
 
   @override
   Widget build(BuildContext context) {
-    // This is CORRECT. It watches the value from the global StreamProvider.
     final categories = context.watch<List<Category>>();
-    _log.info('CategoriesScreen build called.');
 
     return Scaffold(
       appBar: AppBar(title: const Text('Categories')),
       body: () {
-        // `initialData: []` in main.dart means `categories`
-        // will be an empty list while loading for the first time.
         if (categories.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
-
-        // We have data! Just build the list.
-        _log.info(
-            'CategoriesStream: Rebuilt with ${categories.length} categories.');
         return ListView.builder(
           padding: const EdgeInsets.all(16.0),
           itemCount: categories.length,
@@ -44,14 +29,12 @@ class CategoriesScreen extends StatelessWidget {
             return _CategoryListItem(category: category);
           },
         );
-      }(), // Using () runs this logic block
+      }(),
     );
   }
 }
 
-/// A single item in the category list.
 class _CategoryListItem extends StatefulWidget {
-  
   const _CategoryListItem({this.category});
   final Category? category;
 
@@ -74,103 +57,90 @@ class _CategoryListItemState extends State<_CategoryListItem> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Shimmer as a base placeholder
             Shimmer.fromColors(
-              baseColor: colorScheme.onSurface.withOpacity(0.1),
-              highlightColor: colorScheme.onSurface.withOpacity(0.2),
+              baseColor: colorScheme.onSurface.withAlpha(26),
+              highlightColor: colorScheme.onSurface.withAlpha(51),
               child: Container(color: colorScheme.surfaceContainerHigh),
             ),
             InkWell(
-                onTap: () {
-                  // 💡 --- THIS IS THE FIX FOR NAVIGATION ---
-                  if (!context.mounted || widget.category == null) return;
-                  
-                  final service = context.read<FirebaseService>();
+              onTap: () {
+                if (!context.mounted || widget.category == null) return;
+                final service = context.read<FirebaseService>();
 
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) =>
-                        // 1. Use Provider<Stream<...>> to provide the stream object
-                        Provider<Stream<List<Pack>>>(
-                          create: (ctx) => service.getPacksStream(widget.category!.id),
-                          // 2. No initialData
-                          child: PacksScreen(category: widget.category!),
-                        )
-                    ),
-                  );
-                  // 💡 --- END OF FIX ---
-                },
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Layer 1 (Bottom): The solid background color that fills the card.
-                    Container(
-                      color: colorScheme.tertiaryContainer,
-                    ),
-
-                    // Layer 2a: The image
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: ShaderMask(
-                        shaderCallback: (bounds) {
-                          return LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            colors: [
-                              colorScheme.surface, 
-                              colorScheme.surface.withOpacity(0.0),
-                            ],
-                            stops: const [ 0.5, 1.0 ],
-                          ).createShader(bounds);
-                        },
-                        blendMode: BlendMode.dstIn,
-                        child: FirebaseImage(
-                          storagePath: widget.category?.thumbnailUrl ?? '',
-                          fit: BoxFit.fitHeight,
-                          alignment: Alignment.centerLeft,
-                        ),
-                      ),
-                    ),
-
-                    // Layer 2b: Extended gradient
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => Provider<Stream<List<Pack>>>(
+                            create: (ctx) =>
+                                service.getPacksStream(widget.category!.id),
+                            child: PacksScreen(category: widget.category!),
+                          )),
+                );
+              },
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(
+                    color: colorScheme.tertiaryContainer,
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: ShaderMask(
+                      shaderCallback: (bounds) {
+                        return LinearGradient(
                           begin: Alignment.centerLeft,
-                          end: Alignment.topCenter,
+                          end: Alignment.centerRight,
                           colors: [
-                            colorScheme.tertiaryContainer.withAlpha(0),
-                            colorScheme.primaryContainer,
+                            colorScheme.surface,
+                            colorScheme.surface.withAlpha(0),
                           ],
-                          stops: const [ 0.4, 1.0 ],
-                        ),
+                          stops: const [0.5, 1.0],
+                        ).createShader(bounds);
+                      },
+                      blendMode: BlendMode.dstIn,
+                      child: FirebaseImage(
+                        storagePath: widget.category?.imagePath ?? '',
+                        fit: BoxFit.fitHeight,
+                        alignment: Alignment.centerLeft,
                       ),
                     ),
-
-                    // Layer 3 (Top): Your UI.
-                    GridTile(
-                      header: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Align(
-                          alignment: Alignment.topRight,
-                          child: isPlaceholder
-                              ? const SizedBox.shrink()
-                              : _CategoryProgressIndicator(
-                                  category: widget.category!),
-                        ),
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.topCenter,
+                        colors: [
+                          colorScheme.tertiaryContainer.withAlpha(0),
+                          colorScheme.primaryContainer,
+                        ],
+                        stops: const [0.4, 1.0],
                       ),
-                      footer: GridTileBar(
-                        backgroundColor: colorScheme.surface.withAlpha(150),
-                        title: Text(widget.category?.name ?? '',
-                            style: TextStyle(
-                                color: colorScheme.onSurface,
-                                fontWeight: FontWeight.bold)),
-                      ),
-                      child: Container(),
                     ),
-                  ],
-                ),
+                  ),
+                  GridTile(
+                    header: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Align(
+                        alignment: Alignment.topRight,
+                        child: isPlaceholder
+                            ? const SizedBox.shrink()
+                            : _CategoryProgressIndicator(
+                                category: widget.category!),
+                      ),
+                    ),
+                    footer: GridTileBar(
+                      backgroundColor: colorScheme.surface.withAlpha(150),
+                      title: Text(widget.category?.name ?? '',
+                          style: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                    child: Container(),
+                  ),
+                ],
               ),
+            ),
           ],
         ),
       ),
@@ -178,7 +148,6 @@ class _CategoryListItemState extends State<_CategoryListItem> {
   }
 }
 
-/// A widget that shows the user's progress for a specific category.
 class _CategoryProgressIndicator extends StatefulWidget {
   final Category category;
   const _CategoryProgressIndicator({required this.category});
@@ -191,14 +160,13 @@ class _CategoryProgressIndicator extends StatefulWidget {
 class _CategoryProgressIndicatorState
     extends State<_CategoryProgressIndicator> {
   late Future<int> _completedLevelsFuture;
-  static final _log = Logger('_CategoryProgressIndicatorState');
 
   @override
   void initState() {
     super.initState();
     _fetchCompletedLevels();
   }
-  
+
   void _fetchCompletedLevels() {
     final levelModel = context.read<LevelModel>();
     _completedLevelsFuture =
@@ -221,14 +189,9 @@ class _CategoryProgressIndicatorState
       future: _completedLevelsFuture,
       builder: (context, snapshot) {
         final completedLevels = snapshot.data ?? 0;
-        // 💡 Use the totalLevels from the widget, which came from the denormalized field
-        final totalLevels = widget.category.totalLevels; 
+        final totalLevels = widget.category.totalLevels;
         final double progress =
             (totalLevels > 0) ? completedLevels / totalLevels : 0.0;
-
-        _log.info('Category "${widget.category.name}": '
-            'calculating progress with completedLevels=$completedLevels, totalLevels=$totalLevels');
-
 
         return SizedBox(
           width: 44,
@@ -239,14 +202,14 @@ class _CategoryProgressIndicatorState
               CircularProgressIndicator(
                 value: progress < 0 ? 0.0 : progress,
                 strokeWidth: 3.0,
-                backgroundColor: colorScheme.primary.withOpacity(0.2),
+                backgroundColor: colorScheme.primary.withAlpha(51),
                 valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
               ),
               Container(
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                  color: colorScheme.tertiaryContainer.withOpacity(0.7),
+                  color: colorScheme.tertiaryContainer.withAlpha(179),
                   shape: BoxShape.circle,
                 ),
               ),

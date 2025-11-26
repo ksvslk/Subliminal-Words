@@ -1,4 +1,3 @@
-import 'package:logging/logging.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:operation_hermes/persistence/level_persistence.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,8 +7,6 @@ const maxLevel = "MAX_LEVEL";
 const openLevelSelectQuest = "OPEN_QUEST_TAB";
 
 class LocalStorageLevelPersistence extends LevelPersistence {
-  
-  static final _log = Logger('LocalStorageLevelPersistence');
 
   final Future<SharedPreferences> instanceFuture =
       SharedPreferences.getInstance();

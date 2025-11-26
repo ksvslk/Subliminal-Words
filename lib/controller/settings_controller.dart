@@ -7,26 +7,17 @@ import 'package:operation_hermes/config/C.dart';
 
 import '../persistence/settings_persistence.dart';
 
-/// An class that holds settings like [playerName] or [musicOn],
-/// and saves them to an injected persistence store.
 class SettingsController {
   final SettingsPersistence _persistence;
 
-  /// The persistence store for settings.
   SettingsPersistence get persistence => _persistence;
-
-  /// Whether or not the sound is on at all. This overrides both music
-  /// and sound.
-
   ValueNotifier<bool> soundsOn = ValueNotifier(false);
   ValueNotifier<bool> musicOn = ValueNotifier(false);
-  ValueNotifier<int> seedColor = ValueNotifier(C.DEFAULT_THEME_COLOR.value);
+  ValueNotifier<int> seedColor = ValueNotifier(C.defaultThemeColor.toARGB32());
 
-  /// Creates a new instance of [SettingsController] backed by [persistence].
   SettingsController({required SettingsPersistence persistence})
       : _persistence = persistence;
 
-  /// Asynchronously loads values from the injected persistence store.
   Future<void> loadStateFromPersistence() async {
     await Future.wait([
       _persistence.getSoundsOn().then((value) => soundsOn.value = value),
@@ -36,7 +27,7 @@ class SettingsController {
   }
 
   void changeSeedColor(Color color) {
-    seedColor.value = color.value;
+    seedColor.value = color.toARGB32();
     _persistence.saveSeedColor(seedColor.value);
   }
 

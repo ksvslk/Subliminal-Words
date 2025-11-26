@@ -16,25 +16,21 @@ class _LetterBoxState extends State<LetterBox> {
 
   @override
   Widget build(BuildContext context) {
-    //print("Building ${widget.data.letter}");
     Color getContainerColor() {
       switch (widget.data.state) {
         case LetterBoxState.solutionSlot:
           return Theme.of(context).colorScheme.secondaryContainer
           .blendWith(Theme.of(context).colorScheme.surface, 0.75);
-        //.withOpacity(0.25);
         case LetterBoxState.solutionPick:
-          return Theme.of(context).colorScheme.surfaceVariant;
+          return Theme.of(context).colorScheme.surfaceContainerHighest;
         case LetterBoxState.fieldPick:
           return Theme.of(context).colorScheme.primaryContainer;
         case LetterBoxState.fieldSlot:
           return Theme.of(context).colorScheme.secondaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.25);
-        //.withOpacity(0.25);
         case LetterBoxState.locked:
           return Theme.of(context).colorScheme.tertiaryContainer;
         case LetterBoxState.removed:
           return Theme.of(context).colorScheme.secondaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.9);
-        //.withOpacity(0.1);
       }
     }
 
@@ -42,21 +38,16 @@ class _LetterBoxState extends State<LetterBox> {
       switch (widget.data.state) {
         case LetterBoxState.solutionSlot:
           return Theme.of(context).colorScheme.onSecondaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.5);
-        //.withOpacity(0.5);
         case LetterBoxState.solutionPick:
           return Theme.of(context).colorScheme.secondary;
         case LetterBoxState.fieldPick:
           return Theme.of(context).colorScheme.secondaryContainer.blendWith(Theme.of(context).colorScheme.primary, 0.5);
-        //.withOpacity(0.5);
         case LetterBoxState.fieldSlot:
           return Theme.of(context).colorScheme.onSecondaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.5);
-        //.withOpacity(0.5);
         case LetterBoxState.removed:
           return Theme.of(context).colorScheme.onSurface.blendWith(Theme.of(context).colorScheme.surface, 0.9);
-        //.withOpacity(0.1);
         case LetterBoxState.locked:
           return Theme.of(context).colorScheme.onTertiaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.5);
-        //.withOpacity(0.5);
       }
     }
 
@@ -74,7 +65,6 @@ class _LetterBoxState extends State<LetterBox> {
           return Theme.of(context).colorScheme.onTertiaryContainer;
         case LetterBoxState.removed:
           return Theme.of(context).colorScheme.onSecondaryContainer.blendWith(Theme.of(context).colorScheme.surface, 0.9);
-        //.withOpacity(0.1);
       }
     }
 

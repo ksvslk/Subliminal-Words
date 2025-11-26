@@ -1,4 +1,3 @@
-//detail page for the licence
 import 'package:flutter/material.dart';
 
 class LicenseDetailPage extends StatelessWidget {

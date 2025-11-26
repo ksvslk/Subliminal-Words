@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:logging/logging.dart';
 import 'package:operation_hermes/ui/freud_dialog.dart';
 import 'package:operation_hermes/ui/game_field.dart';
 import 'package:operation_hermes/ui/hint_bar.dart';
@@ -7,7 +6,6 @@ import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/ui/puzzle.dart';
 import 'package:operation_hermes/menu/top_bar.dart';
 import 'package:provider/provider.dart';
-import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
 class GameFieldScreen extends StatefulWidget {
   const GameFieldScreen({super.key});
@@ -17,17 +15,12 @@ class GameFieldScreen extends StatefulWidget {
 }
 
 class _GameFieldScreenState extends State<GameFieldScreen> {
-  static final _log = Logger('GameFieldWrapper');
   bool _isInitializing = true;
 
   @override
   void initState() {
     super.initState();
-    // Start initialization when the widget is first created.
-    // We use `context.read` because we don't need to listen for changes here.
     context.read<LevelModel>().initialize().then((_) {
-      // Once initialization is complete, update the state to stop showing
-      // the loading indicator.
       if (mounted) {
         setState(() {
           _isInitializing = false;
@@ -38,7 +31,7 @@ class _GameFieldScreenState extends State<GameFieldScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // While initializing, show a loading spinner.
+
     if (_isInitializing) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -55,12 +48,9 @@ class _GameFieldScreenState extends State<GameFieldScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       Flexible(flex: 1, child: TopBar()),
-                      // The Puzzle widget already handles its own shimmer state internally.
                       Flexible(flex: 8, child: Puzzle()),
                       Flexible(
                           flex: 3,
-                          // The GameField widget now handles its own loading state internally,
-                          // preventing any layout shift.
                           child: AnimatedOpacity(
                             opacity: levelModel.isLevelReady ? 1.0 : 0.0,
                             duration: const Duration(milliseconds: 400),
@@ -68,7 +58,6 @@ class _GameFieldScreenState extends State<GameFieldScreen> {
                           )),
                       Flexible(
                           flex: 1,
-                          // The HintBar also handles its own loading state.
                           child: HintBar()),
                     ],
                   ),

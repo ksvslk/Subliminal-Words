@@ -46,244 +46,257 @@ class Puzzle extends StatelessWidget {
                 child: buildPlaceholder(),
               )
             : AspectRatio(
-          aspectRatio: 1,
-          child: Stack(
-            fit: StackFit
-                .expand, // This ensures the stack takes the full size of its parent
-            children: <Widget>[
-              Container(
-                decoration: BoxDecoration(
-                  image: DecorationImage(
-                      image: const AssetImage(
-                          'assets/other/grid.png'), // Replace with your image's path
-                      repeat: ImageRepeat.repeat,
-                      colorFilter: ColorFilter.mode(
-                          Theme.of(context).colorScheme.secondaryContainer,
-                          BlendMode.modulate)),
-                  color: Theme.of(context)
-                      .colorScheme
-                      .secondaryContainer
-                      .withOpacity(0.25),
-                  border: Border.all(
-                      color: Theme.of(context).colorScheme.secondary, width: 1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              // The image
-              ChangeNotifierProvider<PictureModel>.value(
-                value: levelModel.pictureModel,
-                child: Consumer<PictureModel>(
-                  builder: (context, model, child) {
-                    // This widget will be the animated solution for 'fact' levels.
-                    Widget solutionWidget = const SizedBox.shrink();
-                    if (model.isFactTypeLevel && model.isFactLevelComplete) {
-                      // Determine if the solution is a bundled asset or a network image.
-                      final isBundled = levelModel.currentLevel?.isBundled ?? false;
-                      final solutionPath = model.svgPath; // svgPath holds the solution path for fact levels.
-
-                      ImageProvider imageProvider;
-                      if (isBundled) {
-                        imageProvider = AssetImage(solutionPath);
-                      } else {
-                        imageProvider = CachedNetworkImageProvider(solutionPath);
-                      }
-
-                      // Listen for when the image is loaded to trigger the animation.
-                      imageProvider.resolve(const ImageConfiguration()).addListener(
-                        ImageStreamListener((imageInfo, synchronousCall) {
-                          // Once the image is ready, tell the model to start the animation.
-                          model.beginSolutionAnimation();
-                        })
-                      );
-
-                      solutionWidget = Opacity(
-                        opacity: model.solutionOpacity,
-                        child: Image(
-                          image: imageProvider,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.error),
-                        ),
-                      );
-                    }
-
-                    return RotatedBox(
-                      quarterTurns: model.quarterTurn,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        transformAlignment: Alignment.center,
-                        transform: Matrix4.diagonal3(vec3.Vector3(model.scale, model.scale, model.scale)),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          alignment: Alignment.center,
-                          children: [
-                            // --- Base Puzzle Image ---
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: levelModel.currentLevel?.isBundled == false
-                                  ? CachedNetworkImage(
-                                      imageUrl: model.picturePath,
-                                      placeholder: (context, url) => const Center(
-                                        child: SizedBox.square(
-                                          dimension: 24,
-                                          child: CircularProgressIndicator.adaptive(),
-                                        ),
-                                      ),
-                                      errorWidget: (context, url, error) => const Icon(Icons.error),
-                                    )
-                                  : Image.asset(
-                                      model.picturePath,
-                                      fit: BoxFit.contain,
-                                      gaplessPlayback: true,
-                                    ),
-                            ),
-
-                            // --- Animated Solution for 'Fact' Levels ---
-                            solutionWidget,
-
-                            // --- SVG Highlights for 'Highlight' Levels ---
-                            ...model.highlightLetters.map((svgLetter) {
-                              int getDurationAndSetLettersInitialized(SvgLetter svgLetter) {
-                                if (svgLetter.initialLoad) {
-                                  svgLetter.initialLoad = false;
-                                  return 0;
-                                } else {
-                                  return 2000;
-                                }
-                              }
-
-                              final isDarkMode = MediaQuery.of(context).platformBrightness == Brightness.dark;
-                              final firstColor = isDarkMode
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context).colorScheme.inversePrimary;
-                              final secondColor = isDarkMode
-                                  ? Theme.of(context).colorScheme.inverseSurface
-                                  : Theme.of(context).colorScheme.surface;
-
-                              return AnimatedOpacity(
-                                duration: Duration(milliseconds: getDurationAndSetLettersInitialized(svgLetter)),
-                                opacity: (svgLetter.show) ? 1.0 : 0.0,
-                                curve: Curves.fastOutSlowIn,
-                                onEnd: () {
-                                  if (svgLetter.show && !levelModel.levelCompleted) {
-                                    model.hideLetter(svgLetter.letter);
-                                  }
-                                },
-                                child: CustomPaint(
-                                  painter: FilledLetterPainter(
-                                      path: parseSvgPathData(svgLetter.path),
-                                      firstColor: firstColor,
-                                      secondColor: secondColor),
-                                  child: const AspectRatio(
-                                    aspectRatio: 1 / 1,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ],
-                        ),
+                aspectRatio: 1,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: <Widget>[
+                    Container(
+                      decoration: BoxDecoration(
+                        image: DecorationImage(
+                            image: const AssetImage('assets/other/grid.png'),
+                            repeat: ImageRepeat.repeat,
+                            colorFilter: ColorFilter.mode(
+                                Theme.of(context)
+                                    .colorScheme
+                                    .secondaryContainer,
+                                BlendMode.modulate)),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .secondaryContainer
+                            .withAlpha(64),
+                        border: Border.all(
+                            color: Theme.of(context).colorScheme.secondary,
+                            width: 1),
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                    );
-                  },
-                ),
-              ),
-
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(
-                      strokeAlign: BorderSide.strokeAlignCenter,
-                      color: Theme.of(context).colorScheme.secondary,
-                      width: 1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              // Manipulation buttons, positioned bottom right
-              levelModel.manipulationEnabled
-                  ? ChangeNotifierProvider<PictureModel>.value(
+                    ),
+                    ChangeNotifierProvider<PictureModel>.value(
                       value: levelModel.pictureModel,
                       child: Consumer<PictureModel>(
-                          builder: (context, pictureModel, child) {
-                        return Positioned(
-                          bottom: 4,
-                          right: 4,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              IconButton.filled(
-                                visualDensity: VisualDensity.comfortable,
-                                style: IconButton.styleFrom(
-                                    backgroundColor: Theme.of(context)
-                                        .colorScheme
-                                        .background
-                                        .withOpacity(0.25)),
-                                icon: Icon(
-                                  Icons.zoom_out,
-                                  color:
-                                      pictureModel.scale <= pictureModel.minZoom
-                                          ? null
-                                          : Theme.of(context)
-                                              .colorScheme
-                                              .onBackground,
-                                ),
-                                onPressed:
-                                    pictureModel.scale <= pictureModel.minZoom
-                                        ? null
-                                        : () {
-                                            pictureModel.setScaleDown();
-                                            audioController
-                                                .playSfx(SfxType.zoomOut);
-                                          },
+                        builder: (context, model, child) {
+                          Widget solutionWidget = const SizedBox.shrink();
+                          if (model.isFactTypeLevel &&
+                              model.isFactLevelComplete) {
+                            final isBundled =
+                                levelModel.currentLevel?.isBundled ?? false;
+                            final solutionPath = model.svgPath;
+
+                            ImageProvider imageProvider;
+                            if (isBundled) {
+                              imageProvider = AssetImage(solutionPath);
+                            } else {
+                              imageProvider =
+                                  CachedNetworkImageProvider(solutionPath);
+                            }
+
+                            imageProvider
+                                .resolve(const ImageConfiguration())
+                                .addListener(ImageStreamListener(
+                                    (imageInfo, synchronousCall) {
+                              model.beginSolutionAnimation();
+                            }));
+
+                            solutionWidget = Opacity(
+                              opacity: model.solutionOpacity,
+                              child: Image(
+                                image: imageProvider,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Icon(Icons.error),
                               ),
-                              IconButton.filled(
-                                visualDensity: VisualDensity.comfortable,
-                                style: IconButton.styleFrom(
-                                    backgroundColor: Theme.of(context)
-                                        .colorScheme
-                                        .background
-                                        .withOpacity(0.25)),
-                                icon: Icon(
-                                  Icons.zoom_in,
-                                  color:
-                                      pictureModel.scale >= pictureModel.maxZoom
-                                          ? null
-                                          : Theme.of(context)
-                                              .colorScheme
-                                              .onBackground,
-                                ),
-                                onPressed: pictureModel.scale >=
-                                        pictureModel.maxZoom
-                                    ? null
-                                    : () {
-                                        pictureModel.setScaleUp();
-                                        audioController.playSfx(SfxType.zoomIn);
+                            );
+                          }
+
+                          return RotatedBox(
+                            quarterTurns: model.quarterTurn,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              transformAlignment: Alignment.center,
+                              transform: Matrix4.diagonal3(vec3.Vector3(
+                                  model.scale, model.scale, model.scale)),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                alignment: Alignment.center,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: levelModel.currentLevel?.isBundled ==
+                                            false
+                                        ? CachedNetworkImage(
+                                            imageUrl: model.picturePath,
+                                            placeholder: (context, url) =>
+                                                const Center(
+                                              child: SizedBox.square(
+                                                dimension: 24,
+                                                child: CircularProgressIndicator
+                                                    .adaptive(),
+                                              ),
+                                            ),
+                                            errorWidget:
+                                                (context, url, error) =>
+                                                    const Icon(Icons.error),
+                                          )
+                                        : Image.asset(
+                                            model.picturePath,
+                                            fit: BoxFit.contain,
+                                            gaplessPlayback: true,
+                                          ),
+                                  ),
+                                  solutionWidget,
+                                  ...model.highlightLetters.map((svgLetter) {
+                                    int getDurationAndSetLettersInitialized(
+                                        SvgLetter svgLetter) {
+                                      if (svgLetter.initialLoad) {
+                                        svgLetter.initialLoad = false;
+                                        return 0;
+                                      } else {
+                                        return 2000;
+                                      }
+                                    }
+
+                                    final isDarkMode = MediaQuery.of(context)
+                                            .platformBrightness ==
+                                        Brightness.dark;
+                                    final firstColor = isDarkMode
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Theme.of(context)
+                                            .colorScheme
+                                            .inversePrimary;
+                                    final secondColor = isDarkMode
+                                        ? Theme.of(context)
+                                            .colorScheme
+                                            .inverseSurface
+                                        : Theme.of(context).colorScheme.surface;
+
+                                    return AnimatedOpacity(
+                                      duration: Duration(
+                                          milliseconds:
+                                              getDurationAndSetLettersInitialized(
+                                                  svgLetter)),
+                                      opacity: (svgLetter.show) ? 1.0 : 0.0,
+                                      curve: Curves.fastOutSlowIn,
+                                      onEnd: () {
+                                        if (svgLetter.show &&
+                                            !levelModel.levelCompleted) {
+                                          model.hideLetter(svgLetter.letter);
+                                        }
                                       },
+                                      child: CustomPaint(
+                                        painter: FilledLetterPainter(
+                                            path: parseSvgPathData(
+                                                svgLetter.path),
+                                            firstColor: firstColor,
+                                            secondColor: secondColor),
+                                        child: const AspectRatio(
+                                          aspectRatio: 1 / 1,
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                ],
                               ),
-                              IconButton.filled(
-                                visualDensity: VisualDensity.comfortable,
-                                style: IconButton.styleFrom(
-                                    backgroundColor: Theme.of(context)
-                                        .colorScheme
-                                        .background
-                                        .withOpacity(0.25)),
-                                icon: Icon(
-                                  Icons.rotate_90_degrees_cw,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onBackground,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                            strokeAlign: BorderSide.strokeAlignCenter,
+                            color: Theme.of(context).colorScheme.secondary,
+                            width: 1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    levelModel.manipulationEnabled
+                        ? ChangeNotifierProvider<PictureModel>.value(
+                            value: levelModel.pictureModel,
+                            child: Consumer<PictureModel>(
+                                builder: (context, pictureModel, child) {
+                              return Positioned(
+                                bottom: 4,
+                                right: 4,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    IconButton.filled(
+                                      visualDensity: VisualDensity.comfortable,
+                                      style: IconButton.styleFrom(
+                                          backgroundColor: Theme.of(context)
+                                              .colorScheme
+                                              .surface
+                                              .withAlpha(64)),
+                                      icon: Icon(
+                                        Icons.zoom_out,
+                                        color: pictureModel.scale <=
+                                                pictureModel.minZoom
+                                            ? null
+                                            : Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
+                                      ),
+                                      onPressed: pictureModel.scale <=
+                                              pictureModel.minZoom
+                                          ? null
+                                          : () {
+                                              pictureModel.setScaleDown();
+                                              audioController
+                                                  .playSfx(SfxType.zoomOut);
+                                            },
+                                    ),
+                                    IconButton.filled(
+                                      visualDensity: VisualDensity.comfortable,
+                                      style: IconButton.styleFrom(
+                                          backgroundColor: Theme.of(context)
+                                              .colorScheme
+                                              .surface
+                                              .withAlpha(64)),
+                                      icon: Icon(
+                                        Icons.zoom_in,
+                                        color: pictureModel.scale >=
+                                                pictureModel.maxZoom
+                                            ? null
+                                            : Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
+                                      ),
+                                      onPressed: pictureModel.scale >=
+                                              pictureModel.maxZoom
+                                          ? null
+                                          : () {
+                                              pictureModel.setScaleUp();
+                                              audioController
+                                                  .playSfx(SfxType.zoomIn);
+                                            },
+                                    ),
+                                    IconButton.filled(
+                                      visualDensity: VisualDensity.comfortable,
+                                      style: IconButton.styleFrom(
+                                          backgroundColor: Theme.of(context)
+                                              .colorScheme
+                                              .surface
+                                              .withAlpha(64)),
+                                      icon: Icon(
+                                        Icons.rotate_90_degrees_cw,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                      ),
+                                      onPressed: () {
+                                        audioController.playSfx(SfxType.rotate);
+                                        pictureModel.setNextQuarterTurn();
+                                      },
+                                    )
+                                  ],
                                 ),
-                                onPressed: () {
-                                  audioController.playSfx(SfxType.rotate);
-                                  pictureModel.setNextQuarterTurn();
-                                },
-                              )
-                            ],
-                          ),
-                        );
-                      }),
-                    )
-                  : const SizedBox.shrink(),
-            ],
-          ),
-        ),
+                              );
+                            }),
+                          )
+                        : const SizedBox.shrink(),
+                  ],
+                ),
+              ),
       );
     });
   }

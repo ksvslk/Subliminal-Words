@@ -1,7 +1,5 @@
-import 'dart:io';
 import 'dart:math';
-import 'dart:async'; // Import for Timer
-import 'dart:typed_data'; // Import for Uint8List
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
@@ -19,23 +17,20 @@ class PictureModel with ChangeNotifier {
   final maxZoom = 1.0;
   final minZoom = 0.1;
   final zoomStep = 0.1;
-  final FirebaseService _firebaseService; // Renamed to private
+  final FirebaseService _firebaseService;
 
   double scale;
   int quarterTurn;
   int levelNr;
   String picturePath;
-  String svgPath; // For fact levels, this holds the solution image path
+  String svgPath;
   List<SvgLetter> highlightLetters = [];
-  bool isFactTypeLevel = false; // Made public to be used by PictureWidget
-  bool isFactLevelComplete = false; // New flag to indicate completion
-  
-  Uint8List? puzzleImageBytes; // Will hold the pre-loaded image data
-
-  // Animation properties for solution image looping opacity
+  bool isFactTypeLevel = false;
+  bool isFactLevelComplete = false;
+  Uint8List? puzzleImageBytes;
   double solutionOpacity = 0.0;
   Timer? _solutionAnimationTimer;
-  bool _isFadingIn = true; // Controls the direction of the opacity animation
+  bool _isFadingIn = true;
 
   PictureModel({
     required this.scale,
@@ -43,59 +38,52 @@ class PictureModel with ChangeNotifier {
     required this.picturePath,
     required this.svgPath,
     required this.levelNr,
-    required FirebaseService firebaseService, // Add firebaseService to constructor
-  }) : _firebaseService = firebaseService {
-    // Initialization is now handled by initializePicture to avoid race conditions.
-  }
+    required FirebaseService firebaseService,
+  }) : _firebaseService = firebaseService;
 
   @override
   void dispose() {
-    _solutionAnimationTimer?.cancel(); // Cancel timer to prevent memory leaks
+    _solutionAnimationTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> initializePicture(
-      {required SWLevel level}) async {
+  Future<void> initializePicture({required SWLevel level}) async {
     scale = 1.0;
     quarterTurn = 0;
-    this.levelNr = level.nr;
+    levelNr = level.nr;
 
-    // Determine if paths are local assets or remote URLs
     if (level.isBundled) {
-      this.picturePath = level.puzzlePath;
-      this.svgPath = level.solutionPath;
+      picturePath = level.puzzlePath;
+      svgPath = level.solutionPath;
     } else {
-      // Fetch remote URLs for non-bundled levels
-      this.picturePath = await _firebaseService.getDownloadUrl(level.puzzlePath);
-      this.svgPath = await _firebaseService.getDownloadUrl(level.solutionPath);
+      picturePath = await _firebaseService.getDownloadUrl(level.puzzlePath);
+      svgPath = await _firebaseService.getDownloadUrl(level.solutionPath);
     }
 
-    isFactTypeLevel = !level.isHighlightType; // Use the public property
-    isFactLevelComplete = false; // Reset completion flag
-    solutionOpacity = 0.0; // Reset opacity for new level
-    _isFadingIn = true; // Reset animation direction
-    _solutionAnimationTimer?.cancel(); // Cancel any previous animation.
-    _solutionAnimationTimer = null; // CRITICAL: Set timer to null after cancelling.
+    isFactTypeLevel = !level.isHighlightType;
+    isFactLevelComplete = false;
+    solutionOpacity = 0.0;
+    _isFadingIn = true;
+    _solutionAnimationTimer?.cancel();
+    _solutionAnimationTimer = null;
 
-    // Pre-load the puzzle image bytes
     try {
-      puzzleImageBytes = await _loadPuzzleImageBytes(this.picturePath);
+      puzzleImageBytes = await _loadPuzzleImageBytes(picturePath);
     } catch (e) {
       _log.severe('Failed to load puzzle image bytes for display/sharing', e);
-      puzzleImageBytes = null; // Ensure it's null on failure
+      puzzleImageBytes = null;
     }
 
     if (level.isHighlightType) {
-      highlightLetters = await _loadSvgLetters(svgPath: this.svgPath);
+      highlightLetters = await _loadSvgLetters(svgPath: svgPath);
     } else {
-      highlightLetters = []; // No SVG letters for 'fact' type levels
+      highlightLetters = [];
     }
-    notifyListeners(); // Notify once after all properties are set
+    notifyListeners();
   }
 
-  /// Helper method to load image bytes from either network or assets
   Future<Uint8List> _loadPuzzleImageBytes(String path) async {
-    if (path.isEmpty) return Uint8List(0); // Return empty list if no path
+    if (path.isEmpty) return Uint8List(0);
 
     if (path.startsWith('http')) {
       final response = await http.get(Uri.parse(path));
@@ -105,7 +93,6 @@ class PictureModel with ChangeNotifier {
         throw Exception('Failed to download image: ${response.statusCode}');
       }
     } else {
-      // Load from assets
       final byteData = await rootBundle.load(path);
       return byteData.buffer.asUint8List();
     }
@@ -119,61 +106,47 @@ class PictureModel with ChangeNotifier {
       final response = await http.get(Uri.parse(svgPath));
       svgString = response.body;
     } else {
-      // This is the potentially blocking call. The delay in LevelModel ensures
-      // the UI is responsive before this runs.
       svgString = await rootBundle.loadString(svgPath);
     }
     return _parseSvg(svgString);
   }
 
-  void setLevelComplete()
-  {
+  void setLevelComplete() {
     if (isFactTypeLevel) {
-      // For 'fact' levels, just set the flag. The animation will be
-      // triggered by the UI once the image is confirmed to be loaded.
       isFactLevelComplete = true;
       notifyListeners();
     } else {
-      // For 'highlight' levels, show all the SVG letters.
-      for (var element in highlightLetters) { element.show = true; }
-      notifyListeners(); // Notify for highlight changes
+      for (var element in highlightLetters) {
+        element.show = true;
+      }
+      notifyListeners();
     }
   }
 
-  /// This method is called by the UI once the solution image is loaded and ready.
   void beginSolutionAnimation() {
-    // Only start if it's a completed fact level and the timer isn't already running.
     if (isFactLevelComplete && _solutionAnimationTimer == null) {
       _startSolutionAnimationLoop();
     }
   }
 
   void _startSolutionAnimationLoop() {
-    _solutionAnimationTimer?.cancel(); // Ensure only one timer is active
+    _solutionAnimationTimer?.cancel();
 
-    // --- 1. DURATION CONTROL ---
-    // Set the duration for one direction of the fade (e.g., fade-in).
-    // The total loop time will be twice this duration.
     const oneWayDuration = Duration(milliseconds: 3000);
-
-    // --- 2. STYLE CONTROL ---
-    // Choose the animation curve you want for the fade effect.
-    // Examples: Curves.easeInOut, Curves.easeIn, Curves.linear, Curves.bounceInOut
     const animationCurve = Curves.easeIn;
-
     const frameDuration = Duration(milliseconds: 16); // ~60 FPS
-    final totalFrames = oneWayDuration.inMilliseconds / frameDuration.inMilliseconds;
+    final totalFrames =
+        oneWayDuration.inMilliseconds / frameDuration.inMilliseconds;
     final step = 1.0 / totalFrames;
     double progress = 0.0;
 
     _solutionAnimationTimer = Timer.periodic(frameDuration, (timer) {
       progress += step;
       if (progress > 1.0) {
-        progress = 0.0; // Reset progress
-        _isFadingIn = !_isFadingIn; // Reverse direction
+        progress = 0.0;
+        _isFadingIn = !_isFadingIn;
       }
 
-      // Apply the curve to the linear progress
       final curvedProgress = animationCurve.transform(progress);
 
       if (_isFadingIn) {
@@ -181,7 +154,7 @@ class PictureModel with ChangeNotifier {
       } else {
         solutionOpacity = 1.0 - curvedProgress;
       }
-      notifyListeners(); // Notify UI to rebuild with new opacity
+      notifyListeners();
     });
   }
 
@@ -206,25 +179,30 @@ class PictureModel with ChangeNotifier {
   }
 
   void highlightLetter(List<String> availableLetters) {
+    
     if (highlightLetters.isEmpty) {
-      _log.info('No highlight letters available for this level.');
       return;
     }
 
-    var allHintsGiven = highlightLetters.every((element) => element.hintGiven == true);
-    if (allHintsGiven) for (var element in highlightLetters) { element.hintGiven = false; }
+    var allHintsGiven =
+        highlightLetters.every((element) => element.hintGiven == true);
 
+    if (allHintsGiven) {
+      for (var element in highlightLetters) {
+        element.hintGiven = false;
+      }
+    }
     List<int> candidateIndices = highlightLetters
         .asMap()
         .entries
-        .where((entry) => entry.value.hintGiven == false &&
-            entry.value.show == false && // Only highlight letters that are not already shown
+        .where((entry) =>
+            entry.value.hintGiven == false &&
+            entry.value.show == false &&
             availableLetters.contains(entry.value.letter.toUpperCase()))
         .map((entry) => entry.key)
         .toList();
 
     if (candidateIndices.isEmpty) {
-      _log.info('No candidate letters to highlight.');
       return;
     }
 
@@ -235,7 +213,8 @@ class PictureModel with ChangeNotifier {
   }
 
   void hideLetter(String letter) {
-    int index = highlightLetters.indexWhere((item) => item.letter.toUpperCase() == letter.toUpperCase());
+    int index = highlightLetters.indexWhere(
+        (item) => item.letter.toUpperCase() == letter.toUpperCase());
     if (index != -1) {
       highlightLetters[index].show = false;
       notifyListeners();

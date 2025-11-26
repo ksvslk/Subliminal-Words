@@ -17,10 +17,9 @@ class MoneyController extends ChangeNotifier {
   void _queryCustomerInfo() async {
     try {
       _customerInfo = await Purchases.getCustomerInfo();
-      _log.info("Customer info: $_customerInfo");
       notifyListeners();
     } on PlatformException catch (e) {
-      _log.log(Level.SEVERE, "Error getting customer info: $e");
+      _log.severe("Error getting customer info: $e");
     }
   }
 
@@ -63,9 +62,7 @@ class MoneyController extends ChangeNotifier {
   void restorePurchases(BuildContext context) async {
     try {
       CustomerInfo customerInfo = await Purchases.restorePurchases();
-      // Check if any active entitlements were restored
       if (customerInfo.entitlements.active.isNotEmpty) {
-        // Show success popup - purchases were actually restored
         if (context.mounted) {
           showDialog(
             context: context,
@@ -86,7 +83,6 @@ class MoneyController extends ChangeNotifier {
           );
         }
       } else {
-        // No purchases found to restore
         if (context.mounted) {
           showDialog(
             context: context,
@@ -109,8 +105,6 @@ class MoneyController extends ChangeNotifier {
       }
     } on PlatformException catch (e) {
       _log.severe("Error restoring purchases: $e");
-
-      // Show error popup
       if (context.mounted) {
         showDialog(
           context: context,

@@ -15,8 +15,6 @@ class LevelsScreen extends StatefulWidget {
 }
 
 class _LevelsScreenState extends State<LevelsScreen> {
-  // We only need the future for *completed* levels.
-  // The levels list will come from the StreamProvider.
   late Future<Set<String>> _completedLevelsFuture;
 
   @override
@@ -24,7 +22,6 @@ class _LevelsScreenState extends State<LevelsScreen> {
     super.initState();
     final progressPersistence =
         Provider.of<ProgressPersistence>(context, listen: false);
-
     _completedLevelsFuture = progressPersistence.getCompletedLevels();
   }
 
@@ -39,15 +36,11 @@ class _LevelsScreenState extends State<LevelsScreen> {
       appBar: AppBar(
         title: Text(widget.pack.name),
       ),
-      // 2. Use a StreamBuilder for the levels
       body: StreamBuilder<List<SWLevel>>(
         stream: levelsStream,
         builder: (context, levelsSnapshot) {
-          
-          // 3. This check handles loading.
-          // Note: getLevelsStream WILL show a brief load because
-          // it has to load local JSON assets, which is an async 'await'.
-          if (levelsSnapshot.connectionState == ConnectionState.waiting && !levelsSnapshot.hasData) {
+          if (levelsSnapshot.connectionState == ConnectionState.waiting &&
+              !levelsSnapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           if (levelsSnapshot.hasError) {
@@ -57,22 +50,18 @@ class _LevelsScreenState extends State<LevelsScreen> {
           if (levels == null || levels.isEmpty) {
             return const Center(child: Text('No levels found in this pack.'));
           }
-
-          // 4. Nest a FutureBuilder for the completion status
           return FutureBuilder<Set<String>>(
             future: _completedLevelsFuture,
             builder: (context, completedSnapshot) {
-              // We don't need a spinner, just build with empty data
               final completedLevels = completedSnapshot.data ?? <String>{};
-
               final screenWidth = MediaQuery.of(context).size.width;
               final crossAxisCount = (screenWidth / 120).floor().clamp(3, 6);
 
               return GridView.builder(
                 padding: const EdgeInsets.all(16.0),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount, 
-                  crossAxisSpacing: 16.0, 
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 16.0,
                   mainAxisSpacing: 16.0,
                   childAspectRatio: 1 / 1,
                 ),
@@ -85,7 +74,6 @@ class _LevelsScreenState extends State<LevelsScreen> {
                   Widget cardContent;
 
                   if (isCompleted && isEnabled) {
-                    // --- Completed Level Style ---
                     cardContent = Container(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
@@ -100,7 +88,7 @@ class _LevelsScreenState extends State<LevelsScreen> {
                           Icon(
                             Icons.check_circle,
                             size: 125,
-                            color: colorScheme.onPrimary.withOpacity(0.15),
+                            color: colorScheme.onPrimary.withAlpha(38),
                           ),
                           Center(
                             child: Text(
@@ -112,7 +100,7 @@ class _LevelsScreenState extends State<LevelsScreen> {
                                 shadows: [
                                   Shadow(
                                     blurRadius: 2.0,
-                                    color: Colors.black.withOpacity(0.2),
+                                    color: Colors.black.withAlpha(51),
                                     offset: const Offset(1, 1),
                                   ),
                                 ],
@@ -123,7 +111,6 @@ class _LevelsScreenState extends State<LevelsScreen> {
                       ),
                     );
                   } else {
-                    // --- Default Level Style ---
                     cardContent = Container(
                       color: isEnabled
                           ? colorScheme.tertiaryContainer

@@ -15,11 +15,9 @@ class ShimmerLoadingPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Access the color scheme from the theme
     final colorScheme = Theme.of(context).colorScheme;
 
     return Shimmer.fromColors(
-      // Use theme-aware colors
       baseColor: colorScheme.surfaceContainer,
       highlightColor: colorScheme.surface,
       direction: ShimmerDirection.btt,
@@ -27,7 +25,7 @@ class ShimmerLoadingPlaceholder extends StatelessWidget {
         width: width,
         height: height,
         decoration: BoxDecoration(
-          color: Colors.white, // This color is irrelevant, it's just for shape
+          color: Colors.white,
           borderRadius: BorderRadius.circular(borderRadius),
         ),
       ),

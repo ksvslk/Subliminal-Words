@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 3.0.1+46
+version: 4.0.1+50
 
 environment:
   sdk: '>=3.1.0 <4.0.0'
@@ -31,9 +31,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
   audioplayers: ^6.5.1
   logging: ^1.1.0
   provider: ^6.0.2
@@ -46,21 +43,17 @@ dependencies:
   animated_text_kit: ^4.2.2
   games_services: ^4.1.1
   flutter_oss_licenses: ^3.0.11
-  confetti: ^0.8.0
   firebase_core: ^4.1.1
   firebase_analytics: ^12.0.2
   share_plus: ^12.0.0
   in_app_review: ^2.0.8
   cloud_firestore: ^6.0.2
-  lottie: ^3.3.2
-  firebase_app_check: ^0.4.1
+  firebase_app_check: ^0.4.1+2
   firebase_auth: ^6.1.0
   firebase_messaging: ^16.0.2
   firebase_storage: ^13.0.2
   path_provider: ^2.1.5
   cached_network_image: ^3.4.1
-  connectivity_plus: ^6.0.3
-  google_api_availability: ^5.0.0
   shimmer: ^3.0.0
   intl: ^0.20.2
   purchases_flutter: ^9.9.1
@@ -69,6 +62,9 @@ dependencies:
   flutter_soloud: ^3.4.1
   real_volume: ^1.0.9
   firebase_remote_config: ^6.1.0
+  flutter_native_splash: ^2.4.7
+  flutter_launcher_icons: ^0.14.4
+  app_tracking_transparency: ^2.0.6+1
 
 
 dev_dependencies:
@@ -84,6 +80,28 @@ dev_dependencies:
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/other/icon.png"
+  min_sdk_android: 21 # android min sdk min:16, default 21
+  remove_alpha_ios: true
+  adaptive_icon_foreground: "assets/other/icon.png"
+  adaptive_icon_background: "assets/other/icon_mono.png"
+  adaptive_icon_foreground_inset: 21
+
+flutter_native_splash:
+  color: "#210118"
+  image: assets/other/icon_splash.png
+  color_dark: "#210118"
+  image_dark: assets/other/icon_splash.png
+  android_12:
+    image: assets/other/icon_splash.png
+    icon_background_color: "#210118"
+    image_dark: assets/other/icon_splash.png
+    icon_background_color_dark: "#210118"
+  web: false
 
 # The following section is specific to Flutter packages.
 flutter:

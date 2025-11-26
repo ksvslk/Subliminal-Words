@@ -35,10 +35,8 @@ class LetterBoxData with ChangeNotifier {
     : _state = state ?? LetterBoxState.fieldSlot,
       _letter = letter ?? '';
 
-  // Getter for state
   LetterBoxState get state => _state;
 
-  // Setter for state
   set state(LetterBoxState value) {
     if(_state != value) {
       _state = value;
@@ -46,10 +44,8 @@ class LetterBoxData with ChangeNotifier {
     }
   }
 
-  // Getter for letter
   String get letter => _letter;
 
-  // Setter for letter
   set letter(String value) {
     if(_letter != value) {
       _letter = value;

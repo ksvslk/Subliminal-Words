@@ -1,10 +1,8 @@
 import 'dart:io';
 
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
-import 'package:google_api_availability/google_api_availability.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
@@ -22,7 +20,6 @@ import 'package:operation_hermes/persistence/level_persistence.dart';
 import 'package:operation_hermes/persistence/progress_persistence.dart';
 import 'package:operation_hermes/persistence/local_storage_level_persistence.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
-import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 import 'dart:developer' as dev;
 import 'persistence/settings_persistence.dart';
 import 'persistence/local_storage_settings_persistence.dart';
@@ -33,16 +30,9 @@ import 'controller/audio_controller.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:operation_hermes/data/category.dart';
 
-final LocalStorageLevelPersistence globalLevelPersistence =
-    LocalStorageLevelPersistence();
 
 @pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // If you're going to use other Firebase services in the background, such as Firestore,
-  // make sure you call `initializeApp` before using other Firebase services.
-  await Firebase.initializeApp();
-  //globalLevelPersistence.tryAddingNotificationLevel(message);
-}
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {}
 
 Future<void> initPurchases() async {
   await Purchases.setLogLevel(LogLevel.debug);
@@ -59,12 +49,14 @@ Future<void> setUpRemoteConfig() async {
   final remoteConfig = FirebaseRemoteConfig.instance;
   await remoteConfig.setConfigSettings(
     RemoteConfigSettings(
-      fetchTimeout: const Duration(minutes: 1),
-      minimumFetchInterval: const Duration(seconds: 30) // TODO: 6 hours production,
-    ),
+        fetchTimeout: const Duration(minutes: 1),
+        minimumFetchInterval:
+            const Duration(hours: 3) 
+        ),
   );
   await remoteConfig.setDefaults(const {
     C.progressAchievemetns: "",
+    C.adsDisplayLevelLimit: 9
   });
   remoteConfig.onConfigUpdated.listen((event) async {
     await remoteConfig.activate();
@@ -73,8 +65,6 @@ Future<void> setUpRemoteConfig() async {
 }
 
 Future<void> main() async {
-  //debugPaintSizeEnabled = true;
-  // Subscribe to log messages.
   Logger.root.onRecord.listen((record) {
     if (record.level >= Level.INFO) {
       dev.log(
@@ -91,88 +81,57 @@ Future<void> main() async {
   Provider.debugCheckInvalidValueType = null;
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase first.
   await Firebase.initializeApp();
 
-  // Check for an active internet connection.
-  final connectivityResult = await (Connectivity().checkConnectivity());
-  final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
-      connectivityResult.contains(ConnectivityResult.wifi);
-
-  // IMPORTANT: Only activate App Check if the device is online.
-  // Attempting to activate App Check offline will block the app's startup.
-  if (isOnline) {
-    try {
-      _log.info('Device is online, activating Firebase App Check.');
-
-      await FirebaseAppCheck.instance
-          .activate(
-        providerAndroid: kReleaseMode
-            ? const AndroidPlayIntegrityProvider()
-            : const AndroidDebugProvider(),
-        providerApple: kReleaseMode
-            ? const AppleAppAttestProvider()
-            : const AppleDebugProvider(),
-      );
-    } catch (e) {
-      _log.severe('Firebase App Check activation failed.', e);
-    }
-  } else {
-    _log.warning(
-        'Device is offline. Skipping Firebase App Check activation to allow offline startup.');
-    // CRITICAL: Explicitly disable Firestore network to prevent the SDK
-    // from blocking the main thread with connection retries.
-    FirebaseFirestore.instance.disableNetwork();
+  try {
+    await FirebaseAppCheck.instance.activate(
+      providerAndroid: kReleaseMode
+          ? const AndroidPlayIntegrityProvider()
+          : const AndroidDebugProvider(),
+      providerApple: kReleaseMode
+          ? const AppleAppAttestProvider()
+          : const AppleDebugProvider(),
+    );
+  } catch (e) {
+    _log.severe('Firebase App Check activation failed.', e);
   }
 
-  _log.info('Going full screen');
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
   await initPurchases();
   await setUpRemoteConfig();
-
   AdsController? adsController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
-    /// Prepare the google_mobile_ads plugin so that the first ad loads
-    /// faster. This can be done later or with a delay if startup
-    /// experience suffers.
     adsController = AdsController(MobileAds.instance);
   }
+
   GamesServicesController? gamesServicesController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
     gamesServicesController = GamesServicesController();
   }
+
   MoneyController? inAppPurchaseController;
   if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
     inAppPurchaseController = MoneyController();
   }
 
-  FirebaseService firebaseService;
-  firebaseService = FirebaseService();
-
+  FirebaseService firebaseService = FirebaseService();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   runApp(
     MyApp(
         progressPersistence: ProgressPersistence(),
         settingsPersistence: LocalStorageSettingsPersistence(),
-        levelPersistence: globalLevelPersistence,
+        levelPersistence: LocalStorageLevelPersistence(),
         adsController: adsController,
         inAppPurchaseController: inAppPurchaseController,
         gamesServicesController: gamesServicesController,
-        firebaseService: firebaseService,
-        isOnline: isOnline),
+        firebaseService: firebaseService),
   );
 }
 
 Logger _log = Logger('main.dart');
-//Color.fromARGB(255, 40, 0, 161)
-//Color.fromARGB(255, 255, 0, 187)
-//Color.fromARGB(255, 0, 255, 0)
-//Color.fromARGB(255, 0, 255, 255)
-//Color.fromARGB(255, 0, 0, 255)
-//Color.fromARGB(255, 255, 255, 0)
-//Color.fromARGB(255, 255, 0, 0)
+
 
 class MyApp extends StatelessWidget {
   final SettingsPersistence settingsPersistence;
@@ -182,7 +141,6 @@ class MyApp extends StatelessWidget {
   final MoneyController? inAppPurchaseController;
   final GamesServicesController? gamesServicesController;
   final FirebaseService firebaseService;
-  final bool isOnline;
 
   const MyApp(
       {super.key,
@@ -192,8 +150,7 @@ class MyApp extends StatelessWidget {
       required this.adsController,
       required this.inAppPurchaseController,
       required this.gamesServicesController,
-      required this.firebaseService,
-      required this.isOnline});
+      required this.firebaseService});
 
   @override
   Widget build(BuildContext context) {
@@ -222,14 +179,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider<AdsController?>.value(value: adsController),
         ChangeNotifierProvider<MoneyController?>.value(
             value: inAppPurchaseController),
-        
-        // --- AudioController Provider (MOVED UP) ---
-        // This must come BEFORE LevelModel, which depends on it.
         ProxyProvider2<SettingsController, ValueNotifier<AppLifecycleState>,
             AudioController>(
-          // Ensures that the AudioController is created on startup,
-          // and not "only when it's needed", as is default behavior.
-          // This way, music starts immediately.
           lazy: false,
           create: (context) => AudioController()..initialize(),
           update: (context, settings, lifecycleNotifier, audio) {
@@ -240,9 +191,6 @@ class MyApp extends StatelessWidget {
           },
           dispose: (context, audio) => audio.dispose(),
         ),
-
-        // --- LevelModel Provider (MODIFIED) ---
-        // It now reads the AudioController from the context in its 'create' method.
         ChangeNotifierProxyProvider<ValueNotifier<AppLifecycleState>,
             LevelModel>(
           lazy: false,
@@ -255,7 +203,6 @@ class MyApp extends StatelessWidget {
               settingsPersistence:
                   context.read<SettingsController>().persistence,
               firebaseService: firebaseService,
-              isOnline: isOnline,
               // *** FIX: Read the AudioController from the context ***
               audioController: context.read<AudioController>()),
           update: (BuildContext context,
