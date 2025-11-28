@@ -442,7 +442,7 @@ class LevelModel with ChangeNotifier {
     await FirebaseAnalytics.instance.logEvent(
       name: 'level_begin', // Standard event name
       parameters: {
-        'level_number': levelNumber, // Make sure this is an Integer
+        'level_number': levelNumber.toString(), // Make sure this is an Integer
         'pack_name': packName,
         // Create a composite ID for easier reading in basic reports
         'level_id': '${packName}_$levelNumber', 
@@ -455,7 +455,7 @@ class LevelModel with ChangeNotifier {
     await FirebaseAnalytics.instance.logEvent(
       name: 'level_finish',
       parameters: {
-        'level_number': levelNumber,
+        'level_number': levelNumber.toString(),
         'pack_name': packName,
         'time_taken': timeTaken,
         'level_id': '${packName}_$levelNumber',

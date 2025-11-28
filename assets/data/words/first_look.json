@@ -8,7 +8,7 @@
     "puzzlePath": "assets/levels/words/first_look/1.jpg",
     "puzzleThumbnailPath": "assets/levels/words/first_look/1_thumb.webp",
     "solutionPath": "assets/levels/words/first_look/1.svg",
-    "tooltipStart": "I'm glad you're here, please take a seat on the sofa. What word do you see?",
+    "tooltipStart": "",
     "tooltipEnd": "That’s correct. Tap picture to continue.",
     "isEnabled": true
   },
