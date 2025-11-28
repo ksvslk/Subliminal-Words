@@ -56,7 +56,8 @@ class _RandomTutorialOverlayState extends State<RandomTutorialOverlay> {
     final prefs = await SharedPreferences.getInstance();
     final bool seen = prefs.getBool(widget.tutorialId) ?? false; 
 
-    if (!seen || true) {
+    // Removed "|| true" so it properly hides after first use
+    if (!seen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _startStep1(MediaQuery.of(context));
       });
@@ -112,7 +113,6 @@ class _RandomTutorialOverlayState extends State<RandomTutorialOverlay> {
       });
 
       _moveHandRandomly();
-      // Keep moving every 600ms
       _handTimer = Timer.periodic(const Duration(milliseconds: 600), (timer) {
         _moveHandRandomly();
       });
@@ -127,13 +127,12 @@ class _RandomTutorialOverlayState extends State<RandomTutorialOverlay> {
     final double maxRadius = (_spotlightRect!.shortestSide / 2) * 0.7; 
     const double iconOffset = 40.0; 
     
-    // --- UPDATED LOGIC: Minimum Movement 55px ---
+    // Minimum Movement 55px
     const double minMoveDistance = 55.0; 
     
     Offset? nextPos;
     int attempts = 0;
 
-    // Retry loop: try up to 10 times to find a point far enough away
     do {
       final double angle = _rnd.nextDouble() * 2 * pi; 
       final double radius = _rnd.nextDouble() * maxRadius; 
@@ -143,11 +142,8 @@ class _RandomTutorialOverlayState extends State<RandomTutorialOverlay> {
       final Offset candidate = Offset(candidateX, candidateY);
 
       if (_handPosition == null) {
-        // First move, accept anything
         nextPos = candidate;
       } else {
-        // Calculate distance from current actual finger center
-        // (We add iconOffset back to compare center-to-center)
         final Offset currentCenter = _handPosition! + const Offset(iconOffset, iconOffset);
         final double distance = (candidate - currentCenter).distance;
 
@@ -158,9 +154,7 @@ class _RandomTutorialOverlayState extends State<RandomTutorialOverlay> {
       attempts++;
     } while (nextPos == null && attempts < 10);
 
-    // If we couldn't find a far enough point (box too small?), just take the last candidate
     if (nextPos == null) {
-       // Just regenerate one last time without check
        final double angle = _rnd.nextDouble() * 2 * pi; 
        final double radius = _rnd.nextDouble() * maxRadius; 
        nextPos = Offset(centerX + (cos(angle) * radius), centerY + (sin(angle) * radius));
@@ -196,8 +190,8 @@ class _RandomTutorialOverlayState extends State<RandomTutorialOverlay> {
     final Color handBorderColor = colorScheme.onSurface; 
 
     // Arrow Colors
-    final Color arrowFillColor = colorScheme.primary;
-    final Color arrowBorderColor = colorScheme.surface;
+    final Color arrowFillColor = colorScheme.surface;
+    final Color arrowBorderColor = colorScheme.primary;
 
     return Stack(
       children: [
@@ -261,7 +255,12 @@ class _RandomTutorialOverlayState extends State<RandomTutorialOverlay> {
                       Positioned.fill(
                         child: LayoutBuilder(
                           builder: (ctx, constraints) {
-                            final startPoint = Offset(constraints.maxWidth / 2, _textBoxY!);
+                            // MOVED UP 20 PIXELS (_textBoxY! - 20)
+                            final startPoint = Offset(
+                              constraints.maxWidth / 2, 
+                              _textBoxY! - 10 
+                            );
+                            
                             return CustomPaint(
                               painter: ModernArrowPainter(
                                 startPoint: startPoint,
@@ -375,14 +374,11 @@ class ModernArrowPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
-
+      
+      // 1. Line
       canvas.drawLine(startPoint, endPoint, paint);
 
-      final dotPaint = Paint()
-        ..color = drawColor
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(startPoint, strokeWidth + 2, dotPaint);
-
+      // 2. Arrow Head
       final angle = atan2(endPoint.dy - startPoint.dy, endPoint.dx - startPoint.dx);
       final arrowPath = Path()
         ..moveTo(endPoint.dx, endPoint.dy)
@@ -400,7 +396,10 @@ class ModernArrowPainter extends CustomPainter {
       canvas.drawPath(arrowPath, paint);
     }
 
+    // Pass 1: Draw Border (Thick)
     drawLayer(borderWidth, borderColor);
+
+    // Pass 2: Draw Fill (Thin)
     drawLayer(mainWidth, color);
   }
 
