@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 enum DrawingBrushType {
+  none,
   pencil,
   marker,
   charcoal,
@@ -14,6 +15,8 @@ enum DrawingBrushType {
 extension DrawingBrushTypeX on DrawingBrushType {
   String get label {
     switch (this) {
+      case DrawingBrushType.none:
+        return 'No Tool';
       case DrawingBrushType.pencil:
         return 'Pencil';
       case DrawingBrushType.marker:
@@ -27,6 +30,8 @@ extension DrawingBrushTypeX on DrawingBrushType {
 
   double get defaultOpacity {
     switch (this) {
+      case DrawingBrushType.none:
+        return 1.0;
       case DrawingBrushType.pencil:
         return 0.9;
       case DrawingBrushType.marker:
@@ -40,6 +45,8 @@ extension DrawingBrushTypeX on DrawingBrushType {
 
   double get defaultWidth {
     switch (this) {
+      case DrawingBrushType.none:
+        return 0.012;
       case DrawingBrushType.pencil:
         return 0.012;
       case DrawingBrushType.marker:
@@ -53,6 +60,8 @@ extension DrawingBrushTypeX on DrawingBrushType {
 
   Color get color {
     switch (this) {
+      case DrawingBrushType.none:
+        return const Color(0xFF111111);
       case DrawingBrushType.pencil:
         return const Color(0xFF111111);
       case DrawingBrushType.marker:
@@ -160,7 +169,7 @@ class DrawingStroke {
 class DrawingController extends ChangeNotifier {
   DrawingController({
     Iterable<DrawingStroke> initialStrokes = const <DrawingStroke>[],
-    DrawingBrushType initialBrush = DrawingBrushType.pencil,
+    DrawingBrushType initialBrush = DrawingBrushType.none,
     Map<DrawingBrushType, double>? initialBrushWidths,
     Map<DrawingBrushType, double>? initialBrushOpacities,
   })  : _strokes = List<DrawingStroke>.from(initialStrokes),
@@ -181,6 +190,8 @@ class DrawingController extends ChangeNotifier {
   DrawingStroke? get activeStroke => _activeStroke;
 
   DrawingBrushType get selectedBrush => _selectedBrush;
+
+  bool get canDraw => _selectedBrush != DrawingBrushType.none;
 
   double get currentOpacity => _brushOpacities[_selectedBrush]!;
 
@@ -217,6 +228,9 @@ class DrawingController extends ChangeNotifier {
   }
 
   void startStroke(Offset point) {
+    if (!canDraw) {
+      return;
+    }
     _activeStroke = DrawingStroke(
       normalizedPoints: <Offset>[point],
       brushType: _selectedBrush,
