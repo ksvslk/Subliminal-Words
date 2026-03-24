@@ -93,6 +93,7 @@ class LevelModel with ChangeNotifier {
             'No initial levels found from bundled assets or Firestore. Creating a placeholder level.');
         initialLevelData = SWLevel(
           id: 'placeholder__1',
+          documentId: 'placeholder__1',
           nr: 1,
           packId: initialPackId,
           name: 'No Levels Available',
@@ -113,6 +114,7 @@ class LevelModel with ChangeNotifier {
       _log.severe('Failed to fetch initial levels on startup.', e);
       initialLevelData = SWLevel(
         id: 'error__1',
+        documentId: 'error__1',
         nr: 1,
         packId: 'error',
         name: 'Error Loading Levels',
@@ -228,14 +230,18 @@ class LevelModel with ChangeNotifier {
   }
 
   Future<void> nextLevel() async {
-
     if (currentLevel == null) return;
 
     final nextLevelNr = levelNr + 1;
     final String packId = currentLevel!.packId;
     SWLevel? nextLevelData;
 
-    if (FirebaseService.bundledPackAssets.containsKey(packId)) {
+    if (currentLevel!.isCreatorOwned) {
+      nextLevelData = await firebaseService.getMyLevelByNumber(nextLevelNr);
+    }
+
+    if (nextLevelData == null &&
+        FirebaseService.bundledPackAssets.containsKey(packId)) {
       try {
         final String jsonString = await rootBundle
             .loadString(FirebaseService.bundledPackAssets[packId]!);
@@ -251,7 +257,7 @@ class LevelModel with ChangeNotifier {
       }
     }
 
-    if (nextLevelData == null) {
+    if (nextLevelData == null && !currentLevel!.isCreatorOwned) {
       try {
         nextLevelData = await firebaseService.getLevel(packId, nextLevelNr);
       } on FirebaseException catch (e) {
@@ -421,12 +427,13 @@ class LevelModel with ChangeNotifier {
   bool checkForWin() {
     var win = fieldModel.checkForWin();
     if (win) {
-      
       int timeTakenSeconds = 0;
       if (_levelStartTime != null) {
-        timeTakenSeconds = DateTime.now().difference(_levelStartTime!).inSeconds;
+        timeTakenSeconds =
+            DateTime.now().difference(_levelStartTime!).inSeconds;
       }
-      trackLevelFinish(currentLevel?.nr, currentLevel?.packId, timeTakenSeconds);
+      trackLevelFinish(
+          currentLevel?.nr, currentLevel?.packId, timeTakenSeconds);
       pictureModel.setLevelComplete();
       Future.delayed(const Duration(milliseconds: 50), () {
         levelCompleted = true;
@@ -445,12 +452,13 @@ class LevelModel with ChangeNotifier {
         'level_number': levelNumber.toString(), // Make sure this is an Integer
         'pack_name': packName,
         // Create a composite ID for easier reading in basic reports
-        'level_id': '${packName}_$levelNumber', 
+        'level_id': '${packName}_$levelNumber',
       },
     );
   }
 
-  Future<void> trackLevelFinish(int? levelNumber, String? packName, int timeTaken) async {
+  Future<void> trackLevelFinish(
+      int? levelNumber, String? packName, int timeTaken) async {
     if (levelNumber == null || packName == null) return;
     await FirebaseAnalytics.instance.logEvent(
       name: 'level_finish',

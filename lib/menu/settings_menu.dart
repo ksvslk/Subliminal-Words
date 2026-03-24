@@ -5,11 +5,15 @@ import 'package:operation_hermes/controller/games_services.dart';
 import 'package:operation_hermes/menu/credits_dialog.dart';
 import 'package:operation_hermes/menu/licenses_dialog.dart';
 import 'package:operation_hermes/controller/settings_controller.dart';
+import 'package:operation_hermes/ui/screen/create_level_screen.dart';
+import 'package:operation_hermes/ui/screen/my_levels_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 
 enum MenuItem {
+  myXlevels,
+  createXlevel,
   achievements,
   theme,
   about,
@@ -20,6 +24,7 @@ enum MenuItem {
 }
 
 enum AboutSubMenuItem { follow, licenses, credits, privacy, eula }
+
 enum ThemeSubMenuItem { red, yellow, green, blue, purple }
 
 Uri _getPortfolioUri() {
@@ -83,6 +88,28 @@ class _SettingsMenuState extends State<SettingsMenu> {
       },
       menuChildren: MenuItem.values.map((item) {
         switch (item) {
+          case MenuItem.myXlevels:
+            return MenuItemButton(
+                onPressed: () {
+                  Navigator.of(mainContext).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const MyLevelsScreen(),
+                    ),
+                  );
+                },
+                leadingIcon: const Icon(Icons.collections_bookmark_outlined),
+                child: Text(item.name.replaceFirst('X', ' ')));
+          case MenuItem.createXlevel:
+            return MenuItemButton(
+                onPressed: () {
+                  Navigator.of(mainContext).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const CreateLevelScreen(),
+                    ),
+                  );
+                },
+                leadingIcon: const Icon(Icons.draw_outlined),
+                child: Text(item.name.replaceFirst('X', ' ')));
           case MenuItem.achievements:
             return MenuItemButton(
                 onPressed: () {
@@ -199,9 +226,13 @@ class _SettingsMenuState extends State<SettingsMenu> {
                   case AboutSubMenuItem.eula:
                     return MenuItemButton(
                         onPressed: () {
-                          (Platform.isIOS || Platform.isMacOS) ? _launchUrl(_eulaUri) : _launchUrl(Uri.parse('https://www.indest.ee'));
+                          (Platform.isIOS || Platform.isMacOS)
+                              ? _launchUrl(_eulaUri)
+                              : _launchUrl(Uri.parse('https://www.indest.ee'));
                         },
-                        child: Text((Platform.isIOS || Platform.isMacOS) ? item.name : "developer"));
+                        child: Text((Platform.isIOS || Platform.isMacOS)
+                            ? item.name
+                            : "developer"));
                 }
               }).toList(),
               child: Text(item.name),

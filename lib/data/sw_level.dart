@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:operation_hermes/data/user_level_metadata.dart';
 
 class SWLevel {
   final String id;
+  final String documentId;
   final int nr;
   final String packId;
   final String name;
@@ -16,9 +18,17 @@ class SWLevel {
   final DateTime createdAt;
   final DateTime modifiedAt;
   final bool isBundled;
+  final String creatorUid;
+  final String creatorName;
+  final String editorMode;
+  final String submissionStatus;
+  final bool isLocked;
+  final String? submissionId;
+  final Map<String, dynamic> editorData;
 
   SWLevel({
     required this.id,
+    required this.documentId,
     required this.nr,
     required this.packId,
     required this.name,
@@ -33,12 +43,20 @@ class SWLevel {
     required this.createdAt,
     required this.modifiedAt,
     this.isBundled = false,
+    this.creatorUid = '',
+    this.creatorName = '',
+    this.editorMode = UserLevelEditorMode.photoSketch,
+    this.submissionStatus = UserLevelSubmissionStatus.draft,
+    this.isLocked = false,
+    this.submissionId,
+    this.editorData = const <String, dynamic>{},
   });
 
   factory SWLevel.fromFirestore(
       String id, String packId, Map<String, dynamic> data) {
     return SWLevel(
       id: '${packId}__${data['nr']}',
+      documentId: id,
       nr: data['nr'] ?? 0,
       packId: packId,
       name: data['name'] ?? 'Unnamed Level',
@@ -54,12 +72,21 @@ class SWLevel {
       modifiedAt:
           (data['modifiedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isBundled: false,
+      creatorUid: data['creatorUid'] ?? '',
+      creatorName: data['creatorName'] ?? '',
+      editorMode: data['editorMode'] ?? UserLevelEditorMode.photoSketch,
+      submissionStatus:
+          data['submissionStatus'] ?? UserLevelSubmissionStatus.draft,
+      isLocked: data['isLocked'] ?? false,
+      submissionId: data['submissionId'],
+      editorData: Map<String, dynamic>.from(data['editorData'] ?? const {}),
     );
   }
 
   factory SWLevel.fromJson(String packId, Map<String, dynamic> json) {
     return SWLevel(
       id: '${packId}__${json['nr']}',
+      documentId: '${packId}__${json['nr']}',
       nr: json['nr'] ?? 0,
       packId: packId,
       name: json['name'] ?? 'Unnamed Level',
@@ -74,12 +101,21 @@ class SWLevel {
       createdAt: DateTime.now(),
       modifiedAt: DateTime.now(),
       isBundled: true,
+      creatorUid: json['creatorUid'] ?? '',
+      creatorName: json['creatorName'] ?? '',
+      editorMode: json['editorMode'] ?? UserLevelEditorMode.photoSketch,
+      submissionStatus:
+          json['submissionStatus'] ?? UserLevelSubmissionStatus.approved,
+      isLocked: json['isLocked'] ?? false,
+      submissionId: json['submissionId'],
+      editorData: Map<String, dynamic>.from(json['editorData'] ?? const {}),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'documentId': documentId,
       'nr': nr,
       'packId': packId,
       'name': name,
@@ -94,6 +130,13 @@ class SWLevel {
       'createdAt': createdAt.toIso8601String(),
       'modifiedAt': modifiedAt.toIso8601String(),
       'isBundled': isBundled,
+      'creatorUid': creatorUid,
+      'creatorName': creatorName,
+      'editorMode': editorMode,
+      'submissionStatus': submissionStatus,
+      'isLocked': isLocked,
+      'submissionId': submissionId,
+      'editorData': editorData,
     };
   }
 
@@ -105,6 +148,24 @@ class SWLevel {
   bool get isHighlightType => hintType == 'highlight';
   bool get hasStartTooltip => tooltipStart.isNotEmpty;
   bool get hasEndTooltip => tooltipEnd.isNotEmpty;
+  bool get isCreatorOwned => creatorUid.isNotEmpty;
+  bool get usesDrawObjectEditor => editorMode == UserLevelEditorMode.drawObject;
+  bool get hasReviewReadyPuzzleImage {
+    final storedFlag = editorData['hasPuzzleImage'];
+    if (storedFlag is bool) {
+      return storedFlag;
+    }
+
+    if (puzzlePath.isEmpty) {
+      return false;
+    }
+
+    if (usesDrawObjectEditor) {
+      return solutionPath.isNotEmpty && puzzlePath != solutionPath;
+    }
+
+    return true;
+  }
 
   String get packNameSanitized => packId
       .split('-')
