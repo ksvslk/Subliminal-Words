@@ -9,6 +9,7 @@ import 'package:xml/xml.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/data/svg_letter.dart';
+import 'package:operation_hermes/data/word_letter_style.dart';
 
 class PictureModel with ChangeNotifier {
   static final _log = Logger('PictureModel');
@@ -247,10 +248,10 @@ class PictureModel with ChangeNotifier {
       }
 
       final x = double.tryParse(
-        element.getAttribute('x') ?? element.getAttribute('data-x') ?? '',
+        element.getAttribute('data-x') ?? element.getAttribute('x') ?? '',
       );
       final y = double.tryParse(
-        element.getAttribute('y') ?? element.getAttribute('data-y') ?? '',
+        element.getAttribute('data-y') ?? element.getAttribute('y') ?? '',
       );
       final fontSize = double.tryParse(
         element.getAttribute('font-size') ??
@@ -268,6 +269,14 @@ class PictureModel with ChangeNotifier {
         x: x,
         y: y,
         fontSize: fontSize,
+        fontWeightValue: normalizeWordLetterWeightValue(
+          int.tryParse(
+                element.getAttribute('font-weight') ??
+                    element.getAttribute('data-font-weight') ??
+                    '',
+              ) ??
+              kDefaultWordLetterWeightValue,
+        ),
         rotationDegrees: _rotationFromTransform(
           element.getAttribute('transform'),
           element.getAttribute('data-rotation'),

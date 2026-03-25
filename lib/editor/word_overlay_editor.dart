@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:operation_hermes/data/word_letter_style.dart';
 import 'package:xml/xml.dart';
 
 class WordOverlayLetter {
@@ -18,6 +19,7 @@ class WordOverlayLetter {
   final double skewXDegrees;
   final double skewYDegrees;
   final double opacity;
+  final int fontWeightValue;
 
   const WordOverlayLetter({
     required this.id,
@@ -30,6 +32,7 @@ class WordOverlayLetter {
     required this.skewXDegrees,
     required this.skewYDegrees,
     required this.opacity,
+    this.fontWeightValue = kDefaultWordLetterWeightValue,
   });
 
   WordOverlayLetter copyWith({
@@ -43,6 +46,7 @@ class WordOverlayLetter {
     double? skewXDegrees,
     double? skewYDegrees,
     double? opacity,
+    int? fontWeightValue,
   }) {
     return WordOverlayLetter(
       id: id ?? this.id,
@@ -55,6 +59,7 @@ class WordOverlayLetter {
       skewXDegrees: skewXDegrees ?? this.skewXDegrees,
       skewYDegrees: skewYDegrees ?? this.skewYDegrees,
       opacity: opacity ?? this.opacity,
+      fontWeightValue: fontWeightValue ?? this.fontWeightValue,
     );
   }
 
@@ -71,6 +76,7 @@ class WordOverlayLetter {
       'skewXDegrees': skewXDegrees,
       'skewYDegrees': skewYDegrees,
       'opacity': opacity,
+      'fontWeightValue': fontWeightValue,
     };
   }
 
@@ -89,6 +95,10 @@ class WordOverlayLetter {
       skewXDegrees: (json['skewXDegrees'] as num?)?.toDouble() ?? 0,
       skewYDegrees: (json['skewYDegrees'] as num?)?.toDouble() ?? 0,
       opacity: (json['opacity'] as num?)?.toDouble() ?? 1,
+      fontWeightValue: normalizeWordLetterWeightValue(
+        (json['fontWeightValue'] as num?)?.toInt() ??
+            kDefaultWordLetterWeightValue,
+      ),
     );
   }
 }
@@ -106,10 +116,24 @@ List<WordOverlayLetter> buildWordOverlayLettersFromSolution(String solution) {
   }
 
   const viewSize = 1024.0;
-  const baseSpacing = 184.0;
-  const rowSpacing = 214.0;
+  const maxColumnSpacing = 244.0;
+  const maxRowSpacing = 252.0;
+  const horizontalMargin = 132.0;
+  const verticalMargin = 176.0;
   final columns = math.max(1, math.min(4, characters.length));
   final rows = (characters.length / columns).ceil();
+  final baseSpacing = columns > 1
+      ? math.min(
+          maxColumnSpacing,
+          (viewSize - (horizontalMargin * 2)) / (columns - 1),
+        )
+      : 0.0;
+  final rowSpacing = rows > 1
+      ? math.min(
+          maxRowSpacing,
+          (viewSize - (verticalMargin * 2)) / (rows - 1),
+        )
+      : 0.0;
   final letters = <WordOverlayLetter>[];
 
   for (var index = 0; index < characters.length; index += 1) {
@@ -133,6 +157,7 @@ List<WordOverlayLetter> buildWordOverlayLettersFromSolution(String solution) {
         skewXDegrees: 0,
         skewYDegrees: 0,
         opacity: 1,
+        fontWeightValue: kDefaultWordLetterWeightValue,
       ),
     );
   }
@@ -171,6 +196,17 @@ class WordOverlayController extends ChangeNotifier {
   bool get hasLetters => _letters.isNotEmpty;
 
   int get contentVersion => _contentVersion;
+
+  int get fontWeightValue {
+    final selected = selectedLetter;
+    if (selected != null) {
+      return selected.fontWeightValue;
+    }
+    if (_letters.isNotEmpty) {
+      return _letters.first.fontWeightValue;
+    }
+    return kDefaultWordLetterWeightValue;
+  }
 
   void selectLetter(String? letterId) {
     if (_selectedLetterId == letterId) {
@@ -213,9 +249,14 @@ class WordOverlayController extends ChangeNotifier {
     final existingById = <String, WordOverlayLetter>{
       for (final letter in _letters) letter.id: letter,
     };
+    final styleSeed = selectedLetter ?? (_letters.isNotEmpty ? _letters.first : null);
     final merged = <WordOverlayLetter>[
       for (final template in templates)
-        (existingById[template.id] ?? template)
+        (existingById[template.id] ??
+                template.copyWith(
+                  fontWeightValue:
+                      styleSeed?.fontWeightValue ?? template.fontWeightValue,
+                ))
             .copyWith(letter: template.letter),
     ];
 
@@ -276,6 +317,7 @@ class WordOverlayController extends ChangeNotifier {
         current.letter == nextLetter.letter &&
         current.normalizedCenter == nextLetter.normalizedCenter &&
         current.fontSize == nextLetter.fontSize &&
+        current.fontWeightValue == nextLetter.fontWeightValue &&
         current.rotationDegrees == nextLetter.rotationDegrees &&
         current.scaleX == nextLetter.scaleX &&
         current.scaleY == nextLetter.scaleY &&
@@ -397,6 +439,20 @@ class WordOverlayController extends ChangeNotifier {
     );
   }
 
+  void updateAllFontWeightValue(int fontWeightValue) {
+    final normalized = normalizeWordLetterWeightValue(fontWeightValue);
+    if (_letters.isEmpty ||
+        _letters.every((letter) => letter.fontWeightValue == normalized)) {
+      return;
+    }
+
+    for (var index = 0; index < _letters.length; index += 1) {
+      _letters[index] = _letters[index].copyWith(fontWeightValue: normalized);
+    }
+    _contentVersion += 1;
+    notifyListeners();
+  }
+
   void nudgeSelectedFontSize(double delta) {
     final selected = selectedLetter;
     if (selected == null) {
@@ -501,7 +557,8 @@ class WordOverlayController extends ChangeNotifier {
           a.scaleY != b.scaleY ||
           a.skewXDegrees != b.skewXDegrees ||
           a.skewYDegrees != b.skewYDegrees ||
-          a.opacity != b.opacity) {
+          a.opacity != b.opacity ||
+          a.fontWeightValue != b.fontWeightValue) {
         return false;
       }
     }
@@ -528,12 +585,14 @@ String generateWordOverlaySvg(List<WordOverlayLetter> letters) {
       '<text id="$id" aria-label="$ariaLabel" '
       'x="0" y="0" '
       'font-size="${letter.fontSize.toStringAsFixed(2)}" '
+      'font-weight="${letter.fontWeightValue}" '
       'font-family="Roboto, Arial, sans-serif" '
       'text-anchor="middle" dominant-baseline="middle" fill="#000000" '
       'fill-opacity="${letter.opacity.toStringAsFixed(3)}" '
       'transform="translate(${x.toStringAsFixed(2)} ${y.toStringAsFixed(2)}) rotate(${letter.rotationDegrees.toStringAsFixed(2)}) skewX(${letter.skewXDegrees.toStringAsFixed(2)}) skewY(${letter.skewYDegrees.toStringAsFixed(2)}) scale(${letter.scaleX.toStringAsFixed(3)} ${letter.scaleY.toStringAsFixed(3)})" '
       'data-x="${x.toStringAsFixed(2)}" data-y="${y.toStringAsFixed(2)}" '
       'data-font-size="${letter.fontSize.toStringAsFixed(2)}" '
+      'data-font-weight="${letter.fontWeightValue}" '
       'data-rotation="${letter.rotationDegrees.toStringAsFixed(2)}" '
       'data-scale-x="${letter.scaleX.toStringAsFixed(3)}" '
       'data-scale-y="${letter.scaleY.toStringAsFixed(3)}" '
@@ -564,11 +623,11 @@ List<WordOverlayLetter> parseWordOverlayLetters(String svgString) {
     }
 
     final x = double.tryParse(
-          element.getAttribute('x') ?? element.getAttribute('data-x') ?? '',
+          element.getAttribute('data-x') ?? element.getAttribute('x') ?? '',
         ) ??
         512;
     final y = double.tryParse(
-          element.getAttribute('y') ?? element.getAttribute('data-y') ?? '',
+          element.getAttribute('data-y') ?? element.getAttribute('y') ?? '',
         ) ??
         512;
     final fontSize = double.tryParse(
@@ -589,6 +648,14 @@ List<WordOverlayLetter> parseWordOverlayLetters(String svgString) {
         normalizedCenter:
             Offset((x / 1024).clamp(0.0, 1.0), (y / 1024).clamp(0.0, 1.0)),
         fontSize: fontSize,
+        fontWeightValue: normalizeWordLetterWeightValue(
+          int.tryParse(
+                element.getAttribute('font-weight') ??
+                    element.getAttribute('data-font-weight') ??
+                    '',
+              ) ??
+              kDefaultWordLetterWeightValue,
+        ),
         rotationDegrees: rotation,
         scaleX:
             double.tryParse(element.getAttribute('data-scale-x') ?? '') ?? 1,
@@ -836,13 +903,15 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
   _LetterSelectionMetrics _measureSelection(WordOverlayLetter letter) {
     final scale = widget.size.width / 1024;
     final visualFontSize = letter.fontSize * scale;
-    const outlineWidth = 3.5;
+    final outlineWidth =
+        wordLetterEditorOutlineStrokeWidth(letter.fontWeightValue);
+    final widthScale = wordLetterWidthScale(letter.fontWeightValue);
     final textPainter = TextPainter(
       text: TextSpan(
         text: letter.letter,
         style: TextStyle(
           fontSize: visualFontSize,
-          fontWeight: FontWeight.w900,
+          fontWeight: wordLetterFontWeight(letter.fontWeightValue),
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -851,6 +920,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     final baseBounds = _measureGlyphBounds(
       textPainter: textPainter,
       outlineWidth: outlineWidth,
+      widthScale: widthScale,
     );
     final frameBounds = _expandSelectionFrameBounds(baseBounds);
     final corners = <Offset>[
@@ -880,6 +950,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
   Rect _measureGlyphBounds({
     required TextPainter textPainter,
     required double outlineWidth,
+    required double widthScale,
   }) {
     final selection = TextSelection(
       baseOffset: 0,
@@ -892,7 +963,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
         width: textPainter.width + (outlineWidth * 2),
         height: textPainter.height + (outlineWidth * 2),
       );
-      return _tightenGlyphBounds(fallbackBounds);
+      return _applyWidthScale(_tightenGlyphBounds(fallbackBounds), widthScale);
     }
 
     var minX = double.infinity;
@@ -912,7 +983,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
       maxX - (textPainter.width / 2) + outlineWidth,
       maxY - (textPainter.height / 2) + outlineWidth,
     );
-    return _tightenGlyphBounds(rawBounds);
+    return _applyWidthScale(_tightenGlyphBounds(rawBounds), widthScale);
   }
 
   Rect _tightenGlyphBounds(Rect rawBounds) {
@@ -951,6 +1022,17 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     final outwardPadding =
         math.max(4.0, math.min(8.0, baseBounds.shortestSide * 0.07));
     return baseBounds.inflate(outwardPadding);
+  }
+
+  Rect _applyWidthScale(Rect bounds, double widthScale) {
+    if ((widthScale - 1).abs() < 0.001) {
+      return bounds;
+    }
+    return Rect.fromCenter(
+      center: bounds.center,
+      width: bounds.width * widthScale,
+      height: bounds.height,
+    );
   }
 
   Offset _transformLocalPoint(Offset point, WordOverlayLetter letter) {
@@ -1262,7 +1344,9 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     final isLocked = widget.isLocked;
     final metrics = _measureSelection(letter);
     final visualFontSize = metrics.visualFontSize;
-    const outlineWidth = 3.5;
+    final outlineWidth =
+        wordLetterEditorOutlineStrokeWidth(letter.fontWeightValue);
+    final widthScale = wordLetterWidthScale(letter.fontWeightValue);
     final fillColor = Colors.black.withValues(alpha: letter.opacity);
     final outlineColor = colorScheme.surface;
     final bounds = metrics.transformedBounds;
@@ -1285,7 +1369,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: visualFontSize,
-            fontWeight: FontWeight.w900,
+            fontWeight: wordLetterFontWeight(letter.fontWeightValue),
             foreground: Paint()
               ..style = PaintingStyle.stroke
               ..strokeWidth = outlineWidth
@@ -1299,7 +1383,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: visualFontSize,
-            fontWeight: FontWeight.w900,
+            fontWeight: wordLetterFontWeight(letter.fontWeightValue),
             color: fillColor,
           ),
         ),
@@ -1332,7 +1416,12 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
                           0, 1, math.tan(letter.skewXDegrees * math.pi / 180))
                       ..setEntry(
                           1, 0, math.tan(letter.skewYDegrees * math.pi / 180))
-                      ..scaleByDouble(letter.scaleX, letter.scaleY, 1, 1);
+                      ..scaleByDouble(
+                        letter.scaleX * widthScale,
+                        letter.scaleY,
+                        1,
+                        1,
+                      );
 
                     return Transform.rotate(
                       angle: letter.rotationDegrees * math.pi / 180,
@@ -1350,7 +1439,12 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
                         0, 1, math.tan(letter.skewXDegrees * math.pi / 180))
                     ..setEntry(
                         1, 0, math.tan(letter.skewYDegrees * math.pi / 180))
-                    ..scaleByDouble(letter.scaleX, letter.scaleY, 1, 1);
+                    ..scaleByDouble(
+                      letter.scaleX * widthScale,
+                      letter.scaleY,
+                      1,
+                      1,
+                    );
 
                   final transformedVisual =
                       buildTransformed(IgnorePointer(child: labelVisual));
@@ -1724,7 +1818,7 @@ void _paintWordLetterToCanvas({
       text: letter.letter,
       style: TextStyle(
         fontSize: letter.fontSize * (size.width / 1024),
-        fontWeight: FontWeight.w900,
+        fontWeight: wordLetterFontWeight(letter.fontWeightValue),
         color: color.withValues(alpha: letter.opacity),
       ),
     ),
@@ -1738,7 +1832,12 @@ void _paintWordLetterToCanvas({
   final transform = Matrix4.identity()
     ..setEntry(0, 1, math.tan(letter.skewXDegrees * math.pi / 180))
     ..setEntry(1, 0, math.tan(letter.skewYDegrees * math.pi / 180));
-  transform.scaleByDouble(letter.scaleX, letter.scaleY, 1, 1);
+  transform.scaleByDouble(
+    letter.scaleX * wordLetterWidthScale(letter.fontWeightValue),
+    letter.scaleY,
+    1,
+    1,
+  );
   canvas.transform(transform.storage);
   textPainter.paint(
     canvas,

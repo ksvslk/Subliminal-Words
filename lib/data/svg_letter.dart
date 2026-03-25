@@ -14,6 +14,7 @@ class SvgLetter {
   double skewXDegrees;
   double skewYDegrees;
   double opacity;
+  int fontWeightValue;
 
   SvgLetter({
     required this.path,
@@ -28,6 +29,7 @@ class SvgLetter {
     this.skewXDegrees = 0,
     this.skewYDegrees = 0,
     this.opacity = 1,
+    this.fontWeightValue = 900,
   });
 
   bool get usesTextOverlay =>

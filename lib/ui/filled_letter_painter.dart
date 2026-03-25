@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'package:operation_hermes/data/word_letter_style.dart';
 
 class FilledLetterPainter extends CustomPainter {
   const FilledLetterPainter({
@@ -13,6 +14,7 @@ class FilledLetterPainter extends CustomPainter {
     this.skewXDegrees = 0,
     this.skewYDegrees = 0,
     this.opacity = 1,
+    this.fontWeightValue = kDefaultWordLetterWeightValue,
     required this.firstColor,
     required this.secondColor,
   });
@@ -27,6 +29,7 @@ class FilledLetterPainter extends CustomPainter {
   final double skewXDegrees;
   final double skewYDegrees;
   final double opacity;
+  final int fontWeightValue;
   final Color firstColor;
   final Color secondColor;
 
@@ -42,6 +45,7 @@ class FilledLetterPainter extends CustomPainter {
       oldDelegate.skewXDegrees != skewXDegrees ||
       oldDelegate.skewYDegrees != skewYDegrees ||
       oldDelegate.opacity != opacity ||
+      oldDelegate.fontWeightValue != fontWeightValue ||
       oldDelegate.firstColor != firstColor ||
       oldDelegate.secondColor != secondColor;
 
@@ -49,6 +53,8 @@ class FilledLetterPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     var scale = size.width / 1024;
     canvas.scale(scale, scale);
+    final baseStrokeWidth = wordLetterPainterBaseStrokeWidth(fontWeightValue);
+    final glowStrokeWidth = wordLetterPainterGlowStrokeWidth(fontWeightValue);
 
     final glyphPath = path;
     if (glyphPath != null) {
@@ -79,24 +85,29 @@ class FilledLetterPainter extends CustomPainter {
     final transform = Matrix4.identity()
       ..setEntry(0, 1, math.tan(skewXDegrees * math.pi / 180))
       ..setEntry(1, 0, math.tan(skewYDegrees * math.pi / 180));
-    transform.scaleByDouble(scaleX, scaleY, 1, 1);
+    transform.scaleByDouble(
+      scaleX * wordLetterWidthScale(fontWeightValue),
+      scaleY,
+      1,
+      1,
+    );
     canvas.transform(transform.storage);
 
     final glowStyle = TextStyle(
       fontSize: fontSize,
-      fontWeight: FontWeight.w900,
+      fontWeight: wordLetterFontWeight(fontWeightValue),
       foreground: Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 8
+        ..strokeWidth = glowStrokeWidth
         ..color = secondColor.withValues(alpha: opacity)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0),
     );
     final baseStyle = TextStyle(
       fontSize: fontSize,
-      fontWeight: FontWeight.w900,
+      fontWeight: wordLetterFontWeight(fontWeightValue),
       foreground: Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 6
+        ..strokeWidth = baseStrokeWidth
         ..color = firstColor.withValues(alpha: opacity),
     );
 

@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:operation_hermes/data/user_level_metadata.dart';
+import 'package:operation_hermes/data/word_letter_style.dart';
 import 'package:operation_hermes/editor/content_filter.dart';
 import 'package:operation_hermes/editor/drawing_canvas.dart';
 import 'package:operation_hermes/editor/word_overlay_editor.dart';
@@ -1662,6 +1663,32 @@ class _WordEditorSection extends StatelessWidget {
                       BorderSide(color: colorScheme.secondary, width: 2),
                 ),
               ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Letter Weight',
+              style: textTheme.labelMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<int>(
+              style: compactSegmentStyle,
+              segments: kWordLetterWeightOptions
+                  .map(
+                    (option) => ButtonSegment<int>(
+                      value: option.value,
+                      label: Text(option.label),
+                    ),
+                  )
+                  .toList(growable: false),
+              selected: <int>{controller.fontWeightValue},
+              showSelectedIcon: false,
+              onSelectionChanged: isLocked
+                  ? null
+                  : (selection) =>
+                      controller.updateAllFontWeightValue(selection.first),
             ),
             const SizedBox(height: 12),
             TextField(

@@ -210,6 +210,8 @@ class Puzzle extends StatelessWidget {
                                             skewYDegrees:
                                                 svgLetter.skewYDegrees,
                                             opacity: svgLetter.opacity,
+                                            fontWeightValue:
+                                                svgLetter.fontWeightValue,
                                             firstColor: firstColor,
                                             secondColor: secondColor),
                                         child: const AspectRatio(
