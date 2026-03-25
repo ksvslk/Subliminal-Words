@@ -770,6 +770,10 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
   double? _resizeStartScaleY;
   double? _resizeStartHorizontalExtent;
   double? _resizeStartVerticalExtent;
+  int? _movePointerId;
+  Offset? _moveDownGlobal;
+  bool _moveWasSelectedOnDown = false;
+  bool _moveHasStarted = false;
   Offset? _moveGrabOffset;
   WordOverlayLetter? _draftLetter;
   _TransformMode _transformMode = _TransformMode.resize;
@@ -788,7 +792,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
   bool get _isInteracting =>
       _rotationStartAngle != null ||
       _resizeHandle != null ||
-      _moveGrabOffset != null;
+      _movePointerId != null;
 
   WordOverlayLetter get _currentLetter => _draftLetter ?? widget.letter;
 
@@ -1036,10 +1040,16 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     );
   }
 
-  void _startMove(Offset globalPosition) {
+  void _startMove(
+    Offset globalPosition, {
+    required bool shouldSelect,
+  }) {
     _draftLetter = _currentLetter;
     _moveGrabOffset = _stageLocalFromGlobal(globalPosition) - _letterCenterOnStage();
-    widget.onTap();
+    if (shouldSelect) {
+      widget.onTap();
+      _transformMode = _TransformMode.resize;
+    }
     widget.onInteractionChanged(true);
   }
 
@@ -1072,6 +1082,71 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     });
   }
 
+  void _onMovePointerDown(PointerDownEvent event) {
+    if (widget.isLocked) {
+      return;
+    }
+    _movePointerId = event.pointer;
+    _moveDownGlobal = event.position;
+    _moveWasSelectedOnDown = widget.selected;
+    _moveHasStarted = false;
+  }
+
+  void _onMovePointerMove(PointerMoveEvent event) {
+    if (_movePointerId != event.pointer) {
+      return;
+    }
+
+    if (!_moveHasStarted) {
+      final downGlobal = _moveDownGlobal;
+      if (downGlobal == null) {
+        return;
+      }
+      if ((event.position - downGlobal).distance <= 0.5) {
+        return;
+      }
+      _moveHasStarted = true;
+      _startMove(
+        downGlobal,
+        shouldSelect: !_moveWasSelectedOnDown,
+      );
+    }
+
+    _updateMove(event.position);
+  }
+
+  void _onMovePointerUp(PointerUpEvent event) {
+    if (_movePointerId != event.pointer) {
+      return;
+    }
+
+    if (_moveHasStarted) {
+      _finishInteraction();
+      return;
+    }
+
+    _movePointerId = null;
+    _moveDownGlobal = null;
+    _moveWasSelectedOnDown = false;
+    _moveHasStarted = false;
+  }
+
+  void _onMovePointerCancel(PointerCancelEvent event) {
+    if (_movePointerId != event.pointer) {
+      return;
+    }
+
+    if (_moveHasStarted) {
+      _finishInteraction();
+      return;
+    }
+
+    _movePointerId = null;
+    _moveDownGlobal = null;
+    _moveWasSelectedOnDown = false;
+    _moveHasStarted = false;
+  }
+
   void _finishInteraction() {
     final draftLetter = _draftLetter;
     _rotationStartAngle = null;
@@ -1081,6 +1156,10 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     _resizeStartScaleY = null;
     _resizeStartHorizontalExtent = null;
     _resizeStartVerticalExtent = null;
+    _movePointerId = null;
+    _moveDownGlobal = null;
+    _moveWasSelectedOnDown = false;
+    _moveHasStarted = false;
     _moveGrabOffset = null;
     if (draftLetter != null) {
       widget.controller.replaceLetter(draftLetter);
@@ -1141,29 +1220,36 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     );
 
     if (!isLocked) {
-      label = GestureDetector(
+      label = Listener(
         behavior: HitTestBehavior.translucent,
-        dragStartBehavior: DragStartBehavior.down,
-        onTap: selected
-            ? _toggleTransformMode
-            : () {
-                widget.onTap();
-                _transformMode = _TransformMode.resize;
-              },
-        onPanStart: (details) => _startMove(details.globalPosition),
-        onPanUpdate: (details) => _updateMove(details.globalPosition),
-        onPanEnd: (_) => _finishInteraction(),
-        onPanCancel: _finishInteraction,
-        child: label,
+        onPointerDown: _onMovePointerDown,
+        onPointerMove: _onMovePointerMove,
+        onPointerUp: _onMovePointerUp,
+        onPointerCancel: _onMovePointerCancel,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: selected
+              ? _toggleTransformMode
+              : () {
+                  widget.onTap();
+                  _transformMode = _TransformMode.resize;
+                },
+          child: label,
+        ),
       );
     }
 
-    return RepaintBoundary(
-      child: Align(
-        alignment: Alignment(
-          (letter.normalizedCenter.dx * 2) - 1,
-          (letter.normalizedCenter.dy * 2) - 1,
-        ),
+    final stageCenter = Offset(
+      letter.normalizedCenter.dx * widget.size.width,
+      letter.normalizedCenter.dy * widget.size.height,
+    );
+
+    return Positioned(
+      left: stageCenter.dx - (totalWidth / 2),
+      top: stageCenter.dy - (totalHeight / 2),
+      width: totalWidth,
+      height: totalHeight,
+      child: RepaintBoundary(
         child: SizedBox(
           width: totalWidth,
           height: totalHeight,
@@ -1171,6 +1257,26 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
             clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: <Widget>[
+              Builder(
+                builder: (context) {
+                  final skewScaleTransform = Matrix4.identity()
+                    ..setEntry(
+                        0, 1, math.tan(letter.skewXDegrees * math.pi / 180))
+                    ..setEntry(
+                        1, 0, math.tan(letter.skewYDegrees * math.pi / 180))
+                    ..scaleByDouble(letter.scaleX, letter.scaleY, 1, 1);
+
+                  return Transform.rotate(
+                    angle: letter.rotationDegrees * math.pi / 180,
+                    alignment: Alignment.center,
+                    child: Transform(
+                      alignment: Alignment.center,
+                      transform: skewScaleTransform,
+                      child: label,
+                    ),
+                  );
+                },
+              ),
               if (selected)
                 Positioned.fill(
                   child: IgnorePointer(
@@ -1221,26 +1327,6 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
                       onPanCancel: _finishInteraction,
                     ),
                   ),
-              Builder(
-                builder: (context) {
-                  final skewScaleTransform = Matrix4.identity()
-                    ..setEntry(
-                        0, 1, math.tan(letter.skewXDegrees * math.pi / 180))
-                    ..setEntry(
-                        1, 0, math.tan(letter.skewYDegrees * math.pi / 180))
-                    ..scaleByDouble(letter.scaleX, letter.scaleY, 1, 1);
-
-                  return Transform.rotate(
-                    angle: letter.rotationDegrees * math.pi / 180,
-                    alignment: Alignment.center,
-                    child: Transform(
-                      alignment: Alignment.center,
-                      transform: skewScaleTransform,
-                      child: label,
-                    ),
-                  );
-                },
-              ),
             ],
           ),
         ),
