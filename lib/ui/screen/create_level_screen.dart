@@ -301,6 +301,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     }
 
     final answer = _answerController.text.trim();
+    if (_editorMode == UserLevelEditorMode.highlight) {
+      return answer;
+    }
+
     final factHint = _factController.text.trim();
     if (answer.isEmpty && factHint.isEmpty) {
       return '';
@@ -415,7 +419,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     if (answer.length < 2) {
       return 'Add the solution with at least 2 characters.';
     }
-    if (factHint.isEmpty) {
+    if (_editorMode != UserLevelEditorMode.highlight && factHint.isEmpty) {
       return 'Add a fact hint before saving.';
     }
 
@@ -451,7 +455,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       }
     }
 
-    for (final value in <String>[creatorName, answer, factHint]) {
+    final profanityCheckedValues = <String>[
+      creatorName,
+      answer,
+      if (_editorMode != UserLevelEditorMode.highlight) factHint,
+    ];
+    for (final value in profanityCheckedValues) {
       if (ContentFilter.containsBlockedTerm(value)) {
         return 'Please remove profanity before saving.';
       }
@@ -486,7 +495,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           levelId: widget.initialLevel?.documentId,
           creatorName: _creatorNameController.text,
           answer: _answerController.text,
-          factText: _factController.text,
+          factText: '',
           solutionSvg: generateWordOverlaySvg(_wordOverlayController.letters),
           puzzleImageBytes: _generatedPuzzleImageBytes,
           allowReuseExistingPuzzle: !_hasPuzzleInvalidatedByEdit,
@@ -754,19 +763,19 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                           decoration: _solutionFieldDecoration(colorScheme),
                         ),
                         const SizedBox(height: 12),
-                      ],
-                      TextField(
-                        controller: _factController,
-                        enabled: !_isLocked,
-                        textInputAction: TextInputAction.next,
-                        maxLines: 2,
-                        decoration: _fieldDecoration(
-                          colorScheme,
-                          label: 'Fact Hint',
-                          icon: Icons.lightbulb_outline,
+                        TextField(
+                          controller: _factController,
+                          enabled: !_isLocked,
+                          textInputAction: TextInputAction.next,
+                          maxLines: 2,
+                          decoration: _fieldDecoration(
+                            colorScheme,
+                            label: 'Fact Hint',
+                            icon: Icons.lightbulb_outline,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
+                      ],
                       TextField(
                         controller: _creatorNameController,
                         enabled: !_isLocked,
@@ -1555,7 +1564,6 @@ class _WordEditorSection extends StatelessWidget {
     return AnimatedBuilder(
       animation: Listenable.merge(<Listenable>[controller, solutionController]),
       builder: (context, _) {
-        final hasLetters = controller.hasLetters;
         final solutionBorder = OutlineInputBorder(
           borderRadius: BorderRadius.circular(20),
           borderSide: BorderSide(color: colorScheme.secondary),
@@ -1656,20 +1664,6 @@ class _WordEditorSection extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
-              if (hasLetters) ...<Widget>[
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    'Tap a letter to show its transform box.',
-                    style: textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ],
             TextField(
               controller: promptController,
               enabled: !isLocked && !isGeneratingPuzzle,

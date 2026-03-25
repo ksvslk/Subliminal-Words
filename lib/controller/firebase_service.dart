@@ -592,7 +592,9 @@ class FirebaseService {
       'editorMode': UserLevelEditorMode.highlight,
       'creatorUid': uid,
       'creatorName': creatorName.trim(),
-      'hints': <String, dynamic>{'fact': factText.trim()},
+      'hints': factText.trim().isEmpty
+          ? <String, dynamic>{}
+          : <String, dynamic>{'fact': factText.trim()},
       'puzzlePath': puzzlePath,
       'puzzleThumbnailPath': puzzleThumbnailPath,
       'solutionPath': solutionRef.fullPath,

@@ -308,6 +308,7 @@ exports.submitUserLevelSubmission = onCall(async (request) => {
 
         const creatorName = String(levelData.creatorName || '').trim();
         const answer = String(levelData.name || '').trim();
+        const editorMode = String(levelData.editorMode || 'draw_object').trim();
         const factText = String(levelData?.hints?.fact || '').trim();
         const tooltipStart = String(levelData.tooltipStart || '').trim();
         const tooltipEnd = String(levelData.tooltipEnd || '').trim();
@@ -319,7 +320,7 @@ exports.submitUserLevelSubmission = onCall(async (request) => {
             );
         }
 
-        if (!factText) {
+        if (editorMode !== 'highlight' && !factText) {
             throw new HttpsError(
                 'failed-precondition',
                 'The level is missing a fact hint.',
@@ -333,7 +334,17 @@ exports.submitUserLevelSubmission = onCall(async (request) => {
             );
         }
 
-        for (const value of [creatorName, answer, factText, tooltipStart, tooltipEnd]) {
+        const profanityCheckedValues = [
+            creatorName,
+            answer,
+            tooltipStart,
+            tooltipEnd,
+        ];
+        if (editorMode !== 'highlight') {
+            profanityCheckedValues.push(factText);
+        }
+
+        for (const value of profanityCheckedValues) {
             if (containsBlockedTerm(value)) {
                 throw new HttpsError(
                     'failed-precondition',
@@ -352,7 +363,7 @@ exports.submitUserLevelSubmission = onCall(async (request) => {
             creatorName,
             name: answer,
             hintType: levelData.hintType || 'fact',
-            editorMode: levelData.editorMode || 'draw_object',
+            editorMode,
             hints: levelData.hints || {},
             puzzlePath: levelData.puzzlePath || '',
             puzzleThumbnailPath: levelData.puzzleThumbnailPath || levelData.puzzlePath || '',

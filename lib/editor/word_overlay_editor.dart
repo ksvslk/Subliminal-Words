@@ -106,9 +106,9 @@ List<WordOverlayLetter> buildWordOverlayLettersFromSolution(String solution) {
   }
 
   const viewSize = 1024.0;
-  const baseSpacing = 132.0;
-  const rowSpacing = 170.0;
-  final columns = math.max(1, math.min(5, math.sqrt(characters.length).ceil()));
+  const baseSpacing = 184.0;
+  const rowSpacing = 214.0;
+  final columns = math.max(1, math.min(4, characters.length));
   final rows = (characters.length / columns).ceil();
   final letters = <WordOverlayLetter>[];
 
@@ -688,6 +688,10 @@ class _WordOverlayStageState extends State<WordOverlayStage> {
                           builder: (context, _) {
                             final letters = widget.controller.letters;
                             final selectedId = widget.controller.selectedLetterId;
+                            final orderedLetters = <WordOverlayLetter>[
+                              ...letters.where((letter) => letter.id != selectedId),
+                              ...letters.where((letter) => letter.id == selectedId),
+                            ];
 
                             return Stack(
                               fit: StackFit.expand,
@@ -702,7 +706,7 @@ class _WordOverlayStageState extends State<WordOverlayStage> {
                                       foregroundColor: widget.foregroundColor,
                                     ),
                                   ),
-                                for (final letter in letters)
+                                for (final letter in orderedLetters)
                                   _WordLetterHandle(
                                     key: ValueKey<String>(letter.id),
                                     stageKey: _stageKey,
@@ -763,6 +767,10 @@ class _WordLetterHandle extends StatefulWidget {
 }
 
 class _WordLetterHandleState extends State<_WordLetterHandle> {
+  static const double _moveStartThreshold = 4.0;
+  static const double _selectedInteractionPadding = 12.0;
+  static const double _unselectedInteractionPadding = 4.0;
+
   double? _rotationStartAngle;
   double? _rotationStartDegrees;
   _ResizeHandle? _resizeHandle;
@@ -777,6 +785,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
   Offset? _moveGrabOffset;
   WordOverlayLetter? _draftLetter;
   _TransformMode _transformMode = _TransformMode.resize;
+  bool _consumeNextTapAfterSelection = false;
 
   @override
   void didUpdateWidget(covariant _WordLetterHandle oldWidget) {
@@ -841,11 +850,12 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
       textPainter: textPainter,
       outlineWidth: outlineWidth,
     );
+    final frameBounds = _expandSelectionFrameBounds(baseBounds);
     final corners = <Offset>[
-      baseBounds.topLeft,
-      baseBounds.topRight,
-      baseBounds.bottomRight,
-      baseBounds.bottomLeft,
+      frameBounds.topLeft,
+      frameBounds.topRight,
+      frameBounds.bottomRight,
+      frameBounds.bottomLeft,
     ].map((corner) => _transformLocalPoint(corner, letter)).toList();
     var minX = double.infinity;
     var minY = double.infinity;
@@ -860,6 +870,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     return _LetterSelectionMetrics(
       visualFontSize: visualFontSize,
       baseBounds: baseBounds,
+      frameBounds: frameBounds,
       transformedBounds: Rect.fromLTRB(minX, minY, maxX, maxY),
     );
   }
@@ -874,11 +885,12 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     );
     final boxes = textPainter.getBoxesForSelection(selection);
     if (boxes.isEmpty) {
-      return Rect.fromCenter(
+      final fallbackBounds = Rect.fromCenter(
         center: Offset.zero,
         width: textPainter.width + (outlineWidth * 2),
         height: textPainter.height + (outlineWidth * 2),
       );
+      return _tightenGlyphBounds(fallbackBounds);
     }
 
     var minX = double.infinity;
@@ -892,12 +904,51 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
       maxY = math.max(maxY, box.bottom);
     }
 
-    return Rect.fromLTRB(
+    final rawBounds = Rect.fromLTRB(
       minX - (textPainter.width / 2) - outlineWidth,
       minY - (textPainter.height / 2) - outlineWidth,
       maxX - (textPainter.width / 2) + outlineWidth,
       maxY - (textPainter.height / 2) + outlineWidth,
     );
+    return _tightenGlyphBounds(rawBounds);
+  }
+
+  Rect _tightenGlyphBounds(Rect rawBounds) {
+    final grapheme = _currentLetter.letter.trim();
+    if (grapheme.isEmpty) {
+      return rawBounds;
+    }
+
+    final uppercaseOnly = grapheme == grapheme.toUpperCase() &&
+        grapheme != grapheme.toLowerCase();
+    final hasDescender = RegExp(r'[gjpqyQJ]').hasMatch(grapheme);
+    final horizontalInset = rawBounds.width * 0.11;
+    final topInset = rawBounds.height * (uppercaseOnly ? 0.2 : 0.24);
+    final bottomInset = rawBounds.height * (hasDescender ? 0.08 : 0.2);
+
+    final tightened = Rect.fromLTRB(
+      rawBounds.left + horizontalInset,
+      rawBounds.top + topInset,
+      rawBounds.right - horizontalInset,
+      rawBounds.bottom - bottomInset,
+    );
+
+    final minWidth = math.max(10.0, rawBounds.width * 0.2);
+    final minHeight = math.max(14.0, rawBounds.height * 0.3);
+    final nextWidth = math.max(minWidth, tightened.width);
+    final nextHeight = math.max(minHeight, tightened.height);
+
+    return Rect.fromCenter(
+      center: tightened.center,
+      width: nextWidth,
+      height: nextHeight,
+    );
+  }
+
+  Rect _expandSelectionFrameBounds(Rect baseBounds) {
+    final outwardPadding =
+        math.max(4.0, math.min(8.0, baseBounds.shortestSide * 0.07));
+    return baseBounds.inflate(outwardPadding);
   }
 
   Offset _transformLocalPoint(Offset point, WordOverlayLetter letter) {
@@ -1082,13 +1133,40 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     });
   }
 
+  void _handleLetterTap() {
+    if (widget.isLocked) {
+      return;
+    }
+    if (_consumeNextTapAfterSelection) {
+      _consumeNextTapAfterSelection = false;
+      return;
+    }
+    if (widget.selected) {
+      if (_transformMode != _TransformMode.resize) {
+        setState(() {
+          _transformMode = _TransformMode.resize;
+        });
+      }
+      return;
+    }
+    widget.onTap();
+    setState(() {
+      _transformMode = _TransformMode.resize;
+    });
+  }
+
   void _onMovePointerDown(PointerDownEvent event) {
     if (widget.isLocked) {
       return;
     }
+    if (!widget.selected) {
+      widget.onTap();
+      _transformMode = _TransformMode.resize;
+      _consumeNextTapAfterSelection = true;
+    }
     _movePointerId = event.pointer;
     _moveDownGlobal = event.position;
-    _moveWasSelectedOnDown = widget.selected;
+    _moveWasSelectedOnDown = true;
     _moveHasStarted = false;
   }
 
@@ -1102,7 +1180,8 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
       if (downGlobal == null) {
         return;
       }
-      if ((event.position - downGlobal).distance <= 0.5) {
+      final moveThreshold = _moveWasSelectedOnDown ? 0.5 : _moveStartThreshold;
+      if ((event.position - downGlobal).distance <= moveThreshold) {
         return;
       }
       _moveHasStarted = true;
@@ -1145,6 +1224,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     _moveDownGlobal = null;
     _moveWasSelectedOnDown = false;
     _moveHasStarted = false;
+    _consumeNextTapAfterSelection = false;
   }
 
   void _finishInteraction() {
@@ -1161,6 +1241,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     _moveWasSelectedOnDown = false;
     _moveHasStarted = false;
     _moveGrabOffset = null;
+    _consumeNextTapAfterSelection = false;
     if (draftLetter != null) {
       widget.controller.replaceLetter(draftLetter);
       _draftLetter = null;
@@ -1181,6 +1262,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     final outlineColor = colorScheme.surface;
     final bounds = metrics.transformedBounds;
     final baseBounds = metrics.baseBounds;
+    final frameBounds = metrics.frameBounds;
     const handleHitSize = 30.0;
     const handleVisualSize = 12.0;
     final centerX = math.max(bounds.left.abs(), bounds.right.abs()) +
@@ -1190,7 +1272,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     final totalWidth = centerX * 2;
     final totalHeight = centerY * 2;
 
-    Widget label = Stack(
+    final labelVisual = Stack(
       alignment: Alignment.center,
       children: <Widget>[
         Text(
@@ -1219,26 +1301,6 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
       ],
     );
 
-    if (!isLocked) {
-      label = Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: _onMovePointerDown,
-        onPointerMove: _onMovePointerMove,
-        onPointerUp: _onMovePointerUp,
-        onPointerCancel: _onMovePointerCancel,
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: selected
-              ? _toggleTransformMode
-              : () {
-                  widget.onTap();
-                  _transformMode = _TransformMode.resize;
-                },
-          child: label,
-        ),
-      );
-    }
-
     final stageCenter = Offset(
       letter.normalizedCenter.dx * widget.size.width,
       letter.normalizedCenter.dy * widget.size.height,
@@ -1259,6 +1321,25 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
             children: <Widget>[
               Builder(
                 builder: (context) {
+                  Widget buildTransformed(Widget child) {
+                    final skewScaleTransform = Matrix4.identity()
+                      ..setEntry(
+                          0, 1, math.tan(letter.skewXDegrees * math.pi / 180))
+                      ..setEntry(
+                          1, 0, math.tan(letter.skewYDegrees * math.pi / 180))
+                      ..scaleByDouble(letter.scaleX, letter.scaleY, 1, 1);
+
+                    return Transform.rotate(
+                      angle: letter.rotationDegrees * math.pi / 180,
+                      alignment: Alignment.center,
+                      child: Transform(
+                        alignment: Alignment.center,
+                        transform: skewScaleTransform,
+                        child: child,
+                      ),
+                    );
+                  }
+
                   final skewScaleTransform = Matrix4.identity()
                     ..setEntry(
                         0, 1, math.tan(letter.skewXDegrees * math.pi / 180))
@@ -1266,13 +1347,50 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
                         1, 0, math.tan(letter.skewYDegrees * math.pi / 180))
                     ..scaleByDouble(letter.scaleX, letter.scaleY, 1, 1);
 
+                  final transformedVisual =
+                      buildTransformed(IgnorePointer(child: labelVisual));
+
+                  if (isLocked) {
+                    return transformedVisual;
+                  }
+
+                  final interactionPadding = selected
+                      ? _selectedInteractionPadding
+                      : _unselectedInteractionPadding;
+                  final interactionBox = SizedBox(
+                    width: baseBounds.width + (interactionPadding * 2),
+                    height: baseBounds.height + (interactionPadding * 2),
+                    child: const ColoredBox(color: Colors.transparent),
+                  );
+
                   return Transform.rotate(
                     angle: letter.rotationDegrees * math.pi / 180,
                     alignment: Alignment.center,
                     child: Transform(
                       alignment: Alignment.center,
                       transform: skewScaleTransform,
-                      child: label,
+                      child: Listener(
+                        behavior: HitTestBehavior.translucent,
+                        onPointerDown: _onMovePointerDown,
+                        onPointerMove: _onMovePointerMove,
+                        onPointerUp: _onMovePointerUp,
+                        onPointerCancel: _onMovePointerCancel,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: _handleLetterTap,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            clipBehavior: Clip.none,
+                            children: <Widget>[
+                              Transform.translate(
+                                offset: baseBounds.center,
+                                child: interactionBox,
+                              ),
+                              IgnorePointer(child: labelVisual),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   );
                 },
@@ -1283,7 +1401,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
                     child: CustomPaint(
                       painter: _SelectionFramePainter(
                         points: _selectionCornerPoints(
-                          baseBounds: baseBounds,
+                          baseBounds: frameBounds,
                           center: Offset(centerX, centerY),
                           letter: letter,
                         ),
@@ -1296,10 +1414,10 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
                 for (final handle in _visibleHandlesForMode(_transformMode))
                   Positioned(
                     left: centerX +
-                        _handleLocalPoint(baseBounds, handle, letter).dx -
+                        _handleLocalPoint(frameBounds, handle, letter).dx -
                         (handleHitSize / 2),
                     top: centerY +
-                        _handleLocalPoint(baseBounds, handle, letter).dy -
+                        _handleLocalPoint(frameBounds, handle, letter).dy -
                         (handleHitSize / 2),
                     child: _ResizeHandleButton(
                       size: handleHitSize,
@@ -1408,11 +1526,13 @@ class _LetterSelectionMetrics {
   const _LetterSelectionMetrics({
     required this.visualFontSize,
     required this.baseBounds,
+    required this.frameBounds,
     required this.transformedBounds,
   });
 
   final double visualFontSize;
   final Rect baseBounds;
+  final Rect frameBounds;
   final Rect transformedBounds;
 }
 
