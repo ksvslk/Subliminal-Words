@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:operation_hermes/editor/drawing_canvas.dart';
 import 'package:operation_hermes/data/word_letter_style.dart';
 import 'package:xml/xml.dart';
 
@@ -695,7 +696,9 @@ String _escapeXml(String value) {
 
 class WordOverlayStage extends StatefulWidget {
   final WordOverlayController controller;
+  final DrawingController? drawingController;
   final bool isLocked;
+  final Offset Function(Offset localPosition, Size size)? normalizePoint;
   final ValueChanged<bool> onInteractionChanged;
   final Color borderColor;
   final Color backgroundColor;
@@ -704,7 +707,9 @@ class WordOverlayStage extends StatefulWidget {
   const WordOverlayStage({
     super.key,
     required this.controller,
+    this.drawingController,
     required this.isLocked,
+    this.normalizePoint,
     required this.onInteractionChanged,
     required this.borderColor,
     required this.backgroundColor,
@@ -717,6 +722,52 @@ class WordOverlayStage extends StatefulWidget {
 
 class _WordOverlayStageState extends State<WordOverlayStage> {
   final GlobalKey _stageKey = GlobalKey();
+  int? _activeDrawingPointerId;
+
+  bool get _canDraw =>
+      !widget.isLocked &&
+      widget.drawingController != null &&
+      widget.normalizePoint != null &&
+      widget.drawingController!.canDraw;
+
+  void _startStroke(PointerDownEvent event, Size size) {
+    if (!_canDraw || _activeDrawingPointerId != null || event.buttons == 0) {
+      return;
+    }
+    _activeDrawingPointerId = event.pointer;
+    widget.onInteractionChanged(true);
+    widget.drawingController!.startStroke(
+      widget.normalizePoint!(event.localPosition, size),
+    );
+  }
+
+  void _appendStroke(PointerMoveEvent event, Size size) {
+    if (_activeDrawingPointerId != event.pointer || !_canDraw) {
+      return;
+    }
+    widget.drawingController!.appendPoint(
+      widget.normalizePoint!(event.localPosition, size),
+    );
+  }
+
+  void _finishStroke(int pointer) {
+    if (_activeDrawingPointerId != pointer) {
+      return;
+    }
+    widget.drawingController?.endStroke();
+    _activeDrawingPointerId = null;
+    widget.onInteractionChanged(false);
+  }
+
+  @override
+  void dispose() {
+    if (_activeDrawingPointerId != null) {
+      widget.drawingController?.endStroke();
+      _activeDrawingPointerId = null;
+      widget.onInteractionChanged(false);
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -733,28 +784,58 @@ class _WordOverlayStageState extends State<WordOverlayStage> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final size = Size(constraints.maxWidth, constraints.maxHeight);
+              final drawingController = widget.drawingController;
+              final isDrawingMode = _canDraw;
 
               return Listener(
-                onPointerDown: (_) {
-                  if (!widget.isLocked && widget.controller.hasLetters) {
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: (event) {
+                  if (isDrawingMode) {
+                    _startStroke(event, size);
+                  } else if (!widget.isLocked && widget.controller.hasLetters) {
                     widget.onInteractionChanged(true);
                   }
                 },
-                onPointerUp: (_) => widget.onInteractionChanged(false),
-                onPointerCancel: (_) => widget.onInteractionChanged(false),
+                onPointerMove: (event) {
+                  if (isDrawingMode) {
+                    _appendStroke(event, size);
+                  }
+                },
+                onPointerUp: (event) {
+                  if (isDrawingMode) {
+                    _finishStroke(event.pointer);
+                  } else {
+                    widget.onInteractionChanged(false);
+                  }
+                },
+                onPointerCancel: (event) {
+                  if (isDrawingMode) {
+                    _finishStroke(event.pointer);
+                  } else {
+                    widget.onInteractionChanged(false);
+                  }
+                },
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: () => widget.controller.selectLetter(null),
+                  onTap: isDrawingMode
+                      ? null
+                      : () => widget.controller.selectLetter(null),
                   child: RepaintBoundary(
                     child: Stack(
                       key: _stageKey,
                       fit: StackFit.expand,
                       children: <Widget>[
                         AnimatedBuilder(
-                          animation: widget.controller,
+                          animation: Listenable.merge(<Listenable>[
+                            widget.controller,
+                            if (drawingController != null) drawingController,
+                          ]),
                           builder: (context, _) {
                             final letters = widget.controller.letters;
                             final selectedId = widget.controller.selectedLetterId;
+                            final hasDrawing = drawingController != null &&
+                                (drawingController.hasCommittedStrokes ||
+                                    drawingController.activeStroke != null);
                             final orderedLetters = <WordOverlayLetter>[
                               ...letters.where((letter) => letter.id != selectedId),
                               ...letters.where((letter) => letter.id == selectedId),
@@ -763,7 +844,7 @@ class _WordOverlayStageState extends State<WordOverlayStage> {
                             return Stack(
                               fit: StackFit.expand,
                               children: <Widget>[
-                                if (letters.isEmpty)
+                                if (letters.isEmpty && !hasDrawing)
                                   IgnorePointer(
                                     child: _WordStagePlaceholder(
                                       icon: Icons.text_fields_rounded,
@@ -773,20 +854,38 @@ class _WordOverlayStageState extends State<WordOverlayStage> {
                                       foregroundColor: widget.foregroundColor,
                                     ),
                                   ),
-                                for (final letter in orderedLetters)
-                                  _WordLetterHandle(
-                                    key: ValueKey<String>(letter.id),
-                                    stageKey: _stageKey,
-                                    controller: widget.controller,
-                                    letter: letter,
-                                    size: size,
-                                    selected: selectedId == letter.id,
-                                    isLocked: widget.isLocked,
-                                    foregroundColor: widget.foregroundColor,
-                                    onInteractionChanged:
-                                        widget.onInteractionChanged,
-                                    onTap: () =>
-                                        widget.controller.selectLetter(letter.id),
+                                IgnorePointer(
+                                  ignoring: isDrawingMode,
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: <Widget>[
+                                      for (final letter in orderedLetters)
+                                        _WordLetterHandle(
+                                          key: ValueKey<String>(letter.id),
+                                          stageKey: _stageKey,
+                                          controller: widget.controller,
+                                          letter: letter,
+                                          size: size,
+                                          selected: selectedId == letter.id,
+                                          isLocked: widget.isLocked,
+                                          foregroundColor:
+                                              widget.foregroundColor,
+                                          onInteractionChanged:
+                                              widget.onInteractionChanged,
+                                          onTap: () => widget.controller
+                                              .selectLetter(letter.id),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                if (drawingController != null)
+                                  IgnorePointer(
+                                    ignoring: !isDrawingMode,
+                                    child: DrawingCanvas(
+                                      controller: drawingController,
+                                      backgroundColor: widget.backgroundColor,
+                                      paintBackground: false,
+                                    ),
                                   ),
                               ],
                             );
@@ -1775,6 +1874,7 @@ class _WordStagePlaceholder extends StatelessWidget {
 
 Future<Uint8List> exportWordOverlayAsPng({
   required List<WordOverlayLetter> letters,
+  List<DrawingStroke> strokes = const <DrawingStroke>[],
   required Color backgroundColor,
   int dimension = 1024,
 }) async {
@@ -1790,6 +1890,17 @@ Future<Uint8List> exportWordOverlayAsPng({
       size: size,
       letter: letter,
       color: Colors.black,
+    );
+  }
+
+  if (strokes.isNotEmpty) {
+    paintDrawingStrokes(
+      canvas: canvas,
+      size: size,
+      strokes: strokes,
+      activeStroke: null,
+      backgroundColor: backgroundColor,
+      paintBackground: false,
     );
   }
 

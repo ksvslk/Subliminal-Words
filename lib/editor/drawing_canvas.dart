@@ -307,11 +307,13 @@ class DrawingController extends ChangeNotifier {
 class DrawingCanvas extends StatelessWidget {
   final DrawingController controller;
   final Color backgroundColor;
+  final bool paintBackground;
 
   const DrawingCanvas({
     super.key,
     required this.controller,
     required this.backgroundColor,
+    this.paintBackground = true,
   });
 
   @override
@@ -321,6 +323,7 @@ class DrawingCanvas extends StatelessWidget {
         painter: _DrawingPainter(
           controller: controller,
           backgroundColor: backgroundColor,
+          paintBackground: paintBackground,
         ),
         child: const SizedBox.expand(),
       ),
@@ -331,39 +334,46 @@ class DrawingCanvas extends StatelessWidget {
 class _DrawingPainter extends CustomPainter {
   final DrawingController controller;
   final Color backgroundColor;
+  final bool paintBackground;
 
   _DrawingPainter({
     required this.controller,
     required this.backgroundColor,
+    required this.paintBackground,
   }) : super(repaint: controller);
 
   @override
   void paint(Canvas canvas, Size size) {
-    _paintDrawing(
+    paintDrawingStrokes(
       canvas: canvas,
       size: size,
       strokes: controller.strokes,
       activeStroke: controller.activeStroke,
       backgroundColor: backgroundColor,
+      paintBackground: paintBackground,
     );
   }
 
   @override
   bool shouldRepaint(covariant _DrawingPainter oldDelegate) {
     return oldDelegate.controller != controller ||
-        oldDelegate.backgroundColor != backgroundColor;
+        oldDelegate.backgroundColor != backgroundColor ||
+        oldDelegate.paintBackground != paintBackground;
   }
 }
 
-void _paintDrawing({
+void paintDrawingStrokes({
   required Canvas canvas,
   required Size size,
   required List<DrawingStroke> strokes,
   required DrawingStroke? activeStroke,
   required Color backgroundColor,
+  bool paintBackground = true,
 }) {
-  final backgroundPaint = Paint()..color = backgroundColor;
-  canvas.drawRect(Offset.zero & size, backgroundPaint);
+  if (paintBackground) {
+    final backgroundPaint = Paint()..color = backgroundColor;
+    canvas.drawRect(Offset.zero & size, backgroundPaint);
+  }
 
   for (final stroke in <DrawingStroke>[
     ...strokes,
@@ -424,7 +434,7 @@ Future<Uint8List> exportDrawingAsPng({
   final canvas = Canvas(recorder);
   final size = Size.square(dimension.toDouble());
 
-  _paintDrawing(
+  paintDrawingStrokes(
     canvas: canvas,
     size: size,
     strokes: strokes,

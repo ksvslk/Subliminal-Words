@@ -25,6 +25,50 @@ DrawingBrushType _brushFromName(String? name) {
   );
 }
 
+DrawingController _buildDrawingControllerFromEditorData(
+  Map<dynamic, dynamic>? rawEditorData,
+) {
+  final editorData = rawEditorData == null
+      ? const <String, dynamic>{}
+      : Map<String, dynamic>.from(rawEditorData);
+  final initialStrokes = <DrawingStroke>[];
+  final strokeJson = editorData['strokes'] as List<dynamic>? ?? const <dynamic>[];
+  for (final stroke in strokeJson) {
+    if (stroke is Map) {
+      initialStrokes.add(DrawingStroke.fromJson(Map<String, dynamic>.from(stroke)));
+    }
+  }
+
+  final brushSettings =
+      editorData['brushSettings'] as Map<dynamic, dynamic>? ??
+          const <dynamic, dynamic>{};
+  final initialBrushWidths = <DrawingBrushType, double>{};
+  final initialBrushOpacities = <DrawingBrushType, double>{};
+
+  for (final brush in DrawingBrushType.values) {
+    final rawSettings = brushSettings[brush.name];
+    if (rawSettings is! Map) {
+      continue;
+    }
+    final settingsMap = Map<String, dynamic>.from(rawSettings);
+    final width = settingsMap['width'];
+    final opacity = settingsMap['opacity'];
+    if (width is num) {
+      initialBrushWidths[brush] = width.toDouble();
+    }
+    if (opacity is num) {
+      initialBrushOpacities[brush] = opacity.toDouble();
+    }
+  }
+
+  return DrawingController(
+    initialStrokes: initialStrokes,
+    initialBrush: _brushFromName(editorData['selectedBrush'] as String?),
+    initialBrushWidths: initialBrushWidths,
+    initialBrushOpacities: initialBrushOpacities,
+  );
+}
+
 class CreateLevelScreen extends StatefulWidget {
   final SWLevel? initialLevel;
 
@@ -42,6 +86,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   late final TextEditingController _factController;
   late final TextEditingController _generationPromptController;
   late final DrawingController _drawingController;
+  late final DrawingController _wordDrawingController;
   late final WordOverlayController _wordOverlayController;
   late final Future<String>? _existingPuzzlePreviewUrlFuture;
 
@@ -55,6 +100,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   _StagePreviewMode _stagePreviewMode = _StagePreviewMode.solution;
   bool _hasPuzzleInvalidatedByEdit = false;
   int _lastSeenDrawingContentVersion = 0;
+  int _lastSeenWordDrawingContentVersion = 0;
   int _lastSeenWordContentVersion = 0;
   late String _editorMode;
 
@@ -89,44 +135,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     _generationDifficulty =
         (initialEditorData['generationDifficulty'] as num?)?.toDouble() ?? 1.5;
 
-    final initialStrokes = <DrawingStroke>[];
-    final strokeJson = initialLevel?.editorData['strokes'] as List<dynamic>? ??
-        const <dynamic>[];
-    for (final stroke in strokeJson) {
-      if (stroke is Map) {
-        initialStrokes
-            .add(DrawingStroke.fromJson(Map<String, dynamic>.from(stroke)));
-      }
-    }
-
-    final brushSettings =
-        initialEditorData['brushSettings'] as Map<dynamic, dynamic>? ??
-            const <dynamic, dynamic>{};
-    final initialBrushWidths = <DrawingBrushType, double>{};
-    final initialBrushOpacities = <DrawingBrushType, double>{};
-
-    for (final brush in DrawingBrushType.values) {
-      final rawSettings = brushSettings[brush.name];
-      if (rawSettings is! Map) {
-        continue;
-      }
-      final settingsMap = Map<String, dynamic>.from(rawSettings);
-      final width = settingsMap['width'];
-      final opacity = settingsMap['opacity'];
-      if (width is num) {
-        initialBrushWidths[brush] = width.toDouble();
-      }
-      if (opacity is num) {
-        initialBrushOpacities[brush] = opacity.toDouble();
-      }
-    }
-
-    _drawingController = DrawingController(
-      initialStrokes: initialStrokes,
-      initialBrush:
-          _brushFromName(initialEditorData['selectedBrush'] as String?),
-      initialBrushWidths: initialBrushWidths,
-      initialBrushOpacities: initialBrushOpacities,
+    _drawingController = _buildDrawingControllerFromEditorData(initialEditorData);
+    _wordDrawingController = _buildDrawingControllerFromEditorData(
+      initialEditorData['wordDrawing'] as Map<dynamic, dynamic>?,
     );
     final initialWordLettersJson =
         initialEditorData['wordLetters'] as List<dynamic>? ?? const <dynamic>[];
@@ -138,8 +149,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           ),
     );
     _lastSeenDrawingContentVersion = _drawingController.contentVersion;
+    _lastSeenWordDrawingContentVersion = _wordDrawingController.contentVersion;
     _lastSeenWordContentVersion = _wordOverlayController.contentVersion;
     _drawingController.addListener(_handleDrawingControllerChanged);
+    _wordDrawingController.addListener(_handleWordDrawingControllerChanged);
     _wordOverlayController.addListener(_handleWordOverlayControllerChanged);
     _answerController.addListener(_handleAnswerChanged);
     _factController.addListener(_handleGenerationInputsChanged);
@@ -165,11 +178,13 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     _factController.dispose();
     _generationPromptController.dispose();
     _drawingController.removeListener(_handleDrawingControllerChanged);
+    _wordDrawingController.removeListener(_handleWordDrawingControllerChanged);
     _wordOverlayController.removeListener(_handleWordOverlayControllerChanged);
     _answerController.removeListener(_handleAnswerChanged);
     _factController.removeListener(_handleGenerationInputsChanged);
     _generationPromptController.removeListener(_handleGenerationInputsChanged);
     _drawingController.dispose();
+    _wordDrawingController.dispose();
     _wordOverlayController.dispose();
     super.dispose();
   }
@@ -200,6 +215,16 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     }
 
     _lastSeenWordContentVersion = contentVersion;
+    _invalidatePuzzlePreview();
+  }
+
+  void _handleWordDrawingControllerChanged() {
+    final contentVersion = _wordDrawingController.contentVersion;
+    if (contentVersion == _lastSeenWordDrawingContentVersion) {
+      return;
+    }
+
+    _lastSeenWordDrawingContentVersion = contentVersion;
     _invalidatePuzzlePreview();
   }
 
@@ -359,6 +384,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       final solutionBytes = _editorMode == UserLevelEditorMode.highlight
           ? await exportWordOverlayAsPng(
               letters: _wordOverlayController.letters,
+              strokes: _wordDrawingController.strokes,
               backgroundColor: _generationExportBackground,
             )
           : await exportDrawingAsPng(
@@ -488,6 +514,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           'wordLetters': _wordOverlayController.letters
               .map((letter) => letter.toJson())
               .toList(),
+          'wordDrawing': _wordDrawingController.toEditorData(),
           'generationPrompt': _generationPromptController.text.trim(),
           'generationDifficulty': _generationDifficulty,
         };
@@ -649,6 +676,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                   _answerController,
                   _factController,
                   _drawingController,
+                  _wordDrawingController,
                   _wordOverlayController,
                 ]),
                 builder: (context, _) => Row(
@@ -695,6 +723,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                   child: _editorMode == UserLevelEditorMode.highlight
                       ? _WordEditorSection(
                           controller: _wordOverlayController,
+                          drawingController: _wordDrawingController,
                           solutionController: _answerController,
                           promptController: _generationPromptController,
                           textTheme: textTheme,
@@ -712,6 +741,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                           generationDifficulty: _generationDifficulty,
                           onStageInteractionChanged:
                               _handleStageInteractionChanged,
+                          normalizePoint: _normalizePoint,
                           onSelectStagePreview: (mode) =>
                               setState(() => _stagePreviewMode = mode),
                           onGeneratePuzzle: _generatePuzzle,
@@ -1508,6 +1538,7 @@ InputDecoration _sharedFieldDecoration(
 
 class _WordEditorSection extends StatelessWidget {
   final WordOverlayController controller;
+  final DrawingController drawingController;
   final TextEditingController solutionController;
   final TextEditingController promptController;
   final TextTheme textTheme;
@@ -1522,6 +1553,7 @@ class _WordEditorSection extends StatelessWidget {
   final bool isGeneratingPuzzle;
   final String puzzleGenerationStatus;
   final double generationDifficulty;
+  final Offset Function(Offset localPosition, Size size) normalizePoint;
   final ValueChanged<bool> onStageInteractionChanged;
   final ValueChanged<_StagePreviewMode> onSelectStagePreview;
   final VoidCallback onGeneratePuzzle;
@@ -1529,6 +1561,7 @@ class _WordEditorSection extends StatelessWidget {
 
   const _WordEditorSection({
     required this.controller,
+    required this.drawingController,
     required this.solutionController,
     required this.promptController,
     required this.textTheme,
@@ -1543,6 +1576,7 @@ class _WordEditorSection extends StatelessWidget {
     required this.isGeneratingPuzzle,
     required this.puzzleGenerationStatus,
     required this.generationDifficulty,
+    required this.normalizePoint,
     required this.onStageInteractionChanged,
     required this.onSelectStagePreview,
     required this.onGeneratePuzzle,
@@ -1563,18 +1597,47 @@ class _WordEditorSection extends StatelessWidget {
     );
 
     return AnimatedBuilder(
-      animation: Listenable.merge(<Listenable>[controller, solutionController]),
+      animation: Listenable.merge(<Listenable>[
+        controller,
+        drawingController,
+        solutionController,
+      ]),
       builder: (context, _) {
         final solutionBorder = OutlineInputBorder(
           borderRadius: BorderRadius.circular(20),
           borderSide: BorderSide(color: colorScheme.secondary),
         );
+        final canEditDrawing = stagePreviewMode == _StagePreviewMode.solution &&
+            !isLocked &&
+            drawingController.hasCommittedStrokes;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Row(
               children: <Widget>[
+                SizedBox(
+                  width: 86,
+                  child: Row(
+                    children: <Widget>[
+                      _CompactActionButton(
+                        icon: Icons.undo_rounded,
+                        label: 'Undo',
+                        enabled: canEditDrawing,
+                        onPressed: drawingController.undo,
+                        dimension: 40,
+                      ),
+                      const SizedBox(width: 6),
+                      _CompactActionButton(
+                        icon: Icons.delete_outline_rounded,
+                        label: 'Delete',
+                        enabled: canEditDrawing,
+                        onPressed: drawingController.clear,
+                        dimension: 40,
+                      ),
+                    ],
+                  ),
+                ),
                 const Spacer(),
                 SegmentedButton<_StagePreviewMode>(
                   style: compactSegmentStyle,
@@ -1605,7 +1668,9 @@ class _WordEditorSection extends StatelessWidget {
                   stagePreviewMode == _StagePreviewMode.solution
                       ? WordOverlayStage(
                           controller: controller,
+                          drawingController: drawingController,
                           isLocked: isLocked,
+                          normalizePoint: normalizePoint,
                           onInteractionChanged: onStageInteractionChanged,
                           borderColor: colorScheme.outlineVariant,
                           backgroundColor: canvasBackgroundColor,
@@ -1639,6 +1704,110 @@ class _WordEditorSection extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
+            if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
+              Builder(
+                builder: (context) {
+                  final selectedBrush = drawingController.selectedBrush;
+                  final currentOpacity = drawingController.currentOpacity;
+                  final currentWidth = drawingController.currentWidth;
+                  final canAdjustOpacity =
+                      selectedBrush != DrawingBrushType.eraser &&
+                          selectedBrush != DrawingBrushType.none;
+                  final canAdjustSize =
+                      selectedBrush != DrawingBrushType.none;
+
+                  return Column(
+                    children: <Widget>[
+                      SizedBox(
+                        height: 48,
+                        child: _BrushSelectorStrip(
+                          selectedBrush: selectedBrush,
+                          enabled: !isLocked,
+                          onSelectBrush: drawingController.selectBrush,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: _CompactSliderTile(
+                              label: selectedBrush == DrawingBrushType.none
+                                  ? 'Opacity'
+                                  : canAdjustOpacity
+                                      ? 'Opacity'
+                                      : 'Eraser',
+                              valueText: selectedBrush == DrawingBrushType.none
+                                  ? 'Off'
+                                  : canAdjustOpacity
+                                      ? '${(currentOpacity * 100).round()}%'
+                                      : 'On',
+                              child: Opacity(
+                                opacity: canAdjustOpacity ? 1 : 0.45,
+                                child: SliderTheme(
+                                  data: SliderTheme.of(context).copyWith(
+                                    trackHeight: 3,
+                                    thumbShape: const RoundSliderThumbShape(
+                                      enabledThumbRadius: 8,
+                                    ),
+                                    overlayShape:
+                                        const RoundSliderOverlayShape(
+                                      overlayRadius: 14,
+                                    ),
+                                  ),
+                                  child: Slider(
+                                    value: currentOpacity,
+                                    min: 0.2,
+                                    max: 1.0,
+                                    divisions: 8,
+                                    onChanged: canAdjustOpacity
+                                        ? drawingController.setOpacity
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _CompactSliderTile(
+                              label: 'Size',
+                              valueText: canAdjustSize
+                                  ? '${(currentWidth * 1000).round()}'
+                                  : 'Off',
+                              child: Opacity(
+                                opacity: canAdjustSize ? 1 : 0.45,
+                                child: SliderTheme(
+                                  data: SliderTheme.of(context).copyWith(
+                                    trackHeight: 3,
+                                    thumbShape: const RoundSliderThumbShape(
+                                      enabledThumbRadius: 8,
+                                    ),
+                                    overlayShape:
+                                        const RoundSliderOverlayShape(
+                                      overlayRadius: 14,
+                                    ),
+                                  ),
+                                  child: Slider(
+                                    value: currentWidth,
+                                    min: 0.006,
+                                    max: 0.08,
+                                    divisions: 18,
+                                    onChanged: isLocked || !canAdjustSize
+                                        ? null
+                                        : drawingController.setBrushWidth,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
             TextField(
               controller: solutionController,
               enabled: !isLocked,
