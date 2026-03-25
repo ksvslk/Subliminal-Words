@@ -770,6 +770,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
   static const double _moveStartThreshold = 4.0;
   static const double _selectedInteractionPadding = 12.0;
   static const double _unselectedInteractionPadding = 4.0;
+  static const Duration _selectionSettleDuration = Duration(milliseconds: 180);
 
   double? _rotationStartAngle;
   double? _rotationStartDegrees;
@@ -786,6 +787,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
   WordOverlayLetter? _draftLetter;
   _TransformMode _transformMode = _TransformMode.resize;
   bool _consumeNextTapAfterSelection = false;
+  DateTime? _selectedAt;
 
   @override
   void didUpdateWidget(covariant _WordLetterHandle oldWidget) {
@@ -1142,17 +1144,19 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
       return;
     }
     if (widget.selected) {
-      if (_transformMode != _TransformMode.resize) {
-        setState(() {
-          _transformMode = _TransformMode.resize;
-        });
+      final selectedAt = _selectedAt;
+      if (selectedAt != null &&
+          DateTime.now().difference(selectedAt) < _selectionSettleDuration) {
+        return;
       }
+      _toggleTransformMode();
       return;
     }
     widget.onTap();
     setState(() {
       _transformMode = _TransformMode.resize;
     });
+    _selectedAt = DateTime.now();
   }
 
   void _onMovePointerDown(PointerDownEvent event) {
@@ -1163,6 +1167,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
       widget.onTap();
       _transformMode = _TransformMode.resize;
       _consumeNextTapAfterSelection = true;
+      _selectedAt = DateTime.now();
     }
     _movePointerId = event.pointer;
     _moveDownGlobal = event.position;
