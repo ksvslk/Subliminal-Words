@@ -320,49 +320,18 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     return buildWordOverlayLettersFromSolution(_answerController.text.trim());
   }
 
-  String _resolvedGenerationPrompt() {
-    final manualPrompt = _generationPromptController.text.trim();
-    if (manualPrompt.isNotEmpty) {
-      return manualPrompt;
-    }
-
-    final answer = _answerController.text.trim();
-    if (_editorMode == UserLevelEditorMode.highlight) {
-      return answer;
-    }
-
-    final factHint = _factController.text.trim();
-    if (answer.isEmpty && factHint.isEmpty) {
-      return '';
-    }
-
-    if (answer.isNotEmpty && factHint.isNotEmpty) {
-      return '$answer. $factHint';
-    }
-
-    return answer.isNotEmpty ? answer : factHint;
-  }
-
   Future<void> _generatePuzzle() async {
     if (_isLocked || _isGeneratingPuzzle) {
       return;
     }
 
-    final prompt = _resolvedGenerationPrompt();
-    if (prompt.isEmpty) {
-      _showSnack('Add a scene prompt or object details before generating.');
+    final validationMessage = _validateGenerationInputs();
+    if (validationMessage != null) {
+      _showSnack(validationMessage);
       return;
     }
-    if (_editorMode == UserLevelEditorMode.highlight &&
-        !_wordOverlayController.hasLetters) {
-      _showSnack('Add the solution letters to the stage before generating.');
-      return;
-    }
-    if (_editorMode != UserLevelEditorMode.highlight &&
-        !_drawingController.hasCommittedStrokes) {
-      _showSnack('Draw something before generating.');
-      return;
-    }
+
+    final prompt = _generationPromptController.text.trim();
 
     for (final value in <String>[prompt]) {
       if (ContentFilter.containsBlockedTerm(value)) {
@@ -433,6 +402,38 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         setState(() => _isGeneratingPuzzle = false);
       }
     }
+  }
+
+  String? _validateGenerationInputs() {
+    final solution = _answerController.text.trim();
+    final prompt = _generationPromptController.text.trim();
+
+    if (solution.length < 2) {
+      return 'Add the solution before generating.';
+    }
+    if (prompt.isEmpty) {
+      return 'Add a puzzle scene before generating.';
+    }
+
+    if (_editorMode == UserLevelEditorMode.highlight) {
+      final expectedTemplates = _wordSolutionTemplates();
+      if (!_wordOverlayController.hasLetters) {
+        return 'Add the solution letters to the stage before generating.';
+      }
+      if (_wordOverlayController.letters.length != expectedTemplates.length) {
+        return 'Add the solution letters again so they match the solution.';
+      }
+    } else if (!_drawingController.hasCommittedStrokes) {
+      return 'Draw something before generating.';
+    }
+
+    for (final value in <String>[solution, prompt]) {
+      if (ContentFilter.containsBlockedTerm(value)) {
+        return 'Please remove profanity before generating.';
+      }
+    }
+
+    return null;
   }
 
   String? _validateInputs({required bool forSubmission}) {
@@ -588,51 +589,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     return Offset(normalizedX, normalizedY);
   }
 
-  InputDecoration _fieldDecoration(
-    ColorScheme colorScheme, {
-    required String label,
-    IconData? icon,
-  }) {
-    final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(18),
-      borderSide: BorderSide(color: colorScheme.outlineVariant),
-    );
-
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: icon == null ? null : Icon(icon),
-      filled: true,
-      fillColor: colorScheme.surfaceContainerHigh,
-      border: border,
-      enabledBorder: border,
-      disabledBorder: border,
-      focusedBorder: border.copyWith(
-        borderSide: BorderSide(color: colorScheme.primary, width: 2),
-      ),
-    );
-  }
-
-  InputDecoration _solutionFieldDecoration(ColorScheme colorScheme) {
-    final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(20),
-      borderSide: BorderSide(color: colorScheme.secondary),
-    );
-
-    return InputDecoration(
-      labelText: 'Solution',
-      hintText: 'What should players guess?',
-      prefixIcon: const Icon(Icons.track_changes_outlined),
-      filled: true,
-      fillColor: colorScheme.secondaryContainer,
-      border: border,
-      enabledBorder: border,
-      disabledBorder: border,
-      focusedBorder: border.copyWith(
-        borderSide: BorderSide(color: colorScheme.secondary, width: 2),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -725,6 +681,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                           controller: _wordOverlayController,
                           drawingController: _wordDrawingController,
                           solutionController: _answerController,
+                          creatorNameController: _creatorNameController,
                           promptController: _generationPromptController,
                           textTheme: textTheme,
                           colorScheme: colorScheme,
@@ -751,6 +708,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                         )
                       : _CanvasEditorSection(
                           controller: _drawingController,
+                          solutionController: _answerController,
+                          factController: _factController,
+                          creatorNameController: _creatorNameController,
                           promptController: _generationPromptController,
                           textTheme: textTheme,
                           colorScheme: colorScheme,
@@ -774,51 +734,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                             () => _generationDifficulty = value,
                           ),
                         ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      if (_editorMode !=
-                          UserLevelEditorMode.highlight) ...<Widget>[
-                        TextField(
-                          controller: _answerController,
-                          enabled: !_isLocked,
-                          textCapitalization: TextCapitalization.words,
-                          textInputAction: TextInputAction.next,
-                          style: textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: colorScheme.onSecondaryContainer,
-                          ),
-                          decoration: _solutionFieldDecoration(colorScheme),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _factController,
-                          enabled: !_isLocked,
-                          textInputAction: TextInputAction.next,
-                          maxLines: 2,
-                          decoration: _fieldDecoration(
-                            colorScheme,
-                            label: 'Fact Hint',
-                            icon: Icons.lightbulb_outline,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      TextField(
-                        controller: _creatorNameController,
-                        enabled: !_isLocked,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: _fieldDecoration(
-                          colorScheme,
-                          label: 'Creator Name',
-                          icon: Icons.badge_outlined,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
                 const SizedBox(height: 16),
                 _SectionCard(
@@ -846,6 +761,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
 class _CanvasEditorSection extends StatelessWidget {
   final DrawingController controller;
+  final TextEditingController solutionController;
+  final TextEditingController factController;
+  final TextEditingController creatorNameController;
   final TextEditingController promptController;
   final TextTheme textTheme;
   final ColorScheme colorScheme;
@@ -866,6 +784,9 @@ class _CanvasEditorSection extends StatelessWidget {
 
   const _CanvasEditorSection({
     required this.controller,
+    required this.solutionController,
+    required this.factController,
+    required this.creatorNameController,
     required this.promptController,
     required this.textTheme,
     required this.colorScheme,
@@ -887,21 +808,27 @@ class _CanvasEditorSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
-    final compactSegmentStyle = ButtonStyle(
-      visualDensity: VisualDensity.compact,
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
-        EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-      ),
-      textStyle: WidgetStatePropertyAll<TextStyle?>(
-        textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
-      ),
-    );
+    return AnimatedBuilder(
+      animation: Listenable.merge(<Listenable>[
+        controller,
+        solutionController,
+        promptController,
+      ]),
+      builder: (context, _) {
+        final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
+        final canAdvanceToPuzzle =
+            !isLocked &&
+            solutionController.text.trim().length >= 2 &&
+            controller.hasCommittedStrokes;
+        final canGeneratePuzzleNow =
+            !isLocked &&
+            solutionController.text.trim().length >= 2 &&
+            promptController.text.trim().isNotEmpty &&
+            controller.hasCommittedStrokes;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
         AnimatedBuilder(
           animation: controller,
           builder: (context, _) {
@@ -937,23 +864,10 @@ class _CanvasEditorSection extends StatelessWidget {
                 ),
                 const Spacer(),
                 const SizedBox(width: 8),
-                SegmentedButton<_StagePreviewMode>(
-                  style: compactSegmentStyle,
-                  segments: const <ButtonSegment<_StagePreviewMode>>[
-                    ButtonSegment<_StagePreviewMode>(
-                      value: _StagePreviewMode.solution,
-                      label: Text('Solution'),
-                    ),
-                    ButtonSegment<_StagePreviewMode>(
-                      value: _StagePreviewMode.puzzle,
-                      label: Text('Puzzle'),
-                    ),
-                  ],
-                  selected: <_StagePreviewMode>{stagePreviewMode},
-                  showSelectedIcon: false,
-                  onSelectionChanged: isLocked
-                      ? null
-                      : (selection) => onSelectStagePreview(selection.first),
+                _StageStepToggle(
+                  value: stagePreviewMode,
+                  textTheme: textTheme,
+                  onChanged: isLocked ? null : onSelectStagePreview,
                 ),
               ],
             );
@@ -980,6 +894,16 @@ class _CanvasEditorSection extends StatelessWidget {
                   borderColor: colorScheme.outlineVariant,
                   backgroundColor: canvasBackgroundColor,
                   foregroundColor: colorScheme.onSurfaceVariant,
+                  solutionBackdrop: IgnorePointer(
+                    child: Opacity(
+                      opacity: 0.14,
+                      child: DrawingCanvas(
+                        controller: controller,
+                        backgroundColor: canvasBackgroundColor,
+                        paintBackground: false,
+                      ),
+                    ),
+                  ),
                 ),
         ),
         const SizedBox(height: 8),
@@ -1084,118 +1008,155 @@ class _CanvasEditorSection extends StatelessWidget {
             },
           ),
           const SizedBox(height: 12),
-        ],
-        TextField(
-          controller: promptController,
-          enabled: !isLocked && !isGeneratingPuzzle,
-          textInputAction: TextInputAction.done,
-          maxLines: 2,
-          decoration: InputDecoration(
-            labelText: 'Puzzle Scene',
-            filled: true,
-            fillColor: colorScheme.surfaceContainerHighest,
-            prefixIcon: const Icon(Icons.auto_awesome_outlined),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
-              borderSide: BorderSide(color: colorScheme.outlineVariant),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
-              borderSide: BorderSide(color: colorScheme.outlineVariant),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
-              borderSide: BorderSide(color: colorScheme.primary, width: 2),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: <Widget>[
-            SizedBox(
-              width: 54,
-              child: Text(
-                'Hard',
-                style: textTheme.labelMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            Expanded(
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 3,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 8,
-                  ),
-                  overlayShape: const RoundSliderOverlayShape(
-                    overlayRadius: 14,
-                  ),
-                ),
-                child: Slider(
-                  value: generationDifficulty,
-                  min: 0.1,
-                  max: 3.0,
-                  divisions: 29,
-                  onChanged: isLocked || isGeneratingPuzzle
-                      ? null
-                      : onGenerationDifficultyChanged,
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 54,
-              child: Text(
-                'Easy',
-                textAlign: TextAlign.end,
-                style: textTheme.labelMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-        Align(
-          alignment: Alignment.center,
-          child: Text(
-            'Difficulty ${generationDifficulty.toStringAsFixed(1)}',
-            style: textTheme.labelSmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        if (puzzleGenerationStatus.isNotEmpty) ...<Widget>[
-          Text(
-            puzzleGenerationStatus,
-            style: textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+          TextField(
+            controller: solutionController,
+            enabled: !isLocked,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.next,
+            style: textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700,
+              color: colorScheme.onSecondaryContainer,
+            ),
+            decoration: _solutionFieldDecoration(colorScheme),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.tonalIcon(
+              onPressed: !canAdvanceToPuzzle
+                  ? null
+                  : () => onSelectStagePreview(_StagePreviewMode.puzzle),
+              icon: const Icon(Icons.arrow_forward_rounded),
+              label: const Text('Next: Puzzle'),
+            ),
+          ),
+        ] else ...<Widget>[
+          TextField(
+            controller: promptController,
+            enabled: !isLocked && !isGeneratingPuzzle,
+            textInputAction: TextInputAction.done,
+            maxLines: 2,
+            decoration: _sharedFieldDecoration(
+              colorScheme,
+              label: 'Puzzle Scene',
+              icon: Icons.auto_awesome_outlined,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: <Widget>[
+              SizedBox(
+                width: 54,
+                child: Text(
+                  'Hard',
+                  style: textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 3,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 8,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 14,
+                    ),
+                  ),
+                  child: Slider(
+                    value: generationDifficulty,
+                    min: 0.1,
+                    max: 3.0,
+                    divisions: 29,
+                    onChanged: isLocked || isGeneratingPuzzle
+                        ? null
+                        : onGenerationDifficultyChanged,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 54,
+                child: Text(
+                  'Easy',
+                  textAlign: TextAlign.end,
+                  style: textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Align(
+            alignment: Alignment.center,
+            child: Text(
+              'Difficulty ${generationDifficulty.toStringAsFixed(1)}',
+              style: textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           const SizedBox(height: 10),
-        ],
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: isLocked || isGeneratingPuzzle ? null : onGeneratePuzzle,
-            icon: Icon(
-              hasPuzzlePreview
-                  ? Icons.refresh_rounded
-                  : Icons.auto_awesome_outlined,
-            ),
-            label: Text(
-              isGeneratingPuzzle
-                  ? 'Generating...'
-                  : hasPuzzlePreview
-                      ? 'Regenerate Puzzle'
-                      : 'Generate Puzzle',
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: isGeneratingPuzzle || !canGeneratePuzzleNow
+                  ? null
+                  : onGeneratePuzzle,
+              icon: Icon(
+                hasPuzzlePreview
+                    ? Icons.refresh_rounded
+                    : Icons.auto_awesome_outlined,
+              ),
+              label: Text(
+                isGeneratingPuzzle
+                    ? 'Generating...'
+                    : hasPuzzlePreview
+                        ? 'Regenerate Puzzle'
+                        : 'Generate Puzzle',
+              ),
             ),
           ),
-        ),
-      ],
+          if (puzzleGenerationStatus.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 10),
+            Text(
+              puzzleGenerationStatus,
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: factController,
+            enabled: !isLocked,
+            textInputAction: TextInputAction.next,
+            maxLines: 2,
+            decoration: _sharedFieldDecoration(
+              colorScheme,
+              label: 'Fact Hint',
+              icon: Icons.lightbulb_outline,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: creatorNameController,
+            enabled: !isLocked,
+            textCapitalization: TextCapitalization.words,
+            decoration: _sharedFieldDecoration(
+              colorScheme,
+              label: 'Creator Name',
+              icon: Icons.badge_outlined,
+            ),
+          ),
+        ],
+          ],
+        );
+      },
     );
   }
 }
@@ -1341,6 +1302,7 @@ class _PuzzleStage extends StatelessWidget {
   final Color borderColor;
   final Color backgroundColor;
   final Color foregroundColor;
+  final Widget? solutionBackdrop;
 
   const _PuzzleStage({
     required this.puzzleBytes,
@@ -1351,6 +1313,7 @@ class _PuzzleStage extends StatelessWidget {
     required this.borderColor,
     required this.backgroundColor,
     required this.foregroundColor,
+    this.solutionBackdrop,
   });
 
   @override
@@ -1373,6 +1336,8 @@ class _PuzzleStage extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: <Widget>[
+              if (solutionBackdrop != null && !hasLocalImage && !showStoredImage)
+                solutionBackdrop!,
               if (hasLocalImage)
                 Image.memory(
                   puzzleBytes!,
@@ -1419,13 +1384,6 @@ class _PuzzleStage extends StatelessWidget {
                       ),
                     );
                   },
-                )
-              else
-                _StagePlaceholder(
-                  icon: Icons.auto_awesome_outlined,
-                  title: 'Puzzle preview',
-                  subtitle: 'Generate the puzzle to see it here.',
-                  foregroundColor: foregroundColor,
                 ),
               if (isGeneratingPuzzle)
                 DecoratedBox(
@@ -1473,7 +1431,7 @@ class _StagePlaceholder extends StatelessWidget {
   const _StagePlaceholder({
     required this.icon,
     required this.title,
-    required this.subtitle,
+    this.subtitle = '',
     required this.foregroundColor,
   });
 
@@ -1497,14 +1455,16 @@ class _StagePlaceholder extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: textTheme.bodyMedium?.copyWith(
-                color: foregroundColor,
+            if (subtitle.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: textTheme.bodyMedium?.copyWith(
+                  color: foregroundColor,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -1536,10 +1496,80 @@ InputDecoration _sharedFieldDecoration(
   );
 }
 
+InputDecoration _solutionFieldDecoration(
+  ColorScheme colorScheme, {
+  String label = 'Solution',
+  String hint = 'What should players guess?',
+}) {
+  final border = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(20),
+    borderSide: BorderSide(color: colorScheme.secondary),
+  );
+
+  return InputDecoration(
+    labelText: label,
+    hintText: hint,
+    prefixIcon: const Icon(Icons.track_changes_outlined),
+    filled: true,
+    fillColor: colorScheme.secondaryContainer,
+    border: border,
+    enabledBorder: border,
+    disabledBorder: border,
+    focusedBorder: border.copyWith(
+      borderSide: BorderSide(color: colorScheme.secondary, width: 2),
+    ),
+  );
+}
+
+class _StageStepToggle extends StatelessWidget {
+  final _StagePreviewMode value;
+  final ValueChanged<_StagePreviewMode>? onChanged;
+  final TextTheme textTheme;
+
+  const _StageStepToggle({
+    required this.value,
+    required this.onChanged,
+    required this.textTheme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final compactSegmentStyle = ButtonStyle(
+      visualDensity: VisualDensity.compact,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
+        EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+      ),
+      textStyle: WidgetStatePropertyAll<TextStyle?>(
+        textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+      ),
+    );
+
+    return SegmentedButton<_StagePreviewMode>(
+      style: compactSegmentStyle,
+      segments: const <ButtonSegment<_StagePreviewMode>>[
+        ButtonSegment<_StagePreviewMode>(
+          value: _StagePreviewMode.solution,
+          label: Text('1. Solution'),
+        ),
+        ButtonSegment<_StagePreviewMode>(
+          value: _StagePreviewMode.puzzle,
+          label: Text('2. Puzzle'),
+        ),
+      ],
+      selected: <_StagePreviewMode>{value},
+      showSelectedIcon: false,
+      onSelectionChanged:
+          onChanged == null ? null : (selection) => onChanged!(selection.first),
+    );
+  }
+}
+
 class _WordEditorSection extends StatelessWidget {
   final WordOverlayController controller;
   final DrawingController drawingController;
   final TextEditingController solutionController;
+  final TextEditingController creatorNameController;
   final TextEditingController promptController;
   final TextTheme textTheme;
   final ColorScheme colorScheme;
@@ -1563,6 +1593,7 @@ class _WordEditorSection extends StatelessWidget {
     required this.controller,
     required this.drawingController,
     required this.solutionController,
+    required this.creatorNameController,
     required this.promptController,
     required this.textTheme,
     required this.colorScheme,
@@ -1601,12 +1632,18 @@ class _WordEditorSection extends StatelessWidget {
         controller,
         drawingController,
         solutionController,
+        promptController,
       ]),
       builder: (context, _) {
-        final solutionBorder = OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
-          borderSide: BorderSide(color: colorScheme.secondary),
-        );
+        final canAdvanceToPuzzle =
+            !isLocked &&
+            solutionController.text.trim().length >= 2 &&
+            controller.hasLetters;
+        final canGeneratePuzzleNow =
+            !isLocked &&
+            solutionController.text.trim().length >= 2 &&
+            promptController.text.trim().isNotEmpty &&
+            controller.hasLetters;
         final canEditDrawing = stagePreviewMode == _StagePreviewMode.solution &&
             !isLocked &&
             drawingController.hasCommittedStrokes;
@@ -1639,23 +1676,10 @@ class _WordEditorSection extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                SegmentedButton<_StagePreviewMode>(
-                  style: compactSegmentStyle,
-                  segments: const <ButtonSegment<_StagePreviewMode>>[
-                    ButtonSegment<_StagePreviewMode>(
-                      value: _StagePreviewMode.solution,
-                      label: Text('Solution'),
-                    ),
-                    ButtonSegment<_StagePreviewMode>(
-                      value: _StagePreviewMode.puzzle,
-                      label: Text('Puzzle'),
-                    ),
-                  ],
-                  selected: <_StagePreviewMode>{stagePreviewMode},
-                  showSelectedIcon: false,
-                  onSelectionChanged: isLocked
-                      ? null
-                      : (selection) => onSelectStagePreview(selection.first),
+                _StageStepToggle(
+                  value: stagePreviewMode,
+                  textTheme: textTheme,
+                  onChanged: isLocked ? null : onSelectStagePreview,
                 ),
               ],
             ),
@@ -1686,6 +1710,22 @@ class _WordEditorSection extends StatelessWidget {
                           borderColor: colorScheme.outlineVariant,
                           backgroundColor: canvasBackgroundColor,
                           foregroundColor: colorScheme.onSurfaceVariant,
+                          solutionBackdrop: IgnorePointer(
+                            child: Opacity(
+                              opacity: 0.14,
+                              child: WordOverlayStage(
+                                controller: controller,
+                                drawingController: drawingController,
+                                isLocked: true,
+                                normalizePoint: null,
+                                onInteractionChanged: (_) {},
+                                borderColor: Colors.transparent,
+                                backgroundColor: Colors.transparent,
+                                foregroundColor:
+                                    colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
                         ),
                   if (isLoadingInitialOverlay)
                     DecoratedBox(
@@ -1807,128 +1847,152 @@ class _WordEditorSection extends StatelessWidget {
                 },
               ),
               const SizedBox(height: 12),
-            ],
-            TextField(
-              controller: solutionController,
-              enabled: !isLocked,
-              textCapitalization: TextCapitalization.characters,
-              textInputAction: TextInputAction.next,
-              style: textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: colorScheme.onSecondaryContainer,
-                letterSpacing: 0.5,
-              ),
-              decoration: InputDecoration(
-                labelText: 'Solution',
-                hintText: 'Type the word and letters appear on the stage.',
-                prefixIcon: const Icon(Icons.track_changes_outlined),
-                filled: true,
-                fillColor: colorScheme.secondaryContainer,
-                border: solutionBorder,
-                enabledBorder: solutionBorder,
-                disabledBorder: solutionBorder,
-                focusedBorder: solutionBorder.copyWith(
-                  borderSide:
-                      BorderSide(color: colorScheme.secondary, width: 2),
+              TextField(
+                controller: solutionController,
+                enabled: !isLocked,
+                textCapitalization: TextCapitalization.characters,
+                textInputAction: TextInputAction.next,
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: colorScheme.onSecondaryContainer,
+                  letterSpacing: 0.5,
+                ),
+                decoration: _solutionFieldDecoration(
+                  colorScheme,
+                  hint: 'Type the word and letters appear on the stage.',
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Letter Weight',
-              style: textTheme.labelMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            SegmentedButton<int>(
-              style: compactSegmentStyle,
-              segments: kWordLetterWeightOptions
-                  .map(
-                    (option) => ButtonSegment<int>(
-                      value: option.value,
-                      label: Text(option.label),
-                    ),
-                  )
-                  .toList(growable: false),
-              selected: <int>{controller.fontWeightValue},
-              showSelectedIcon: false,
-              onSelectionChanged: isLocked
-                  ? null
-                  : (selection) =>
-                      controller.updateAllFontWeightValue(selection.first),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: promptController,
-              enabled: !isLocked && !isGeneratingPuzzle,
-              maxLines: 2,
-              decoration: _sharedFieldDecoration(
-                colorScheme,
-                label: 'Puzzle Scene',
-                icon: Icons.auto_awesome_outlined,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: <Widget>[
-                SizedBox(
-                  width: 54,
-                  child: Text(
-                    'Hard',
-                    style: textTheme.labelMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+              const SizedBox(height: 12),
+              Text(
+                'Letter Weight',
+                style: textTheme.labelMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
                 ),
-                Expanded(
-                  child: _EditorSlider(
-                    value: generationDifficulty,
-                    min: 0.35,
-                    max: 2.0,
-                    divisions: 13,
-                    onChanged: isLocked || isGeneratingPuzzle
-                        ? null
-                        : onGenerationDifficultyChanged,
-                  ),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<int>(
+                style: compactSegmentStyle,
+                segments: kWordLetterWeightOptions
+                    .map(
+                      (option) => ButtonSegment<int>(
+                        value: option.value,
+                        label: Text(option.label),
+                      ),
+                    )
+                    .toList(growable: false),
+                selected: <int>{controller.fontWeightValue},
+                showSelectedIcon: false,
+                onSelectionChanged: isLocked
+                    ? null
+                    : (selection) =>
+                        controller.updateAllFontWeightValue(selection.first),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  onPressed: !canAdvanceToPuzzle
+                      ? null
+                      : () => onSelectStagePreview(_StagePreviewMode.puzzle),
+                  icon: const Icon(Icons.arrow_forward_rounded),
+                  label: const Text('Next: Puzzle'),
                 ),
-                SizedBox(
-                  width: 52,
-                  child: Align(
-                    alignment: Alignment.centerRight,
+              ),
+            ] else ...<Widget>[
+              TextField(
+                controller: promptController,
+                enabled: !isLocked && !isGeneratingPuzzle,
+                maxLines: 2,
+                decoration: _sharedFieldDecoration(
+                  colorScheme,
+                  label: 'Puzzle Scene',
+                  icon: Icons.auto_awesome_outlined,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: <Widget>[
+                  SizedBox(
+                    width: 54,
                     child: Text(
-                      generationDifficulty.toStringAsFixed(2),
+                      'Hard',
                       style: textTheme.labelMedium?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed:
-                    isLocked || isGeneratingPuzzle ? null : onGeneratePuzzle,
-                icon: Icon(
-                  (puzzleBytes != null || hasStoredPuzzleImage)
-                      ? Icons.refresh_rounded
-                      : Icons.auto_awesome_outlined,
-                ),
-                label: Text(
-                  isGeneratingPuzzle
-                      ? 'Generating...'
-                      : (puzzleBytes != null || hasStoredPuzzleImage)
-                          ? 'Regenerate Puzzle'
-                          : 'Generate Puzzle',
+                  Expanded(
+                    child: _EditorSlider(
+                      value: generationDifficulty,
+                      min: 0.35,
+                      max: 2.0,
+                      divisions: 13,
+                      onChanged: isLocked || isGeneratingPuzzle
+                          ? null
+                          : onGenerationDifficultyChanged,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 52,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        generationDifficulty.toStringAsFixed(2),
+                        style: textTheme.labelMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed:
+                      isGeneratingPuzzle || !canGeneratePuzzleNow
+                          ? null
+                          : onGeneratePuzzle,
+                  icon: Icon(
+                    (puzzleBytes != null || hasStoredPuzzleImage)
+                        ? Icons.refresh_rounded
+                        : Icons.auto_awesome_outlined,
+                  ),
+                  label: Text(
+                    isGeneratingPuzzle
+                        ? 'Generating...'
+                        : (puzzleBytes != null || hasStoredPuzzleImage)
+                            ? 'Regenerate Puzzle'
+                            : 'Generate Puzzle',
+                  ),
                 ),
               ),
-            ),
+              if (puzzleGenerationStatus.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 10),
+                Text(
+                  puzzleGenerationStatus,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: creatorNameController,
+                enabled: !isLocked,
+                textCapitalization: TextCapitalization.words,
+                decoration: _sharedFieldDecoration(
+                  colorScheme,
+                  label: 'Creator Name',
+                  icon: Icons.badge_outlined,
+                ),
+              ),
+            ],
           ],
         );
       },
