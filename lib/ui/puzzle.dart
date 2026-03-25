@@ -9,7 +9,6 @@ import 'package:operation_hermes/change_notifier/picture_model.dart';
 import 'package:operation_hermes/data/svg_letter.dart';
 import 'package:path_drawing/path_drawing.dart';
 import 'package:provider/provider.dart';
-import 'package:vector_math/vector_math_64.dart' as vec3;
 
 class Puzzle extends StatelessWidget {
   const Puzzle({super.key});
@@ -112,8 +111,11 @@ class Puzzle extends StatelessWidget {
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 150),
                               transformAlignment: Alignment.center,
-                              transform: Matrix4.diagonal3(vec3.Vector3(
-                                  model.scale, model.scale, model.scale)),
+                              transform: Matrix4.diagonal3Values(
+                                model.scale,
+                                model.scale,
+                                1,
+                              ),
                               child: Stack(
                                 fit: StackFit.expand,
                                 alignment: Alignment.center,
@@ -183,8 +185,31 @@ class Puzzle extends StatelessWidget {
                                       },
                                       child: CustomPaint(
                                         painter: FilledLetterPainter(
-                                            path: parseSvgPathData(
-                                                svgLetter.path),
+                                            path: svgLetter.usesTextOverlay
+                                                ? null
+                                                : parseSvgPathData(
+                                                    svgLetter.path),
+                                            text: svgLetter.usesTextOverlay
+                                                ? svgLetter.text
+                                                : null,
+                                            center: svgLetter.usesTextOverlay
+                                                ? Offset(
+                                                    svgLetter.x ?? 512,
+                                                    svgLetter.y ?? 512,
+                                                  )
+                                                : null,
+                                            fontSize: svgLetter.usesTextOverlay
+                                                ? (svgLetter.fontSize ?? 132)
+                                                : 132,
+                                            rotationDegrees:
+                                                svgLetter.rotationDegrees,
+                                            scaleX: svgLetter.scaleX,
+                                            scaleY: svgLetter.scaleY,
+                                            skewXDegrees:
+                                                svgLetter.skewXDegrees,
+                                            skewYDegrees:
+                                                svgLetter.skewYDegrees,
+                                            opacity: svgLetter.opacity,
                                             firstColor: firstColor,
                                             secondColor: secondColor),
                                         child: const AspectRatio(

@@ -6,7 +6,6 @@ import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:xml/xml.dart';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/data/svg_letter.dart';
@@ -179,7 +178,6 @@ class PictureModel with ChangeNotifier {
   }
 
   void highlightLetter(List<String> availableLetters) {
-    
     if (highlightLetters.isEmpty) {
       return;
     }
@@ -206,7 +204,8 @@ class PictureModel with ChangeNotifier {
       return;
     }
 
-    var letterIndexToHighlight = candidateIndices.sample(1, Random()).first;
+    final letterIndexToHighlight =
+        candidateIndices[Random().nextInt(candidateIndices.length)];
     highlightLetters[letterIndexToHighlight].show = true;
     highlightLetters[letterIndexToHighlight].hintGiven = true;
     notifyListeners();
@@ -226,14 +225,84 @@ class PictureModel with ChangeNotifier {
     XmlDocument document = XmlDocument.parse(svgString);
     final allPaths = document.findAllElements('path');
     for (var element in allPaths) {
-      final id = element.getAttribute('id');
       final path = element.getAttribute('d');
-      if (id != null && path != null) {
-        var svgLetter = SvgLetter(path: path, letter: id);
-        if (id.length <= 3) letters.add(svgLetter);
+      final letter = (element.getAttribute('aria-label') ??
+              element.getAttribute('id') ??
+              '')
+          .trim();
+      if (letter.isNotEmpty && path != null) {
+        final svgLetter = SvgLetter(path: path, letter: letter);
+        if (letter.length <= 3) {
+          letters.add(svgLetter);
+        }
+      }
+    }
+
+    final allText = document.findAllElements('text');
+    for (var element in allText) {
+      final text = element.innerText.trim();
+      final letter = (element.getAttribute('aria-label') ?? text).trim();
+      if (letter.isEmpty) {
+        continue;
+      }
+
+      final x = double.tryParse(
+        element.getAttribute('x') ?? element.getAttribute('data-x') ?? '',
+      );
+      final y = double.tryParse(
+        element.getAttribute('y') ?? element.getAttribute('data-y') ?? '',
+      );
+      final fontSize = double.tryParse(
+        element.getAttribute('font-size') ??
+            element.getAttribute('data-font-size') ??
+            '',
+      );
+      if (x == null || y == null || fontSize == null) {
+        continue;
+      }
+
+      final svgLetter = SvgLetter(
+        path: '',
+        letter: letter,
+        text: text,
+        x: x,
+        y: y,
+        fontSize: fontSize,
+        rotationDegrees: _rotationFromTransform(
+          element.getAttribute('transform'),
+          element.getAttribute('data-rotation'),
+        ),
+        scaleX:
+            double.tryParse(element.getAttribute('data-scale-x') ?? '') ?? 1,
+        scaleY:
+            double.tryParse(element.getAttribute('data-scale-y') ?? '') ?? 1,
+        skewXDegrees:
+            double.tryParse(element.getAttribute('data-skew-x') ?? '') ?? 0,
+        skewYDegrees:
+            double.tryParse(element.getAttribute('data-skew-y') ?? '') ?? 0,
+        opacity:
+            double.tryParse(element.getAttribute('data-opacity') ?? '') ?? 1,
+      );
+      if (letter.length <= 3) {
+        letters.add(svgLetter);
       }
     }
     return letters;
+  }
+
+  double _rotationFromTransform(String? transform, String? rotationAttr) {
+    final parsedRotation = double.tryParse(rotationAttr ?? '');
+    if (parsedRotation != null) {
+      return parsedRotation;
+    }
+
+    final normalized = transform ?? '';
+    final match = RegExp(r'rotate\(([-\d.]+)').firstMatch(normalized);
+    if (match == null) {
+      return 0;
+    }
+
+    return double.tryParse(match.group(1) ?? '') ?? 0;
   }
 
   void reset() {
