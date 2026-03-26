@@ -64,9 +64,12 @@ class _CreateLevelTypeDialog extends StatelessWidget {
             _CreateLevelTypeOption(
               icon: Icons.face_retouching_natural_outlined,
               title: 'Face',
-              subtitle: 'Photo-based face levels are coming next.',
-              enabled: false,
+              subtitle: 'Upload a face photo, shape the sketch, then generate the puzzle.',
+              enabled: true,
               colorScheme: colorScheme,
+              onTap: () => Navigator.of(context).pop(
+                UserLevelEditorMode.photoSketch,
+              ),
             ),
             const SizedBox(height: 12),
             _CreateLevelTypeOption(

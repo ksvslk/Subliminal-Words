@@ -490,6 +490,142 @@ class FirebaseService {
     return docRef.id;
   }
 
+  Future<String> savePhotoSketchLevel({
+    String? levelId,
+    required String creatorName,
+    required String answer,
+    required String factText,
+    required Uint8List sourceImageBytes,
+    required Uint8List solutionPngBytes,
+    Uint8List? puzzleImageBytes,
+    bool allowReuseExistingPuzzle = true,
+    required Map<String, dynamic> editorData,
+  }) async {
+    final uid = currentUserId;
+    if (uid == null || uid.isEmpty) {
+      throw StateError('You need to be signed in before saving a level.');
+    }
+
+    final levelsRef = _userLevelsCollection(uid);
+    final docRef = levelId == null ? levelsRef.doc() : levelsRef.doc(levelId);
+
+    int levelNr = 1;
+    DateTime? existingCreatedAt;
+    String existingPuzzlePath = '';
+    String existingPuzzleThumbnailPath = '';
+    bool canReuseExistingPuzzle = false;
+
+    if (levelId != null) {
+      final existingDoc = await docRef.get();
+      if (existingDoc.exists && existingDoc.data() != null) {
+        final existingData = existingDoc.data()!;
+        if (existingData['isLocked'] == true) {
+          throw StateError(
+              'Submitted levels are locked. Duplicate the level to change it.');
+        }
+        levelNr = existingData['nr'] ?? 1;
+        existingCreatedAt = (existingData['createdAt'] as Timestamp?)?.toDate();
+        canReuseExistingPuzzle = allowReuseExistingPuzzle &&
+            _hasStoredReviewReadyPuzzleImage(existingData);
+        existingPuzzlePath = existingData['puzzlePath'] as String? ?? '';
+        existingPuzzleThumbnailPath =
+            existingData['puzzleThumbnailPath'] as String? ??
+                existingPuzzlePath;
+      }
+    } else {
+      final latestLevel =
+          await levelsRef.orderBy('nr', descending: true).limit(1).get();
+      if (latestLevel.docs.isNotEmpty) {
+        levelNr = (latestLevel.docs.first.data()['nr'] ?? 0) + 1;
+      }
+    }
+
+    final storageBase = 'user-levels/$uid/${docRef.id}';
+    final sourceRef = _storage.ref('$storageBase/source.jpg');
+    await sourceRef.putData(
+      sourceImageBytes,
+      SettableMetadata(
+        contentType: 'image/jpeg',
+        customMetadata: <String, String>{
+          'ownerUid': uid,
+          'editorMode': UserLevelEditorMode.photoSketch,
+          'assetRole': 'source',
+        },
+      ),
+    );
+
+    final solutionRef = _storage.ref('$storageBase/solution.png');
+    await solutionRef.putData(
+      solutionPngBytes,
+      SettableMetadata(
+        contentType: 'image/png',
+        customMetadata: <String, String>{
+          'ownerUid': uid,
+          'editorMode': UserLevelEditorMode.photoSketch,
+          'assetRole': 'solution',
+        },
+      ),
+    );
+
+    String puzzlePath = '';
+    String puzzleThumbnailPath = '';
+    bool hasPuzzleImage = false;
+
+    if (puzzleImageBytes != null) {
+      final normalizedPuzzleBytes =
+          _normalizePuzzleImageBytes(puzzleImageBytes);
+      final puzzleRef = _storage.ref('$storageBase/puzzle.jpg');
+      await puzzleRef.putData(
+        normalizedPuzzleBytes,
+        SettableMetadata(
+          contentType: 'image/jpeg',
+          customMetadata: <String, String>{
+            'ownerUid': uid,
+            'editorMode': UserLevelEditorMode.photoSketch,
+            'assetRole': 'puzzle',
+          },
+        ),
+      );
+      puzzlePath = puzzleRef.fullPath;
+      puzzleThumbnailPath = puzzleRef.fullPath;
+      hasPuzzleImage = true;
+    } else if (canReuseExistingPuzzle) {
+      puzzlePath = existingPuzzlePath;
+      puzzleThumbnailPath = existingPuzzleThumbnailPath;
+      hasPuzzleImage = puzzlePath.isNotEmpty;
+    }
+
+    final normalizedEditorData = Map<String, dynamic>.from(editorData)
+      ..['hasPuzzleImage'] = hasPuzzleImage
+      ..['sourceImagePath'] = sourceRef.fullPath;
+
+    await docRef.set(<String, dynamic>{
+      'nr': levelNr,
+      'name': answer.trim(),
+      'hintType': 'fact',
+      'editorMode': UserLevelEditorMode.photoSketch,
+      'creatorUid': uid,
+      'creatorName': creatorName.trim(),
+      'hints': <String, dynamic>{'fact': factText.trim()},
+      'puzzlePath': puzzlePath,
+      'puzzleThumbnailPath': puzzleThumbnailPath,
+      'solutionPath': solutionRef.fullPath,
+      'tooltipStart': '',
+      'tooltipEnd': '',
+      'isEnabled': true,
+      'isLocked': false,
+      'submissionStatus': UserLevelSubmissionStatus.draft,
+      'submissionId': null,
+      'editorData': normalizedEditorData,
+      'createdAt': existingCreatedAt == null
+          ? FieldValue.serverTimestamp()
+          : Timestamp.fromDate(existingCreatedAt),
+      'modifiedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    return docRef.id;
+  }
+
   Future<String> saveWordLevel({
     String? levelId,
     required String creatorName,

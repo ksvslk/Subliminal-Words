@@ -26,6 +26,22 @@ class SWLevel {
   final String? submissionId;
   final Map<String, dynamic> editorData;
 
+  static String inferEditorMode({
+    required String? editorMode,
+    required String? hintType,
+  }) {
+    if (editorMode != null &&
+        UserLevelEditorMode.supported.contains(editorMode)) {
+      return editorMode;
+    }
+
+    if (hintType == 'highlight') {
+      return UserLevelEditorMode.highlight;
+    }
+
+    return UserLevelEditorMode.drawObject;
+  }
+
   SWLevel({
     required this.id,
     required this.documentId,
@@ -45,7 +61,7 @@ class SWLevel {
     this.isBundled = false,
     this.creatorUid = '',
     this.creatorName = '',
-    this.editorMode = UserLevelEditorMode.photoSketch,
+    this.editorMode = UserLevelEditorMode.drawObject,
     this.submissionStatus = UserLevelSubmissionStatus.draft,
     this.isLocked = false,
     this.submissionId,
@@ -54,13 +70,14 @@ class SWLevel {
 
   factory SWLevel.fromFirestore(
       String id, String packId, Map<String, dynamic> data) {
+    final hintType = data['hintType'] as String?;
     return SWLevel(
       id: '${packId}__${data['nr']}',
       documentId: id,
       nr: data['nr'] ?? 0,
       packId: packId,
       name: data['name'] ?? 'Unnamed Level',
-      hintType: data['hintType'] ?? 'fact',
+      hintType: hintType ?? 'fact',
       hints: data['hints'] ?? {},
       puzzlePath: data['puzzlePath'] ?? '',
       puzzleThumbnailPath: data['puzzleThumbnailPath'] ?? '',
@@ -74,7 +91,10 @@ class SWLevel {
       isBundled: false,
       creatorUid: data['creatorUid'] ?? '',
       creatorName: data['creatorName'] ?? '',
-      editorMode: data['editorMode'] ?? UserLevelEditorMode.photoSketch,
+      editorMode: inferEditorMode(
+        editorMode: data['editorMode'] as String?,
+        hintType: hintType,
+      ),
       submissionStatus:
           data['submissionStatus'] ?? UserLevelSubmissionStatus.draft,
       isLocked: data['isLocked'] ?? false,
@@ -84,13 +104,14 @@ class SWLevel {
   }
 
   factory SWLevel.fromJson(String packId, Map<String, dynamic> json) {
+    final hintType = json['hintType'] as String?;
     return SWLevel(
       id: '${packId}__${json['nr']}',
       documentId: '${packId}__${json['nr']}',
       nr: json['nr'] ?? 0,
       packId: packId,
       name: json['name'] ?? 'Unnamed Level',
-      hintType: json['hintType'] ?? 'fact',
+      hintType: hintType ?? 'fact',
       hints: json['hints'] ?? {},
       puzzlePath: json['puzzlePath'] ?? '',
       puzzleThumbnailPath: json['puzzleThumbnailPath'] ?? '',
@@ -103,7 +124,10 @@ class SWLevel {
       isBundled: true,
       creatorUid: json['creatorUid'] ?? '',
       creatorName: json['creatorName'] ?? '',
-      editorMode: json['editorMode'] ?? UserLevelEditorMode.photoSketch,
+      editorMode: inferEditorMode(
+        editorMode: json['editorMode'] as String?,
+        hintType: hintType,
+      ),
       submissionStatus:
           json['submissionStatus'] ?? UserLevelSubmissionStatus.approved,
       isLocked: json['isLocked'] ?? false,
