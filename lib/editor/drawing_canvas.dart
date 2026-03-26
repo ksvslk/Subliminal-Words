@@ -12,6 +12,13 @@ enum DrawingBrushType {
   eraser,
 }
 
+DrawingBrushType _drawingBrushFromName(String? name) {
+  return DrawingBrushType.values.firstWhere(
+    (brush) => brush.name == name,
+    orElse: () => DrawingBrushType.none,
+  );
+}
+
 extension DrawingBrushTypeX on DrawingBrushType {
   String get label {
     switch (this) {
@@ -285,6 +292,55 @@ class DrawingController extends ChangeNotifier {
 
     _strokes.clear();
     _activeStroke = null;
+    _contentVersion += 1;
+    notifyListeners();
+  }
+
+  void replaceFromEditorData(Map<String, dynamic>? rawEditorData) {
+    final editorData = rawEditorData == null
+        ? const <String, dynamic>{}
+        : Map<String, dynamic>.from(rawEditorData);
+    final strokeJson =
+        editorData['strokes'] as List<dynamic>? ?? const <dynamic>[];
+    final nextStrokes = <DrawingStroke>[
+      for (final stroke in strokeJson)
+        if (stroke is Map)
+          DrawingStroke.fromJson(Map<String, dynamic>.from(stroke)),
+    ];
+    final brushSettings =
+        editorData['brushSettings'] as Map<dynamic, dynamic>? ??
+            const <dynamic, dynamic>{};
+    final nextBrushWidths = <DrawingBrushType, double>{};
+    final nextBrushOpacities = <DrawingBrushType, double>{};
+
+    for (final brush in DrawingBrushType.values) {
+      final rawSettings = brushSettings[brush.name];
+      if (rawSettings is! Map) {
+        continue;
+      }
+      final settingsMap = Map<String, dynamic>.from(rawSettings);
+      final width = settingsMap['width'];
+      final opacity = settingsMap['opacity'];
+      if (width is num) {
+        nextBrushWidths[brush] = width.toDouble();
+      }
+      if (opacity is num) {
+        nextBrushOpacities[brush] = opacity.toDouble();
+      }
+    }
+
+    _strokes
+      ..clear()
+      ..addAll(nextStrokes);
+    _activeStroke = null;
+    _selectedBrush =
+        _drawingBrushFromName(editorData['selectedBrush'] as String?);
+    _brushWidths
+      ..clear()
+      ..addAll(_buildInitialBrushWidths(nextBrushWidths));
+    _brushOpacities
+      ..clear()
+      ..addAll(_buildInitialBrushOpacities(nextBrushOpacities));
     _contentVersion += 1;
     notifyListeners();
   }
