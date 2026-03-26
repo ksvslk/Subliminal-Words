@@ -5,7 +5,7 @@ import 'package:operation_hermes/controller/games_services.dart';
 import 'package:operation_hermes/menu/credits_dialog.dart';
 import 'package:operation_hermes/menu/licenses_dialog.dart';
 import 'package:operation_hermes/controller/settings_controller.dart';
-import 'package:operation_hermes/ui/screen/create_level_screen.dart';
+import 'package:operation_hermes/ui/create_level_flow.dart';
 import 'package:operation_hermes/ui/screen/my_levels_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -102,11 +102,7 @@ class _SettingsMenuState extends State<SettingsMenu> {
           case MenuItem.createXlevel:
             return MenuItemButton(
                 onPressed: () {
-                  Navigator.of(mainContext).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const CreateLevelScreen(),
-                    ),
-                  );
+                  openCreateLevelFlow(mainContext);
                 },
                 leadingIcon: const Icon(Icons.draw_outlined),
                 child: Text(item.name.replaceFirst('X', ' ')));

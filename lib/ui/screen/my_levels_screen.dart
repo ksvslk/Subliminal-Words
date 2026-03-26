@@ -3,6 +3,7 @@ import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:operation_hermes/data/user_level_metadata.dart';
+import 'package:operation_hermes/ui/create_level_flow.dart';
 import 'package:operation_hermes/ui/screen/create_level_screen.dart';
 import 'package:provider/provider.dart';
 
@@ -10,6 +11,11 @@ class MyLevelsScreen extends StatelessWidget {
   const MyLevelsScreen({super.key});
 
   Future<void> _openEditor(BuildContext context, {SWLevel? level}) async {
+    if (level == null) {
+      await openCreateLevelFlow(context);
+      return;
+    }
+
     await Navigator.of(context).push(
       MaterialPageRoute<bool>(
         builder: (_) => CreateLevelScreen(initialLevel: level),

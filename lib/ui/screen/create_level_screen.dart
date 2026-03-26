@@ -17,53 +17,6 @@ enum _StagePreviewMode {
   puzzle,
 }
 
-class _EditorModeDraft {
-  final String solution;
-  final String creatorName;
-  final String factHint;
-  final String generationPrompt;
-  final double generationDifficulty;
-  final Map<String, dynamic> drawingEditorData;
-  final Map<String, dynamic> wordDrawingEditorData;
-  final List<Map<String, dynamic>> wordLetters;
-  final Uint8List? generatedPuzzleImageBytes;
-  final String puzzleGenerationStatus;
-  final bool hasPuzzleInvalidatedByEdit;
-  final _StagePreviewMode stagePreviewMode;
-
-  const _EditorModeDraft({
-    required this.solution,
-    required this.creatorName,
-    required this.factHint,
-    required this.generationPrompt,
-    required this.generationDifficulty,
-    required this.drawingEditorData,
-    required this.wordDrawingEditorData,
-    required this.wordLetters,
-    required this.generatedPuzzleImageBytes,
-    required this.puzzleGenerationStatus,
-    required this.hasPuzzleInvalidatedByEdit,
-    required this.stagePreviewMode,
-  });
-
-  factory _EditorModeDraft.empty() {
-    return const _EditorModeDraft(
-      solution: '',
-      creatorName: '',
-      factHint: '',
-      generationPrompt: '',
-      generationDifficulty: 1.5,
-      drawingEditorData: <String, dynamic>{},
-      wordDrawingEditorData: <String, dynamic>{},
-      wordLetters: <Map<String, dynamic>>[],
-      generatedPuzzleImageBytes: null,
-      puzzleGenerationStatus: '',
-      hasPuzzleInvalidatedByEdit: false,
-      stagePreviewMode: _StagePreviewMode.solution,
-    );
-  }
-}
-
 DrawingBrushType _brushFromName(String? name) {
   return DrawingBrushType.values.firstWhere(
     (brush) => brush.name == name,
@@ -118,8 +71,9 @@ DrawingController _buildDrawingControllerFromEditorData(
 
 class CreateLevelScreen extends StatefulWidget {
   final SWLevel? initialLevel;
+  final String? initialEditorMode;
 
-  const CreateLevelScreen({super.key, this.initialLevel});
+  const CreateLevelScreen({super.key, this.initialLevel, this.initialEditorMode});
 
   @override
   State<CreateLevelScreen> createState() => _CreateLevelScreenState();
@@ -148,7 +102,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   bool _isGeneratingPuzzle = false;
   bool _isStageInteracting = false;
   bool _isLoadingWordEditorData = false;
-  bool _isRestoringEditorModeDraft = false;
   double _generationDifficulty = 1.5;
   String _puzzleGenerationStatus = '';
   Uint8List? _generatedPuzzleImageBytes;
@@ -158,7 +111,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   int _lastSeenWordDrawingContentVersion = 0;
   int _lastSeenWordContentVersion = 0;
   late String _editorMode;
-  late final Map<String, _EditorModeDraft> _editorModeDrafts;
 
   bool get _isLocked => widget.initialLevel?.isLocked == true;
   bool get _isEditMode => widget.initialLevel != null;
@@ -188,6 +140,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     final initialLevel = widget.initialLevel;
     final initialEditorData =
         initialLevel?.editorData ?? const <String, dynamic>{};
+    final initialEditorMode = widget.initialEditorMode;
 
     _creatorNameController =
         TextEditingController(text: initialLevel?.creatorName ?? '');
@@ -197,7 +150,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         ValueNotifier<String>(_creatorNameController.text);
     _answerTextNotifier = ValueNotifier<String>(_answerController.text);
     _factTextNotifier = ValueNotifier<String>(_factController.text);
-    _editorMode = initialLevel?.editorMode == UserLevelEditorMode.highlight
+    _editorMode = initialLevel?.editorMode == UserLevelEditorMode.highlight ||
+            initialEditorMode == UserLevelEditorMode.highlight
         ? UserLevelEditorMode.highlight
         : UserLevelEditorMode.drawObject;
     _generationPromptController = TextEditingController(
@@ -241,11 +195,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
             .read<FirebaseService>()
             .getDownloadUrl(initialLevel!.puzzlePath)
         : null;
-    _editorModeDrafts = <String, _EditorModeDraft>{
-      UserLevelEditorMode.drawObject: _EditorModeDraft.empty(),
-      UserLevelEditorMode.highlight: _EditorModeDraft.empty(),
-    };
-    _editorModeDrafts[_editorMode] = _captureCurrentModeDraft();
     if (_editorMode == UserLevelEditorMode.highlight &&
         !_wordOverlayController.hasLetters &&
         (initialLevel?.solutionPath.isNotEmpty ?? false)) {
@@ -289,10 +238,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   void _handleDrawingControllerChanged() {
-    if (_isRestoringEditorModeDraft) {
-      _lastSeenDrawingContentVersion = _drawingController.contentVersion;
-      return;
-    }
     final contentVersion = _drawingController.contentVersion;
     if (contentVersion == _lastSeenDrawingContentVersion) {
       return;
@@ -303,10 +248,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   void _handleWordOverlayControllerChanged() {
-    if (_isRestoringEditorModeDraft) {
-      _lastSeenWordContentVersion = _wordOverlayController.contentVersion;
-      return;
-    }
     final contentVersion = _wordOverlayController.contentVersion;
     if (contentVersion == _lastSeenWordContentVersion) {
       return;
@@ -317,11 +258,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   void _handleWordDrawingControllerChanged() {
-    if (_isRestoringEditorModeDraft) {
-      _lastSeenWordDrawingContentVersion =
-          _wordDrawingController.contentVersion;
-      return;
-    }
     final contentVersion = _wordDrawingController.contentVersion;
     if (contentVersion == _lastSeenWordDrawingContentVersion) {
       return;
@@ -352,74 +288,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     _handleGenerationInputsChanged();
   }
 
-  _EditorModeDraft _captureCurrentModeDraft() {
-    return _EditorModeDraft(
-      solution: _answerController.text,
-      creatorName: _creatorNameController.text,
-      factHint: _factController.text,
-      generationPrompt: _generationPromptController.text,
-      generationDifficulty: _generationDifficulty,
-      drawingEditorData: _drawingController.toEditorData(),
-      wordDrawingEditorData: _wordDrawingController.toEditorData(),
-      wordLetters: _wordOverlayController.letters
-          .map((letter) => letter.toJson())
-          .toList(growable: false),
-      generatedPuzzleImageBytes: _generatedPuzzleImageBytes == null
-          ? null
-          : Uint8List.fromList(_generatedPuzzleImageBytes!),
-      puzzleGenerationStatus: _puzzleGenerationStatus,
-      hasPuzzleInvalidatedByEdit: _hasPuzzleInvalidatedByEdit,
-      stagePreviewMode: _stagePreviewMode,
-    );
-  }
-
-  bool _draftHasSolutionStageContent(_EditorModeDraft draft, String mode) {
-    if (mode == UserLevelEditorMode.highlight) {
-      final expectedLetters =
-          extractWordSolutionCharacters(draft.solution.trim());
-      return expectedLetters.isNotEmpty &&
-          draft.wordLetters.length == expectedLetters.length;
-    }
-
-    final strokes = draft.drawingEditorData['strokes'] as List<dynamic>? ??
-        const <dynamic>[];
-    return strokes.isNotEmpty;
-  }
-
-  bool _draftCanAccessPuzzleStep(_EditorModeDraft draft, String mode) {
-    return draft.solution.trim().length >= _minSolutionLength &&
-        _draftHasSolutionStageContent(draft, mode);
-  }
-
-  void _restoreModeDraft(String mode) {
-    final draft = _editorModeDrafts[mode] ?? _EditorModeDraft.empty();
-    final canAccessPuzzleStep = _draftCanAccessPuzzleStep(draft, mode);
-
-    _isRestoringEditorModeDraft = true;
-    try {
-      _creatorNameController.text = draft.creatorName;
-      _factController.text = draft.factHint;
-      _generationPromptController.text = draft.generationPrompt;
-      _answerController.text = draft.solution;
-      _drawingController.replaceFromEditorData(draft.drawingEditorData);
-      _wordDrawingController.replaceFromEditorData(draft.wordDrawingEditorData);
-      _wordOverlayController.replaceLetters(
-        draft.wordLetters.map(WordOverlayLetter.fromJson),
-      );
-      _generationDifficulty = draft.generationDifficulty;
-      _generatedPuzzleImageBytes = draft.generatedPuzzleImageBytes == null
-          ? null
-          : Uint8List.fromList(draft.generatedPuzzleImageBytes!);
-      _puzzleGenerationStatus = draft.puzzleGenerationStatus;
-      _hasPuzzleInvalidatedByEdit = draft.hasPuzzleInvalidatedByEdit;
-      _stagePreviewMode = canAccessPuzzleStep
-          ? draft.stagePreviewMode
-          : _StagePreviewMode.solution;
-    } finally {
-      _isRestoringEditorModeDraft = false;
-    }
-  }
-
   void _handleCreatorNameChanged() {
     final text = _creatorNameController.text;
     if (text == _creatorNameTextNotifier.value) {
@@ -447,9 +315,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   void _handleGenerationInputsChanged() {
-    if (_isRestoringEditorModeDraft) {
-      return;
-    }
     _invalidatePuzzlePreview();
   }
 
@@ -512,23 +377,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         setState(() => _isLoadingWordEditorData = false);
       }
     }
-  }
-
-  void _setEditorMode(String mode) {
-    if (_isEditMode ||
-        _isLocked ||
-        _editorMode == mode ||
-        _isSaving ||
-        _isGeneratingPuzzle) {
-      return;
-    }
-
-    _editorModeDrafts[_editorMode] = _captureCurrentModeDraft();
-    setState(() {
-      _editorMode = mode;
-      _isStageInteracting = false;
-      _restoreModeDraft(mode);
-    });
   }
 
   List<WordOverlayLetter> _wordSolutionTemplates() {
@@ -898,7 +746,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           foregroundColor: colorScheme.onSurface,
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
-          title: Text(_isEditMode ? 'Edit Level' : 'Create Level'),
+          title: Text(
+            _isEditMode
+                ? 'Edit ${UserLevelEditorMode.labelFor(_editorMode)} Level'
+                : 'Create ${UserLevelEditorMode.labelFor(_editorMode)} Level',
+          ),
         ),
         bottomNavigationBar: SafeArea(
           top: false,
@@ -1009,7 +861,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                             () => _generationDifficulty = value,
                           ),
                           generationPromptFocusNode: _generationPromptFocusNode,
-                          isSolutionStepComplete: _isSolutionStepComplete,
                         )
                       : _CanvasEditorSection(
                           controller: _drawingController,
@@ -1040,22 +891,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                             () => _generationDifficulty = value,
                           ),
                           generationPromptFocusNode: _generationPromptFocusNode,
-                          isSolutionStepComplete: _isSolutionStepComplete,
                         ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                  child: _CreatorModesFooter(
-                    textTheme: textTheme,
-                    colorScheme: colorScheme,
-                    selectedMode: _editorMode,
-                    canChangeMode: !_isEditMode &&
-                        !_isLocked &&
-                        !_isSaving &&
-                        !_isGeneratingPuzzle,
-                    onModeSelected: _setEditorMode,
-                  ),
                 ),
                 if (_isLocked) ...<Widget>[
                   const SizedBox(height: 16),
@@ -1083,7 +919,6 @@ class _CanvasEditorSection extends StatelessWidget {
   final ColorScheme colorScheme;
   final Color canvasBackgroundColor;
   final bool isLocked;
-  final bool isSolutionStepComplete;
   final _StagePreviewMode stagePreviewMode;
   final Uint8List? puzzleBytes;
   final Future<String>? existingPuzzlePreviewUrlFuture;
@@ -1110,7 +945,6 @@ class _CanvasEditorSection extends StatelessWidget {
     required this.colorScheme,
     required this.canvasBackgroundColor,
     required this.isLocked,
-    required this.isSolutionStepComplete,
     required this.stagePreviewMode,
     required this.puzzleBytes,
     required this.existingPuzzlePreviewUrlFuture,
@@ -1135,6 +969,10 @@ class _CanvasEditorSection extends StatelessWidget {
       ]),
       builder: (context, _) {
         final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
+        final isSolutionStepComplete =
+            solutionTextListenable.value.trim().length >=
+                _CreateLevelScreenState._minSolutionLength &&
+            controller.hasCommittedStrokes;
         final canGeneratePuzzleNow = !isLocked &&
             solutionTextListenable.value.trim().length >= 2 &&
             promptTextListenable.value.trim().isNotEmpty &&
@@ -2104,7 +1942,6 @@ class _WordEditorSection extends StatelessWidget {
   final Color canvasBackgroundColor;
   final bool isLocked;
   final bool isLoadingInitialOverlay;
-  final bool isSolutionStepComplete;
   final _StagePreviewMode stagePreviewMode;
   final Uint8List? puzzleBytes;
   final Future<String>? existingPuzzlePreviewUrlFuture;
@@ -2132,7 +1969,6 @@ class _WordEditorSection extends StatelessWidget {
     required this.canvasBackgroundColor,
     required this.isLocked,
     required this.isLoadingInitialOverlay,
-    required this.isSolutionStepComplete,
     required this.stagePreviewMode,
     required this.puzzleBytes,
     required this.existingPuzzlePreviewUrlFuture,
@@ -2168,6 +2004,10 @@ class _WordEditorSection extends StatelessWidget {
         promptTextListenable,
       ]),
       builder: (context, _) {
+        final isSolutionStepComplete =
+            solutionTextListenable.value.trim().length >=
+                _CreateLevelScreenState._minSolutionLength &&
+            controller.hasLetters;
         final canGeneratePuzzleNow = !isLocked &&
             solutionTextListenable.value.trim().length >= 2 &&
             promptTextListenable.value.trim().isNotEmpty &&
@@ -2713,70 +2553,6 @@ class _WordLetterChip extends StatelessWidget {
   }
 }
 
-class _ModePill extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback? onTap;
-
-  const _ModePill({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.enabled,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    final backgroundColor =
-        selected ? colorScheme.surface : colorScheme.surfaceContainerLow;
-    final foregroundColor =
-        selected ? colorScheme.primary : colorScheme.onSurface;
-
-    return Opacity(
-      opacity: enabled ? 1 : 0.56,
-      child: Material(
-        color: backgroundColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(
-            color: selected ? colorScheme.primary : colorScheme.outlineVariant,
-          ),
-        ),
-        child: InkWell(
-          onTap: enabled ? onTap : null,
-          borderRadius: BorderRadius.circular(18),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(icon, size: 16, color: foregroundColor),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: AutoSizeText(
-                    label,
-                    maxLines: 1,
-                    minFontSize: 10,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: foregroundColor,
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _BrushButton extends StatelessWidget {
   final DrawingBrushType brush;
   final bool selected;
@@ -3208,74 +2984,6 @@ class _CompactActionButton extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _CreatorModesFooter extends StatelessWidget {
-  final TextTheme textTheme;
-  final ColorScheme colorScheme;
-  final String selectedMode;
-  final bool canChangeMode;
-  final ValueChanged<String> onModeSelected;
-
-  const _CreatorModesFooter({
-    required this.textTheme,
-    required this.colorScheme,
-    required this.selectedMode,
-    required this.canChangeMode,
-    required this.onModeSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: _ModePill(
-                label: 'Face',
-                icon: Icons.face_retouching_natural_outlined,
-                selected: selectedMode == UserLevelEditorMode.photoSketch,
-                enabled: false,
-              ),
-            ),
-            SizedBox(width: 8),
-            Expanded(
-              child: _ModePill(
-                label: 'Object',
-                icon: Icons.draw_outlined,
-                selected: selectedMode == UserLevelEditorMode.drawObject,
-                enabled: canChangeMode ||
-                    selectedMode == UserLevelEditorMode.drawObject,
-                onTap: () => onModeSelected(UserLevelEditorMode.drawObject),
-              ),
-            ),
-            SizedBox(width: 8),
-            Expanded(
-              child: _ModePill(
-                label: 'Word',
-                icon: Icons.text_fields_outlined,
-                selected: selectedMode == UserLevelEditorMode.highlight,
-                enabled: canChangeMode ||
-                    selectedMode == UserLevelEditorMode.highlight,
-                onTap: () => onModeSelected(UserLevelEditorMode.highlight),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Text(
-          canChangeMode
-              ? 'Object and Word are live now. Face comes next.'
-              : 'Mode is fixed while you edit this draft.',
-          style: textTheme.bodySmall?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
     );
   }
 }
