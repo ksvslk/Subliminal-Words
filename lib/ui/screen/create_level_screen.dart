@@ -285,7 +285,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       return colorScheme.inverseSurface;
     }
 
-    return colorScheme.surfaceContainerLowest;
+    return colorScheme.surface;
   }
 
   void _handleDrawingControllerChanged() {
@@ -1336,7 +1336,7 @@ class _CanvasEditorSection extends StatelessWidget {
                 ],
                 style: textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: colorScheme.onSecondaryContainer,
+                  color: colorScheme.onSurface,
                 ),
                 decoration: _solutionFieldDecoration(colorScheme),
               ),
@@ -1799,7 +1799,7 @@ InputDecoration _sharedFieldDecoration(
     labelText: label,
     prefixIcon: icon == null ? null : Icon(icon),
     filled: true,
-    fillColor: colorScheme.surfaceContainerHigh,
+    fillColor: colorScheme.surface,
     border: border,
     enabledBorder: border,
     disabledBorder: border,
@@ -1816,7 +1816,7 @@ InputDecoration _solutionFieldDecoration(
 }) {
   final border = OutlineInputBorder(
     borderRadius: BorderRadius.circular(20),
-    borderSide: BorderSide(color: colorScheme.secondary),
+    borderSide: BorderSide(color: colorScheme.outlineVariant),
   );
 
   return InputDecoration(
@@ -1824,12 +1824,12 @@ InputDecoration _solutionFieldDecoration(
     hintText: hint,
     prefixIcon: const Icon(Icons.track_changes_outlined),
     filled: true,
-    fillColor: colorScheme.secondaryContainer,
+    fillColor: colorScheme.surface,
     border: border,
     enabledBorder: border,
     disabledBorder: border,
     focusedBorder: border.copyWith(
-      borderSide: BorderSide(color: colorScheme.secondary, width: 2),
+      borderSide: BorderSide(color: colorScheme.primary, width: 2),
     ),
   );
 }
@@ -1903,63 +1903,60 @@ class _EditorStepProgress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final solutionActive = activeStep == _StagePreviewMode.solution;
-    final puzzleActive = activeStep == _StagePreviewMode.puzzle;
 
     return SizedBox(
       height: 46,
-      child: Stack(
-        children: <Widget>[
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                color: Colors.transparent,
-                border: Border.all(
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.82),
-                ),
-              ),
-            ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.82),
           ),
-          Row(
-            children: <Widget>[
-              Expanded(
+        ),
+        child: Row(
+          children: <Widget>[
+            Expanded(
                 child: _StepProgressTapArea(
                   label: '1. Solution',
                   progress: solutionProgress,
                   isActive: solutionActive,
                   enabled: true,
-                  colorScheme: colorScheme,
-                  textTheme: textTheme,
+                colorScheme: colorScheme,
+                textTheme: textTheme,
                   onTap: () => onStepSelected(_StagePreviewMode.solution),
                   borderRadius: const BorderRadius.horizontal(
-                    left: Radius.circular(999),
+                    left: Radius.circular(15),
                   ),
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+                  progressPadding: const EdgeInsets.only(left: 14),
                 ),
               ),
-              Container(
-                width: 1,
-                height: 34,
-                color: colorScheme.outlineVariant.withValues(alpha: 0.56),
-              ),
-              Expanded(
+            Container(
+              width: 1,
+              height: double.infinity,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.56),
+            ),
+            Expanded(
                 child: _StepProgressTapArea(
                   label: '2. Puzzle',
                   progress: puzzleProgress,
-                  isActive: puzzleActive,
+                  isActive: activeStep == _StagePreviewMode.puzzle,
                   enabled: canAccessPuzzleStep,
-                  colorScheme: colorScheme,
-                  textTheme: textTheme,
+                colorScheme: colorScheme,
+                textTheme: textTheme,
                   onTap: canAccessPuzzleStep
                       ? () => onStepSelected(_StagePreviewMode.puzzle)
                       : null,
                   borderRadius: const BorderRadius.horizontal(
-                    right: Radius.circular(999),
+                    right: Radius.circular(15),
                   ),
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+                  progressPadding: const EdgeInsets.only(right: 14),
                 ),
               ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1974,6 +1971,8 @@ class _StepProgressTapArea extends StatelessWidget {
   final TextTheme textTheme;
   final VoidCallback? onTap;
   final BorderRadius borderRadius;
+  final EdgeInsets labelPadding;
+  final EdgeInsets progressPadding;
 
   const _StepProgressTapArea({
     required this.label,
@@ -1984,37 +1983,59 @@ class _StepProgressTapArea extends StatelessWidget {
     required this.textTheme,
     required this.onTap,
     required this.borderRadius,
+    this.labelPadding = EdgeInsets.zero,
+    this.progressPadding = EdgeInsets.zero,
   });
 
   @override
   Widget build(BuildContext context) {
+    final activeBackground = colorScheme.brightness == Brightness.dark
+        ? colorScheme.primaryContainer.withValues(alpha: 0.34)
+        : colorScheme.primaryContainer.withValues(alpha: 0.92);
+    final inactiveBackground = enabled
+        ? colorScheme.surfaceContainerLow.withValues(alpha: 0.42)
+        : colorScheme.surfaceContainerLowest.withValues(alpha: 0.22);
     final labelColor = !enabled
         ? colorScheme.onSurfaceVariant.withValues(alpha: 0.42)
         : isActive
-            ? colorScheme.primary
-            : colorScheme.onSurfaceVariant.withValues(alpha: 0.9);
+            ? colorScheme.onPrimaryContainer
+            : colorScheme.onSurfaceVariant.withValues(alpha: 0.88);
 
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: isActive ? activeBackground : inactiveBackground,
+          borderRadius: borderRadius,
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Text(
-              label,
-              style: textTheme.labelMedium?.copyWith(
-                color: labelColor,
-                fontWeight: isActive ? FontWeight.w900 : FontWeight.w700,
+            Padding(
+              padding: labelPadding,
+              child: Text(
+                label,
+                style: textTheme.labelMedium?.copyWith(
+                  color: labelColor,
+                  fontWeight: isActive ? FontWeight.w900 : FontWeight.w700,
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            _StepProgressSegment(
-              progress: progress,
-              colorScheme: colorScheme,
-              borderRadius: borderRadius,
+            const SizedBox(height: 4),
+            Padding(
+              padding: progressPadding,
+              child: _StepProgressSegment(
+                progress: progress,
+                colorScheme: colorScheme,
+                borderRadius: borderRadius,
+                isActive: isActive,
+              ),
             ),
+            const SizedBox(height: 4),
           ],
         ),
       ),
@@ -2026,22 +2047,30 @@ class _StepProgressSegment extends StatelessWidget {
   final double progress;
   final ColorScheme colorScheme;
   final BorderRadius borderRadius;
+  final bool isActive;
 
   const _StepProgressSegment({
     required this.progress,
     required this.colorScheme,
     required this.borderRadius,
+    required this.isActive,
   });
 
   @override
   Widget build(BuildContext context) {
+    final trackColor = isActive
+        ? colorScheme.onPrimaryContainer.withValues(
+            alpha: colorScheme.brightness == Brightness.dark ? 0.34 : 0.18,
+          )
+        : colorScheme.surfaceContainerHighest;
+
     return ClipRRect(
       borderRadius: borderRadius,
       child: SizedBox(
         height: 8,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest,
+            color: trackColor,
           ),
           child: Align(
             alignment: Alignment.centerLeft,
@@ -2356,7 +2385,7 @@ class _WordEditorSection extends StatelessWidget {
                 ],
                 style: textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: colorScheme.onSecondaryContainer,
+                  color: colorScheme.onSurface,
                   letterSpacing: 0.5,
                 ),
                 decoration: _solutionFieldDecoration(
@@ -2626,12 +2655,12 @@ class _WordLetterChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final backgroundColor = selected
-        ? colorScheme.secondaryContainer
+        ? colorScheme.surface
         : isPlaced
-            ? colorScheme.surfaceContainerHigh
+            ? colorScheme.surfaceContainerLow
             : colorScheme.surfaceContainerLowest;
     final foregroundColor = selected
-        ? colorScheme.onSecondaryContainer
+        ? colorScheme.primary
         : isPlaced
             ? colorScheme.onSurface
             : colorScheme.onSurfaceVariant;
@@ -2704,9 +2733,9 @@ class _ModePill extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     final backgroundColor =
-        selected ? colorScheme.primaryContainer : colorScheme.surfaceContainer;
+        selected ? colorScheme.surface : colorScheme.surfaceContainerLow;
     final foregroundColor =
-        selected ? colorScheme.onPrimaryContainer : colorScheme.onSurface;
+        selected ? colorScheme.primary : colorScheme.onSurface;
 
     return Opacity(
       opacity: enabled ? 1 : 0.56,
@@ -2780,10 +2809,10 @@ class _BrushButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final backgroundColor = selected
-        ? colorScheme.secondaryContainer
-        : colorScheme.surfaceContainerHigh;
+        ? colorScheme.surface
+        : colorScheme.surfaceContainerLow;
     final foregroundColor =
-        selected ? colorScheme.onSecondaryContainer : colorScheme.onSurface;
+        selected ? colorScheme.primary : colorScheme.onSurface;
 
     return Opacity(
       opacity: enabled ? 1 : 0.54,
@@ -3044,7 +3073,7 @@ class _SectionCard extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLow,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: colorScheme.outlineVariant),
       ),
