@@ -14,6 +14,7 @@ import 'package:operation_hermes/data/sw_level.dart';
 import 'package:operation_hermes/data/pack.dart';
 import 'package:operation_hermes/data/category.dart';
 import 'package:operation_hermes/data/user_level_metadata.dart';
+import 'package:operation_hermes/editor/generation_image_budget.dart';
 
 class FirebaseService {
   static final _log = Logger('FirebaseService');
@@ -350,25 +351,33 @@ class FirebaseService {
     return true;
   }
 
-  Uint8List _normalizePuzzleImageBytes(Uint8List bytes) {
+  Future<({Uint8List imageBytes, Uint8List thumbnailBytes})>
+      _buildPuzzleStorageAssets(Uint8List bytes) async {
     final decodedImage = img.decodeImage(bytes);
     if (decodedImage == null) {
       throw StateError('Could not read the selected puzzle image.');
     }
 
     final normalizedImage =
-        decodedImage.width > 1600 || decodedImage.height > 1600
+        decodedImage.width > kStoredPuzzleDimension ||
+                decodedImage.height > kStoredPuzzleDimension
             ? img.copyResize(
                 decodedImage,
-                width: decodedImage.width >= decodedImage.height ? 1600 : null,
-                height: decodedImage.height > decodedImage.width ? 1600 : null,
+                width: decodedImage.width >= decodedImage.height
+                    ? kStoredPuzzleDimension
+                    : null,
+                height: decodedImage.height > decodedImage.width
+                    ? kStoredPuzzleDimension
+                    : null,
                 interpolation: img.Interpolation.average,
               )
             : decodedImage;
 
-    return Uint8List.fromList(
-      img.encodeJpg(normalizedImage, quality: 90),
+    final normalizedBytes = Uint8List.fromList(
+      img.encodeJpg(normalizedImage, quality: 94),
     );
+
+    return buildStoredPuzzleWebpAssets(normalizedBytes);
   }
 
   Future<String> saveDrawObjectLevel({
@@ -421,11 +430,15 @@ class FirebaseService {
     }
 
     final storageBase = 'user-levels/$uid/${docRef.id}';
-    final solutionRef = _storage.ref('$storageBase/solution.png');
-    await solutionRef.putData(
+    final storedSolutionBytes = await compressStoredFactSolutionWebp(
       solutionPngBytes,
+      failureLabel: 'solution image',
+    );
+    final solutionRef = _storage.ref('$storageBase/solution.webp');
+    await solutionRef.putData(
+      storedSolutionBytes,
       SettableMetadata(
-        contentType: 'image/png',
+        contentType: 'image/webp',
         customMetadata: <String, String>{
           'ownerUid': uid,
           'editorMode': UserLevelEditorMode.drawObject,
@@ -439,11 +452,13 @@ class FirebaseService {
     bool hasPuzzleImage = false;
 
     if (puzzleImageBytes != null) {
-      final puzzleRef = _storage.ref('$storageBase/puzzle.jpg');
+      final puzzleAssets = await _buildPuzzleStorageAssets(puzzleImageBytes);
+      final puzzleRef = _storage.ref('$storageBase/puzzle.webp');
+      final puzzleThumbRef = _storage.ref('$storageBase/puzzle_thumb.webp');
       await puzzleRef.putData(
-        puzzleImageBytes,
+        puzzleAssets.imageBytes,
         SettableMetadata(
-          contentType: 'image/jpeg',
+          contentType: 'image/webp',
           customMetadata: <String, String>{
             'ownerUid': uid,
             'editorMode': UserLevelEditorMode.drawObject,
@@ -451,8 +466,19 @@ class FirebaseService {
           },
         ),
       );
+      await puzzleThumbRef.putData(
+        puzzleAssets.thumbnailBytes,
+        SettableMetadata(
+          contentType: 'image/webp',
+          customMetadata: <String, String>{
+            'ownerUid': uid,
+            'editorMode': UserLevelEditorMode.drawObject,
+            'assetRole': 'puzzleThumbnail',
+          },
+        ),
+      );
       puzzlePath = puzzleRef.fullPath;
-      puzzleThumbnailPath = puzzleRef.fullPath;
+      puzzleThumbnailPath = puzzleThumbRef.fullPath;
       hasPuzzleImage = true;
     } else if (canReuseExistingPuzzle) {
       puzzlePath = existingPuzzlePath;
@@ -496,7 +522,7 @@ class FirebaseService {
     required String answer,
     required String factText,
     required Uint8List sourceImageBytes,
-    required Uint8List solutionPngBytes,
+    required Uint8List solutionImageBytes,
     Uint8List? puzzleImageBytes,
     bool allowReuseExistingPuzzle = true,
     required Map<String, dynamic> editorData,
@@ -554,11 +580,11 @@ class FirebaseService {
       ),
     );
 
-    final solutionRef = _storage.ref('$storageBase/solution.png');
+    final solutionRef = _storage.ref('$storageBase/solution.webp');
     await solutionRef.putData(
-      solutionPngBytes,
+      solutionImageBytes,
       SettableMetadata(
-        contentType: 'image/png',
+        contentType: 'image/webp',
         customMetadata: <String, String>{
           'ownerUid': uid,
           'editorMode': UserLevelEditorMode.photoSketch,
@@ -572,13 +598,13 @@ class FirebaseService {
     bool hasPuzzleImage = false;
 
     if (puzzleImageBytes != null) {
-      final normalizedPuzzleBytes =
-          _normalizePuzzleImageBytes(puzzleImageBytes);
-      final puzzleRef = _storage.ref('$storageBase/puzzle.jpg');
+      final puzzleAssets = await _buildPuzzleStorageAssets(puzzleImageBytes);
+      final puzzleRef = _storage.ref('$storageBase/puzzle.webp');
+      final puzzleThumbRef = _storage.ref('$storageBase/puzzle_thumb.webp');
       await puzzleRef.putData(
-        normalizedPuzzleBytes,
+        puzzleAssets.imageBytes,
         SettableMetadata(
-          contentType: 'image/jpeg',
+          contentType: 'image/webp',
           customMetadata: <String, String>{
             'ownerUid': uid,
             'editorMode': UserLevelEditorMode.photoSketch,
@@ -586,8 +612,19 @@ class FirebaseService {
           },
         ),
       );
+      await puzzleThumbRef.putData(
+        puzzleAssets.thumbnailBytes,
+        SettableMetadata(
+          contentType: 'image/webp',
+          customMetadata: <String, String>{
+            'ownerUid': uid,
+            'editorMode': UserLevelEditorMode.photoSketch,
+            'assetRole': 'puzzleThumbnail',
+          },
+        ),
+      );
       puzzlePath = puzzleRef.fullPath;
-      puzzleThumbnailPath = puzzleRef.fullPath;
+      puzzleThumbnailPath = puzzleThumbRef.fullPath;
       hasPuzzleImage = true;
     } else if (canReuseExistingPuzzle) {
       puzzlePath = existingPuzzlePath;
@@ -695,13 +732,13 @@ class FirebaseService {
     bool hasPuzzleImage = false;
 
     if (puzzleImageBytes != null) {
-      final normalizedPuzzleBytes =
-          _normalizePuzzleImageBytes(puzzleImageBytes);
-      final puzzleRef = _storage.ref('$storageBase/puzzle.jpg');
+      final puzzleAssets = await _buildPuzzleStorageAssets(puzzleImageBytes);
+      final puzzleRef = _storage.ref('$storageBase/puzzle.webp');
+      final puzzleThumbRef = _storage.ref('$storageBase/puzzle_thumb.webp');
       await puzzleRef.putData(
-        normalizedPuzzleBytes,
+        puzzleAssets.imageBytes,
         SettableMetadata(
-          contentType: 'image/jpeg',
+          contentType: 'image/webp',
           customMetadata: <String, String>{
             'ownerUid': uid,
             'editorMode': UserLevelEditorMode.highlight,
@@ -709,8 +746,19 @@ class FirebaseService {
           },
         ),
       );
+      await puzzleThumbRef.putData(
+        puzzleAssets.thumbnailBytes,
+        SettableMetadata(
+          contentType: 'image/webp',
+          customMetadata: <String, String>{
+            'ownerUid': uid,
+            'editorMode': UserLevelEditorMode.highlight,
+            'assetRole': 'puzzleThumbnail',
+          },
+        ),
+      );
       puzzlePath = puzzleRef.fullPath;
-      puzzleThumbnailPath = puzzleRef.fullPath;
+      puzzleThumbnailPath = puzzleThumbRef.fullPath;
       hasPuzzleImage = true;
     } else if (canReuseExistingPuzzle) {
       puzzlePath = existingPuzzlePath;
@@ -760,89 +808,143 @@ class FirebaseService {
   }
 
   Future<Uint8List> generateDrawObjectPuzzle({
-    required Uint8List solutionPngBytes,
+    required Uint8List solutionImageBytes,
+    String solutionFileName = '1.png',
+    String solutionMimeType = 'image/png',
     required String prompt,
     required double difficulty,
     void Function(String status)? onStatusChanged,
   }) async {
-    onStatusChanged?.call('Waking generator...');
-
     final requestBody = <String, dynamic>{
       'payload': <String, dynamic>{
         'input': <String, dynamic>{
           'workflow': _buildRunpodWorkflow(
             prompt: prompt,
             difficulty: difficulty,
+            solutionFileName: solutionFileName,
           ),
           'images': <Map<String, String>>[
             <String, String>{
-              'name': '1.png',
+              'name': solutionFileName,
               'image':
-                  'data:image/png;base64,${base64Encode(solutionPngBytes)}',
+                  'data:$solutionMimeType;base64,${base64Encode(solutionImageBytes)}',
             },
           ],
         },
       },
     };
 
-    final startData = await _startRunpodGeneration(
-      requestBody: requestBody,
-      onStatusChanged: onStatusChanged,
-    );
-    final jobId = startData['jobId'] as String? ?? '';
-    if (jobId.isEmpty) {
-      throw StateError('The generation job did not start correctly.');
-    }
+    const maxWarmupRetries = 2;
+    const maxTotalWait = Duration(seconds: 95);
+    final totalWait = Stopwatch()..start();
+    onStatusChanged?.call('Waking generator...');
 
-    var transientFailures = 0;
-    for (var attempt = 0; attempt < 80; attempt += 1) {
-      await Future<void>.delayed(
-        Duration(seconds: attempt == 0 ? 5 : 3),
-      );
-
-      Map<String, dynamic> statusData;
-      try {
-        statusData = await _postRunpodProxy(
-          '/api/generate-status',
-          <String, dynamic>{'jobId': jobId},
+    for (var generationAttempt = 0;
+        generationAttempt <= maxWarmupRetries;
+        generationAttempt += 1) {
+      if (totalWait.elapsed >= maxTotalWait) {
+        throw StateError(
+          'The generator is taking longer than usual to start. Please try again in a moment.',
         );
-        transientFailures = 0;
-      } catch (error, stackTrace) {
-        if (_isTransientGenerationError(error) && transientFailures < 6) {
-          transientFailures += 1;
-          _log.warning(
-            'Transient RunPod status polling error for job $jobId '
-            '(attempt ${attempt + 1}, transient retry $transientFailures).',
-            error,
-            stackTrace,
+      }
+
+      if (generationAttempt > 0) {
+        onStatusChanged?.call('Generator is still warming up... trying again.');
+      }
+
+      final startData = await _startRunpodGeneration(
+        requestBody: requestBody,
+        onStatusChanged: onStatusChanged,
+      );
+      final jobId = startData['jobId'] as String? ?? '';
+      if (jobId.isEmpty) {
+        throw StateError('The generation job did not start correctly.');
+      }
+
+      var transientFailures = 0;
+      for (var attempt = 0; attempt < 80; attempt += 1) {
+        if (totalWait.elapsed >= maxTotalWait) {
+          throw StateError(
+            'The generator is taking longer than usual to start. Please try again in a moment.',
           );
-          onStatusChanged?.call('Generator is waking up...');
-          continue;
         }
-        rethrow;
-      }
 
-      final status = (statusData['status'] as String? ?? 'UNKNOWN').trim();
-      onStatusChanged?.call('Status: $status');
+        await Future<void>.delayed(
+          Duration(seconds: attempt == 0 ? 5 : 3),
+        );
 
-      if (status == 'COMPLETED') {
-        final imageBase64 = statusData['imageBase64'] as String? ?? '';
-        if (imageBase64.isEmpty) {
-          throw StateError('Generation completed without an image.');
+        Map<String, dynamic> statusData;
+        try {
+          statusData = await _postRunpodProxy(
+            '/api/generate-status',
+            <String, dynamic>{'jobId': jobId},
+          );
+          transientFailures = 0;
+        } catch (error, stackTrace) {
+          if (_isTransientGenerationError(error) && transientFailures < 6) {
+            transientFailures += 1;
+            _log.warning(
+              'Transient RunPod status polling error for job $jobId '
+              '(attempt ${attempt + 1}, transient retry $transientFailures).',
+              error,
+              stackTrace,
+            );
+            onStatusChanged
+                ?.call('Loading generator... this can take a moment.');
+            continue;
+          }
+          rethrow;
         }
-        return _decodeGeneratedImage(imageBase64);
-      }
 
-      if (status == 'FAILED' || status == 'CANCELLED') {
-        final details = (statusData['errorMessage'] as String? ?? '').trim();
-        if (details.isNotEmpty) {
-          throw StateError('Puzzle generation failed: $details');
+        final status = (statusData['status'] as String? ?? 'UNKNOWN').trim();
+        onStatusChanged?.call(
+          _friendlyGenerationStatus(
+            status,
+            retryable: statusData['retryable'] == true,
+            generationAttempt: generationAttempt,
+            elapsed: totalWait.elapsed,
+          ),
+        );
+
+        if (status == 'COMPLETED') {
+          final imageBase64 = statusData['imageBase64'] as String? ?? '';
+          if (imageBase64.isEmpty) {
+            throw StateError('Generation completed without an image.');
+          }
+          return _decodeGeneratedImage(imageBase64);
         }
-        throw StateError('Puzzle generation failed.');
+
+        if (status == 'FAILED' || status == 'CANCELLED') {
+          final details = (statusData['errorMessage'] as String? ?? '').trim();
+          final retryable = statusData['retryable'] == true ||
+              _isRetryableTerminalGenerationStatus(status, details);
+
+          if (retryable && generationAttempt < maxWarmupRetries) {
+            final retryAfterMs =
+                (statusData['retryAfterMs'] as num?)?.round() ?? 5000;
+            if (totalWait.elapsed + Duration(milliseconds: retryAfterMs) >=
+                maxTotalWait) {
+              throw StateError(
+                'The generator is still warming up. Please try again in a moment.',
+              );
+            }
+            onStatusChanged
+                ?.call('Generator is still starting up... retrying.');
+            await Future<void>.delayed(Duration(milliseconds: retryAfterMs));
+            break;
+          }
+
+          if (details.isNotEmpty) {
+            throw StateError('Puzzle generation failed: $details');
+          }
+          throw StateError('Puzzle generation failed.');
+        }
       }
     }
 
-    throw StateError('Puzzle generation timed out.');
+    throw StateError(
+      'The generator is still warming up. Please try again in a moment.',
+    );
   }
 
   Future<Map<String, dynamic>> _startRunpodGeneration({
@@ -855,7 +957,7 @@ class FirebaseService {
     for (var attempt = 0; attempt < 3; attempt += 1) {
       try {
         if (attempt > 0) {
-          onStatusChanged?.call('Retrying generator...');
+          onStatusChanged?.call('Trying the generator again...');
         }
         return await _postRunpodProxy(
           '/api/generate-run',
@@ -874,6 +976,7 @@ class FirebaseService {
           error,
           stackTrace,
         );
+        onStatusChanged?.call('Waking the generator...');
         await Future<void>.delayed(Duration(seconds: 2 + attempt * 2));
       }
     }
@@ -895,12 +998,77 @@ class FirebaseService {
         message.contains('internal server error') ||
         message.contains('timed out') ||
         message.contains('timeout') ||
+        message.contains('rate limit') ||
+        message.contains('too many requests') ||
         message.contains('too large') ||
+        message.contains('(408)') ||
+        message.contains('(409)') ||
+        message.contains('(429)') ||
         message.contains('(500)') ||
         message.contains('(502)') ||
         message.contains('(503)') ||
         message.contains('(504)') ||
         message.contains('temporarily unavailable');
+  }
+
+  bool _isRetryableTerminalGenerationStatus(String status, String details) {
+    if (status != 'FAILED' && status != 'CANCELLED') {
+      return false;
+    }
+
+    final message = details.toLowerCase();
+    return message.contains('failed to connect to server') ||
+        message.contains('temporarily unavailable') ||
+        message.contains('service unavailable') ||
+        message.contains('internal server error') ||
+        message.contains('timed out') ||
+        message.contains('timeout') ||
+        message.contains('startup') ||
+        message.contains('starting server') ||
+        message.contains('starting handler') ||
+        message.contains('warming') ||
+        message.contains('initializing') ||
+        message.contains('loading model') ||
+        message.contains('boot');
+  }
+
+  String _friendlyGenerationStatus(
+    String status, {
+    required bool retryable,
+    required int generationAttempt,
+    required Duration elapsed,
+  }) {
+    switch (status.toUpperCase()) {
+      case 'IN_QUEUE':
+      case 'QUEUED':
+        if (elapsed >= const Duration(seconds: 35)) {
+          return 'Loading generator models... first run can take about a minute.';
+        }
+        return generationAttempt == 0
+            ? 'Waiting for generator slot...'
+            : 'Waiting for generator to finish warming up...';
+      case 'IN_PROGRESS':
+      case 'PROCESSING':
+      case 'RUNNING':
+        if (elapsed >= const Duration(seconds: 35) &&
+            generationAttempt > 0) {
+          return 'Generator is up and finishing the puzzle...';
+        }
+        return generationAttempt == 0
+            ? 'Creating puzzle...'
+            : 'Generator is up, creating puzzle...';
+      case 'COMPLETED':
+        return 'Puzzle ready';
+      case 'FAILED':
+      case 'CANCELLED':
+        return retryable
+            ? 'Generator is still warming up...'
+            : 'Puzzle generation failed.';
+      default:
+        return generationAttempt == 0
+            ? 'Checking generator status...'
+            : 'Still waiting for generator...';
+    }
   }
 
   Uint8List _decodeGeneratedImage(String imageBase64) {
@@ -949,6 +1117,11 @@ class FirebaseService {
         : Map<String, dynamic>.from(decoded as Map);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (response.statusCode == 413) {
+        throw StateError(
+          'The solution image is still too large for puzzle generation.',
+        );
+      }
       final errorMessage = json['error'] as String? ??
           'Puzzle generation request failed (${response.statusCode}).';
       throw StateError(errorMessage);
@@ -964,12 +1137,15 @@ class FirebaseService {
       'status': (json['status'] as String? ?? 'UNKNOWN').trim().toUpperCase(),
       'imageBase64': _extractGeneratedImage(json),
       'errorMessage': _extractGenerationError(json),
+      'retryable': json['retryable'] == true,
+      'retryAfterMs': (json['retryAfterMs'] as num?)?.round() ?? 0,
     };
   }
 
   Map<String, dynamic> _buildRunpodWorkflow({
     required String prompt,
     required double difficulty,
+    required String solutionFileName,
   }) {
     return <String, dynamic>{
       '10': <String, dynamic>{
@@ -1014,7 +1190,7 @@ class FirebaseService {
       '17': <String, dynamic>{
         'class_type': 'LoadImage',
         'inputs': <String, dynamic>{
-          'image': '1.png',
+          'image': solutionFileName,
           'upload': 'image',
         },
       },

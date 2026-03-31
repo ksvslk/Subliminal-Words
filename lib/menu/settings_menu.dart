@@ -6,13 +6,11 @@ import 'package:operation_hermes/menu/credits_dialog.dart';
 import 'package:operation_hermes/menu/licenses_dialog.dart';
 import 'package:operation_hermes/controller/settings_controller.dart';
 import 'package:operation_hermes/ui/create_level_flow.dart';
-import 'package:operation_hermes/ui/screen/my_levels_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 
 enum MenuItem {
-  myXlevels,
   createXlevel,
   achievements,
   theme,
@@ -88,17 +86,6 @@ class _SettingsMenuState extends State<SettingsMenu> {
       },
       menuChildren: MenuItem.values.map((item) {
         switch (item) {
-          case MenuItem.myXlevels:
-            return MenuItemButton(
-                onPressed: () {
-                  Navigator.of(mainContext).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const MyLevelsScreen(),
-                    ),
-                  );
-                },
-                leadingIcon: const Icon(Icons.collections_bookmark_outlined),
-                child: Text(item.name.replaceFirst('X', ' ')));
           case MenuItem.createXlevel:
             return MenuItemButton(
                 onPressed: () {

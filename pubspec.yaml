@@ -61,6 +61,7 @@ dependencies:
   purchases_flutter: ^9.9.1
   purchases_ui_flutter: ^9.9.1
   image: ^4.5.4
+  flutter_image_compress: ^2.4.0
   flutter_soloud: ^3.4.1
   real_volume: ^1.0.9
   firebase_remote_config: ^6.1.0

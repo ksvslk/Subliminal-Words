@@ -14,6 +14,7 @@ import 'package:operation_hermes/data/word_letter_style.dart';
 import 'package:operation_hermes/editor/content_filter.dart';
 import 'package:operation_hermes/editor/drawing_canvas.dart';
 import 'package:operation_hermes/editor/face_sketch_generator.dart';
+import 'package:operation_hermes/editor/generation_image_budget.dart';
 import 'package:operation_hermes/editor/word_overlay_editor.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -79,7 +80,8 @@ class CreateLevelScreen extends StatefulWidget {
   final SWLevel? initialLevel;
   final String? initialEditorMode;
 
-  const CreateLevelScreen({super.key, this.initialLevel, this.initialEditorMode});
+  const CreateLevelScreen(
+      {super.key, this.initialLevel, this.initialEditorMode});
 
   @override
   State<CreateLevelScreen> createState() => _CreateLevelScreenState();
@@ -99,6 +101,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   late final ValueNotifier<String> _answerTextNotifier;
   late final ValueNotifier<String> _factTextNotifier;
   late final ValueNotifier<String> _generationPromptTextNotifier;
+  late final ValueNotifier<bool> _drawingHasContentNotifier;
+  late final ValueNotifier<bool> _wordDrawingHasContentNotifier;
+  late final ValueNotifier<bool> _wordOverlayHasContentNotifier;
   late final DrawingController _drawingController;
   late final DrawingController _wordDrawingController;
   late final WordOverlayController _wordOverlayController;
@@ -123,6 +128,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   int _lastSeenDrawingContentVersion = 0;
   int _lastSeenWordDrawingContentVersion = 0;
   int _lastSeenWordContentVersion = 0;
+  int _puzzleInputRevision = 0;
+  int _activeGenerationToken = 0;
   int _faceSketchRequestId = 0;
   late String _editorMode;
   late FaceSketchSettings _faceSketchSettings;
@@ -169,6 +176,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         ValueNotifier<String>(_creatorNameController.text);
     _answerTextNotifier = ValueNotifier<String>(_answerController.text);
     _factTextNotifier = ValueNotifier<String>(_factController.text);
+    _drawingHasContentNotifier = ValueNotifier<bool>(false);
+    _wordDrawingHasContentNotifier = ValueNotifier<bool>(false);
+    _wordOverlayHasContentNotifier = ValueNotifier<bool>(false);
     _editorMode = initialLevel?.editorMode ??
         (initialEditorMode != null &&
                 UserLevelEditorMode.supported.contains(initialEditorMode)
@@ -207,6 +217,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
             ),
           ),
     );
+    _drawingHasContentNotifier.value = _drawingController.hasCommittedStrokes;
+    _wordDrawingHasContentNotifier.value =
+        _wordDrawingController.hasCommittedStrokes;
+    _wordOverlayHasContentNotifier.value = _wordOverlayController.hasLetters;
     _lastSeenDrawingContentVersion = _drawingController.contentVersion;
     _lastSeenWordDrawingContentVersion = _wordDrawingController.contentVersion;
     _lastSeenWordContentVersion = _wordOverlayController.contentVersion;
@@ -248,6 +262,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     _answerTextNotifier.dispose();
     _factTextNotifier.dispose();
     _generationPromptTextNotifier.dispose();
+    _drawingHasContentNotifier.dispose();
+    _wordDrawingHasContentNotifier.dispose();
+    _wordOverlayHasContentNotifier.dispose();
     _drawingController.removeListener(_handleDrawingControllerChanged);
     _wordDrawingController.removeListener(_handleWordDrawingControllerChanged);
     _wordOverlayController.removeListener(_handleWordOverlayControllerChanged);
@@ -271,6 +288,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   void _handleDrawingControllerChanged() {
+    final hasContent = _drawingController.hasCommittedStrokes;
+    if (hasContent != _drawingHasContentNotifier.value) {
+      _drawingHasContentNotifier.value = hasContent;
+    }
+
     final contentVersion = _drawingController.contentVersion;
     if (contentVersion == _lastSeenDrawingContentVersion) {
       return;
@@ -281,6 +303,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   void _handleWordOverlayControllerChanged() {
+    final hasContent = _wordOverlayController.hasLetters;
+    if (hasContent != _wordOverlayHasContentNotifier.value) {
+      _wordOverlayHasContentNotifier.value = hasContent;
+    }
+
     final contentVersion = _wordOverlayController.contentVersion;
     if (contentVersion == _lastSeenWordContentVersion) {
       return;
@@ -291,6 +318,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   void _handleWordDrawingControllerChanged() {
+    final hasContent = _wordDrawingController.hasCommittedStrokes;
+    if (hasContent != _wordDrawingHasContentNotifier.value) {
+      _wordDrawingHasContentNotifier.value = hasContent;
+    }
+
     final contentVersion = _wordDrawingController.contentVersion;
     if (contentVersion == _lastSeenWordDrawingContentVersion) {
       return;
@@ -317,6 +349,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     _answerTextNotifier.value = text;
     if (_editorMode == UserLevelEditorMode.highlight) {
       _wordOverlayController.syncToSolution(text);
+      if (_wordDrawingController.selectedBrush != DrawingBrushType.text) {
+        _wordDrawingController.selectBrush(DrawingBrushType.text);
+      }
     }
     _handleGenerationInputsChanged();
   }
@@ -519,11 +554,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     }
 
     try {
-      final sketchBytes = await generateFaceSketchPng(
+      final sketchPngBytes = await generateFaceSketchPng(
         sourceBytes: sourceBytes,
         settings: _faceSketchSettings,
         transform: _faceSourceTransform,
       );
+      final sketchBytes = await compressFaceSketchWebp(sketchPngBytes);
       if (!mounted || requestId != _faceSketchRequestId) {
         return;
       }
@@ -572,12 +608,14 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
   Future<void> _loadExistingFaceEditorData() async {
     final initialLevel = widget.initialLevel;
-    if (initialLevel == null || _editorMode != UserLevelEditorMode.photoSketch) {
+    if (initialLevel == null ||
+        _editorMode != UserLevelEditorMode.photoSketch) {
       return;
     }
 
     final editorData = initialLevel.editorData;
-    final sourceImagePath = (editorData['sourceImagePath'] ?? '').toString().trim();
+    final sourceImagePath =
+        (editorData['sourceImagePath'] ?? '').toString().trim();
 
     if (mounted) {
       setState(() => _isLoadingFaceEditorData = true);
@@ -587,9 +625,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       final sourceBytes = sourceImagePath.isEmpty
           ? null
           : await _loadStorageBytes(sourceImagePath);
-      final sourceSize = sourceBytes == null
-          ? null
-          : await _decodeImageSize(sourceBytes);
+      final sourceSize =
+          sourceBytes == null ? null : await _decodeImageSize(sourceBytes);
       final sketchBytes = initialLevel.solutionPath.isEmpty
           ? null
           : await _loadStorageBytes(initialLevel.solutionPath);
@@ -617,6 +654,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   void _invalidatePuzzlePreview() {
+    _puzzleInputRevision += 1;
+
     if (_generatedPuzzleImageBytes == null && !_hasStoredPuzzleImage) {
       return;
     }
@@ -746,7 +785,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   Future<void> _generatePuzzle() async {
-    if (_isLocked || _isGeneratingPuzzle) {
+    if (_isLocked || _isGeneratingPuzzle || _isSaving) {
+      if (_isSaving) {
+        _showSnack('Wait for the level to finish saving first.');
+      }
       return;
     }
 
@@ -767,6 +809,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
     FocusScope.of(context).unfocus();
     final firebaseService = context.read<FirebaseService>();
+    final generationToken = ++_activeGenerationToken;
+    final generationRevision = _puzzleInputRevision;
 
     setState(() {
       _isGeneratingPuzzle = true;
@@ -776,24 +820,32 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
     try {
       final solutionBytes = _editorMode == UserLevelEditorMode.highlight
-          ? await exportWordOverlayAsPng(
-              letters: _wordOverlayController.letters,
-              strokes: _wordDrawingController.strokes,
-              backgroundColor: _generationExportBackground,
+          ? await compressGenerationImageWebp(
+              await exportWordOverlayAsPng(
+                letters: _wordOverlayController.letters,
+                strokes: _wordDrawingController.strokes,
+                backgroundColor: _generationExportBackground,
+              ),
+              failureLabel: 'word solution image',
             )
           : _editorMode == UserLevelEditorMode.photoSketch
               ? _faceSketchImageBytes!
-              : await exportDrawingAsPng(
-                  strokes: _drawingController.strokes,
-                  backgroundColor: _generationExportBackground,
+              : await compressGenerationImageWebp(
+                  await exportDrawingAsPng(
+                    strokes: _drawingController.strokes,
+                    backgroundColor: _generationExportBackground,
+                  ),
+                  failureLabel: 'object solution image',
                 );
 
       final puzzleBytes = await firebaseService.generateDrawObjectPuzzle(
-        solutionPngBytes: solutionBytes,
+        solutionImageBytes: solutionBytes,
+        solutionFileName: '1.webp',
+        solutionMimeType: 'image/webp',
         prompt: prompt,
         difficulty: _generationDifficulty,
         onStatusChanged: (status) {
-          if (!mounted) {
+          if (!mounted || generationToken != _activeGenerationToken) {
             return;
           }
           setState(() => _puzzleGenerationStatus = status);
@@ -801,6 +853,17 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       );
 
       if (!mounted) {
+        return;
+      }
+
+      if (generationRevision != _puzzleInputRevision) {
+        setState(() {
+          _generatedPuzzleImageBytes = null;
+          _hasPuzzleInvalidatedByEdit = true;
+          _stagePreviewMode = _StagePreviewMode.solution;
+          _puzzleGenerationStatus = '';
+        });
+        _showSnack('The solution changed while the puzzle was generating. Please generate it again.');
         return;
       }
 
@@ -825,7 +888,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
             .replaceFirst('Bad state: ', ''),
       );
     } finally {
-      if (mounted) {
+      if (mounted && generationToken == _activeGenerationToken) {
         setState(() => _isGeneratingPuzzle = false);
       }
     }
@@ -835,7 +898,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     final solution = _answerController.text.trim();
     final prompt = _generationPromptController.text.trim();
 
-    if (_editorMode == UserLevelEditorMode.photoSketch && _isGeneratingFaceSketch) {
+    if (_editorMode == UserLevelEditorMode.photoSketch &&
+        _isGeneratingFaceSketch) {
       return 'Wait for the face sketch to finish updating.';
     }
 
@@ -879,7 +943,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     final answer = _answerController.text.trim();
     final factHint = _factController.text.trim();
 
-    if (_editorMode == UserLevelEditorMode.photoSketch && _isGeneratingFaceSketch) {
+    if (_editorMode == UserLevelEditorMode.photoSketch &&
+        _isGeneratingFaceSketch) {
       return 'Wait for the face sketch to finish updating before saving.';
     }
 
@@ -950,6 +1015,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   Future<void> _save({required bool submitAfterSave}) async {
+    if (_isGeneratingPuzzle) {
+      _showSnack('Wait for puzzle generation to finish before saving.');
+      return;
+    }
+
     final validationMessage = _validateInputs(forSubmission: submitAfterSave);
     if (validationMessage != null) {
       _showSnack(validationMessage);
@@ -996,7 +1066,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           answer: _answerController.text,
           factText: _factController.text,
           sourceImageBytes: _faceSourceImageBytes!,
-          solutionPngBytes: _faceSketchImageBytes!,
+          solutionImageBytes: _faceSketchImageBytes!,
           puzzleImageBytes: _generatedPuzzleImageBytes,
           allowReuseExistingPuzzle: !_hasPuzzleInvalidatedByEdit,
           editorData: editorData,
@@ -1107,9 +1177,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                   _answerTextNotifier,
                   _factTextNotifier,
                   _generationPromptTextNotifier,
-                  _drawingController,
-                  _wordDrawingController,
-                  _wordOverlayController,
+                  _drawingHasContentNotifier,
+                  _wordDrawingHasContentNotifier,
+                  _wordOverlayHasContentNotifier,
                 ]),
                 builder: (context, _) => Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1130,6 +1200,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: _isSaving ||
+                                    _isGeneratingPuzzle ||
                                     _isLocked ||
                                     (_editorMode ==
                                             UserLevelEditorMode.photoSketch &&
@@ -1142,15 +1213,15 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: FilledButton(
-                            onPressed:
-                                _isSaving ||
-                                        _isLocked ||
-                                        !_canSubmitForReview ||
-                                        (_editorMode ==
-                                                UserLevelEditorMode.photoSketch &&
-                                            _isGeneratingFaceSketch)
-                                    ? null
-                                    : () => _save(submitAfterSave: true),
+                            onPressed: _isSaving ||
+                                    _isGeneratingPuzzle ||
+                                    _isLocked ||
+                                    !_canSubmitForReview ||
+                                    (_editorMode ==
+                                            UserLevelEditorMode.photoSketch &&
+                                        _isGeneratingFaceSketch)
+                                ? null
+                                : () => _save(submitAfterSave: true),
                             child: Text(
                               _isSaving ? 'Submitting...' : 'Submit for Review',
                             ),
@@ -1181,6 +1252,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                       ? _WordEditorSection(
                           controller: _wordOverlayController,
                           drawingController: _wordDrawingController,
+                          hasLettersListenable: _wordOverlayHasContentNotifier,
+                          hasDrawingContentListenable:
+                              _wordDrawingHasContentNotifier,
                           solutionController: _answerController,
                           solutionTextListenable: _answerTextNotifier,
                           creatorNameController: _creatorNameController,
@@ -1262,6 +1336,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                             )
                           : _CanvasEditorSection(
                               controller: _drawingController,
+                              hasDrawingContentListenable:
+                                  _drawingHasContentNotifier,
                               solutionController: _answerController,
                               solutionTextListenable: _answerTextNotifier,
                               factController: _factController,
@@ -1386,28 +1462,20 @@ class _FaceEditorSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge(<Listenable>[
-        solutionTextListenable,
-        promptTextListenable,
-      ]),
-      builder: (context, _) {
-        final hasFaceSketch = sketchImageBytes != null;
-        final isSolutionStepComplete =
-            solutionTextListenable.value.trim().length >=
-                _CreateLevelScreenState._minSolutionLength &&
-            hasFaceSketch;
-        final canGeneratePuzzleNow = !isLocked &&
-            !isGeneratingSketch &&
-            solutionTextListenable.value.trim().length >=
-                _CreateLevelScreenState._minSolutionLength &&
-            promptTextListenable.value.trim().isNotEmpty &&
-            hasFaceSketch;
+    final hasFaceSketch = sketchImageBytes != null;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        AnimatedBuilder(
+          animation: solutionTextListenable,
+          builder: (context, _) {
+            final isSolutionStepComplete =
+                solutionTextListenable.value.trim().length >=
+                        _CreateLevelScreenState._minSolutionLength &&
+                    hasFaceSketch;
+
+            return Row(
               children: <Widget>[
                 SizedBox(
                   width: 178,
@@ -1416,8 +1484,7 @@ class _FaceEditorSection extends StatelessWidget {
                       _CompactActionButton(
                         icon: Icons.restart_alt_rounded,
                         label: 'Reset',
-                        enabled:
-                            !isLocked &&
+                        enabled: !isLocked &&
                             !isGeneratingSketch &&
                             sourceImageBytes != null,
                         onPressed: onResetImageTransform,
@@ -1431,8 +1498,7 @@ class _FaceEditorSection extends StatelessWidget {
                         label: isTransformInteractionLocked
                             ? 'Frame Locked'
                             : 'Lock Frame',
-                        enabled:
-                            !isLocked &&
+                        enabled: !isLocked &&
                             !isGeneratingSketch &&
                             sourceImageBytes != null,
                         onPressed: onToggleTransformInteractionLock,
@@ -1442,8 +1508,7 @@ class _FaceEditorSection extends StatelessWidget {
                       _CompactActionButton(
                         icon: Icons.delete_outline_rounded,
                         label: 'Discard',
-                        enabled:
-                            !isLocked &&
+                        enabled: !isLocked &&
                             !isGeneratingSketch &&
                             sourceImageBytes != null,
                         onPressed: onDiscardImage,
@@ -1460,313 +1525,329 @@ class _FaceEditorSection extends StatelessWidget {
                   onChanged: isLocked ? null : onSelectStagePreview,
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-            AspectRatio(
-              aspectRatio: 1,
-              child: stagePreviewMode == _StagePreviewMode.solution
-                  ? _FaceSolutionStage(
-                      sourceImageBytes: sourceImageBytes,
-                      sourceImageSize: sourceImageSize,
-                      sketchImageBytes: sketchImageBytes,
-                      sourceTransform: sourceTransform,
-                      isLoading: isLoadingSourceImage,
-                      isGeneratingSketch: isGeneratingSketch,
-                      isTransformInteractionLocked:
-                          isTransformInteractionLocked,
-                      borderColor: colorScheme.outlineVariant,
-                      backgroundColor: canvasBackgroundColor,
-                      foregroundColor: colorScheme.onSurfaceVariant,
-                      isLocked: isLocked,
-                      onPickImage: onPickImage,
-                      onTransformChanged: onSourceTransformChanged,
-                      onTransformEnded: onSourceTransformEnded,
-                      onInteractionChanged: onStageInteractionChanged,
-                    )
-                  : _PuzzleStage(
-                      puzzleBytes: puzzleBytes,
-                      existingPreviewUrlFuture: existingPuzzlePreviewUrlFuture,
-                      hasStoredPuzzleImage: hasStoredPuzzleImage,
-                      isGeneratingPuzzle: isGeneratingPuzzle,
-                      statusText: puzzleGenerationStatus,
-                      borderColor: colorScheme.outlineVariant,
-                      backgroundColor: canvasBackgroundColor,
-                      foregroundColor: colorScheme.onSurfaceVariant,
-                      solutionBackdrop: sketchImageBytes == null
-                          ? null
-                          : IgnorePointer(
-                              child: Opacity(
-                                opacity: 0.14,
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: canvasBackgroundColor,
-                                    borderRadius: BorderRadius.circular(24),
-                                    image: DecorationImage(
-                                      image: MemoryImage(sketchImageBytes!),
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        AspectRatio(
+          aspectRatio: 1,
+          child: stagePreviewMode == _StagePreviewMode.solution
+              ? _FaceSolutionStage(
+                  sourceImageBytes: sourceImageBytes,
+                  sourceImageSize: sourceImageSize,
+                  sketchImageBytes: sketchImageBytes,
+                  sourceTransform: sourceTransform,
+                  isLoading: isLoadingSourceImage,
+                  isGeneratingSketch: isGeneratingSketch,
+                  isTransformInteractionLocked: isTransformInteractionLocked,
+                  borderColor: colorScheme.outlineVariant,
+                  backgroundColor: canvasBackgroundColor,
+                  foregroundColor: colorScheme.onSurfaceVariant,
+                  isLocked: isLocked,
+                  onPickImage: onPickImage,
+                  onTransformChanged: onSourceTransformChanged,
+                  onTransformEnded: onSourceTransformEnded,
+                  onInteractionChanged: onStageInteractionChanged,
+                )
+              : _PuzzleStage(
+                  puzzleBytes: puzzleBytes,
+                  existingPreviewUrlFuture: existingPuzzlePreviewUrlFuture,
+                  hasStoredPuzzleImage: hasStoredPuzzleImage,
+                  isGeneratingPuzzle: isGeneratingPuzzle,
+                  statusText: puzzleGenerationStatus,
+                  borderColor: colorScheme.outlineVariant,
+                  backgroundColor: canvasBackgroundColor,
+                  foregroundColor: colorScheme.onSurfaceVariant,
+                  solutionBackdrop: sketchImageBytes == null
+                      ? null
+                      : IgnorePointer(
+                          child: Opacity(
+                            opacity: 0.14,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: canvasBackgroundColor,
+                                borderRadius: BorderRadius.circular(24),
+                                image: DecorationImage(
+                                  image: MemoryImage(sketchImageBytes!),
+                                  fit: BoxFit.cover,
                                 ),
                               ),
                             ),
-                    ),
+                          ),
+                        ),
+                ),
+        ),
+        const SizedBox(height: 12),
+        if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
+          TextField(
+            controller: solutionController,
+            enabled: !isLocked,
+            textCapitalization: TextCapitalization.characters,
+            textInputAction: TextInputAction.next,
+            autocorrect: false,
+            enableSuggestions: false,
+            inputFormatters: <TextInputFormatter>[
+              LengthLimitingTextInputFormatter(
+                _CreateLevelScreenState._maxSolutionLength,
+              ),
+            ],
+            style: textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: colorScheme.onSurface,
             ),
-            const SizedBox(height: 12),
-            if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
-              TextField(
-                controller: solutionController,
-                enabled: !isLocked,
-                textCapitalization: TextCapitalization.characters,
-                textInputAction: TextInputAction.next,
-                autocorrect: false,
-                enableSuggestions: false,
-                inputFormatters: <TextInputFormatter>[
-                  LengthLimitingTextInputFormatter(
-                    _CreateLevelScreenState._maxSolutionLength,
-                  ),
-                ],
-                style: textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: colorScheme.onSurface,
-                ),
-                decoration: _solutionFieldDecoration(colorScheme),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: _DeferredCompactSliderTile(
-                      label: 'Contrast',
-                      value: settings.contrast,
-                      min: 1.2,
-                      max: 4.0,
-                      divisions: 28,
-                      enabled: sourceImageBytes != null && !isLocked,
-                      valueTextBuilder: (value) => value.toStringAsFixed(1),
-                      onChanged: (value) => onSettingsChanged(
-                        settings.copyWith(contrast: value),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _DeferredCompactSliderTile(
-                      label: 'Blur',
-                      value: settings.blurAmount,
-                      min: 1,
-                      max: 12,
-                      divisions: 22,
-                      enabled: sourceImageBytes != null && !isLocked,
-                      valueTextBuilder: (value) => value.toStringAsFixed(1),
-                      onChanged: (value) => onSettingsChanged(
-                        settings.copyWith(blurAmount: value),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: _DeferredCompactSliderTile(
-                      label: 'Contour',
-                      value: settings.edgeStrength,
-                      min: 0.6,
-                      max: 2.2,
-                      divisions: 32,
-                      enabled: sourceImageBytes != null && !isLocked,
-                      valueTextBuilder: (value) => value.toStringAsFixed(2),
-                      onChanged: (value) => onSettingsChanged(
-                        settings.copyWith(edgeStrength: value),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _DeferredCompactSliderTile(
-                      label: 'Threshold',
-                      value: settings.inkLevel.toDouble(),
-                      min: 92,
-                      max: 212,
-                      divisions: 24,
-                      enabled: sourceImageBytes != null && !isLocked,
-                      valueTextBuilder: (value) => value.round().toString(),
-                      onChanged: (value) => onSettingsChanged(
-                        settings.copyWith(inkLevel: value.round()),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: _DeferredCompactSliderTile(
-                      label: 'Detail',
-                      value: settings.detailBoost,
-                      min: 0.5,
-                      max: 3.0,
-                      divisions: 25,
-                      enabled: sourceImageBytes != null && !isLocked,
-                      valueTextBuilder: (value) => value.toStringAsFixed(1),
-                      onChanged: (value) => onSettingsChanged(
-                        settings.copyWith(detailBoost: value),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _DeferredCompactSliderTile(
-                      label: 'Cleanup',
-                      value: settings.noiseReduction,
-                      min: 0,
-                      max: 4,
-                      divisions: 16,
-                      enabled: sourceImageBytes != null && !isLocked,
-                      valueTextBuilder: (value) => value.toStringAsFixed(1),
-                      onChanged: (value) => onSettingsChanged(
-                        settings.copyWith(noiseReduction: value),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ] else ...<Widget>[
-              TextField(
-                controller: promptController,
-                focusNode: generationPromptFocusNode,
-                enabled: !isLocked && !isGeneratingPuzzle,
-                textInputAction: TextInputAction.done,
-                maxLines: 2,
-                decoration: _sharedFieldDecoration(
-                  colorScheme,
-                  label: 'Puzzle Scene',
-                  icon: Icons.auto_awesome_outlined,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: <Widget>[
-                  SizedBox(
-                    width: 54,
-                    child: Text(
-                      'Hard',
-                      style: textTheme.labelMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: 3,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 8,
-                        ),
-                        overlayShape: const RoundSliderOverlayShape(
-                          overlayRadius: 14,
-                        ),
-                      ),
-                      child: Slider(
-                        value: generationDifficulty,
-                        min: 0.1,
-                        max: 3.0,
-                        divisions: 29,
-                        onChanged: isLocked || isGeneratingPuzzle
-                            ? null
-                            : onGenerationDifficultyChanged,
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 54,
-                    child: Text(
-                      'Easy',
-                      textAlign: TextAlign.end,
-                      style: textTheme.labelMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              Align(
-                alignment: Alignment.center,
-                child: Text(
-                  'Difficulty ${generationDifficulty.toStringAsFixed(1)}',
-                  style: textTheme.labelSmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
+            decoration: _solutionFieldDecoration(colorScheme),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _DeferredCompactSliderTile(
+                  label: 'Contrast',
+                  value: settings.contrast,
+                  min: 1.2,
+                  max: 4.0,
+                  divisions: 28,
+                  enabled: sourceImageBytes != null && !isLocked,
+                  valueTextBuilder: (value) => value.toStringAsFixed(1),
+                  onChanged: (value) => onSettingsChanged(
+                    settings.copyWith(contrast: value),
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _DeferredCompactSliderTile(
+                  label: 'Blur',
+                  value: settings.blurAmount,
+                  min: 1,
+                  max: 12,
+                  divisions: 22,
+                  enabled: sourceImageBytes != null && !isLocked,
+                  valueTextBuilder: (value) => value.toStringAsFixed(1),
+                  onChanged: (value) => onSettingsChanged(
+                    settings.copyWith(blurAmount: value),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _DeferredCompactSliderTile(
+                  label: 'Contour',
+                  value: settings.edgeStrength,
+                  min: 0.6,
+                  max: 2.2,
+                  divisions: 32,
+                  enabled: sourceImageBytes != null && !isLocked,
+                  valueTextBuilder: (value) => value.toStringAsFixed(2),
+                  onChanged: (value) => onSettingsChanged(
+                    settings.copyWith(edgeStrength: value),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _DeferredCompactSliderTile(
+                  label: 'Threshold',
+                  value: settings.inkLevel.toDouble(),
+                  min: 92,
+                  max: 212,
+                  divisions: 24,
+                  enabled: sourceImageBytes != null && !isLocked,
+                  valueTextBuilder: (value) => value.round().toString(),
+                  onChanged: (value) => onSettingsChanged(
+                    settings.copyWith(inkLevel: value.round()),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _DeferredCompactSliderTile(
+                  label: 'Detail',
+                  value: settings.detailBoost,
+                  min: 0.5,
+                  max: 3.0,
+                  divisions: 25,
+                  enabled: sourceImageBytes != null && !isLocked,
+                  valueTextBuilder: (value) => value.toStringAsFixed(1),
+                  onChanged: (value) => onSettingsChanged(
+                    settings.copyWith(detailBoost: value),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _DeferredCompactSliderTile(
+                  label: 'Cleanup',
+                  value: settings.noiseReduction,
+                  min: 0,
+                  max: 4,
+                  divisions: 16,
+                  enabled: sourceImageBytes != null && !isLocked,
+                  valueTextBuilder: (value) => value.toStringAsFixed(1),
+                  onChanged: (value) => onSettingsChanged(
+                    settings.copyWith(noiseReduction: value),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ] else ...<Widget>[
+          TextField(
+            controller: promptController,
+            focusNode: generationPromptFocusNode,
+            enabled: !isLocked && !isGeneratingPuzzle,
+            textInputAction: TextInputAction.done,
+            maxLines: 2,
+            decoration: _sharedFieldDecoration(
+              colorScheme,
+              label: 'Puzzle Scene',
+              icon: Icons.auto_awesome_outlined,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: <Widget>[
               SizedBox(
+                width: 54,
+                child: Text(
+                  'Hard',
+                  style: textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 3,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 8,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 14,
+                    ),
+                  ),
+                  child: Slider(
+                    value: generationDifficulty,
+                    min: 0.1,
+                    max: 3.0,
+                    divisions: 29,
+                    onChanged: isLocked || isGeneratingPuzzle
+                        ? null
+                        : onGenerationDifficultyChanged,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 54,
+                child: Text(
+                  'Easy',
+                  textAlign: TextAlign.end,
+                  style: textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Align(
+            alignment: Alignment.center,
+            child: Text(
+              'Difficulty ${generationDifficulty.toStringAsFixed(1)}',
+              style: textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          AnimatedBuilder(
+            animation: Listenable.merge(<Listenable>[
+              solutionTextListenable,
+              promptTextListenable,
+            ]),
+            builder: (context, _) {
+              final canGeneratePuzzleNow = !isLocked &&
+                  !isGeneratingSketch &&
+                  solutionTextListenable.value.trim().length >=
+                      _CreateLevelScreenState._minSolutionLength &&
+                  promptTextListenable.value.trim().isNotEmpty &&
+                  hasFaceSketch;
+              final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
+
+              return SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: isGeneratingPuzzle || !canGeneratePuzzleNow
                       ? null
                       : onGeneratePuzzle,
                   icon: Icon(
-                    (puzzleBytes != null || hasStoredPuzzleImage)
+                    hasPuzzlePreview
                         ? Icons.refresh_rounded
                         : Icons.auto_awesome_outlined,
                   ),
                   label: Text(
                     isGeneratingPuzzle
                         ? 'Generating...'
-                        : (puzzleBytes != null || hasStoredPuzzleImage)
+                        : hasPuzzlePreview
                             ? 'Regenerate Puzzle'
                             : 'Generate Puzzle',
                   ),
                 ),
+              );
+            },
+          ),
+          if (puzzleGenerationStatus.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 10),
+            Text(
+              puzzleGenerationStatus,
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
               ),
-              if (puzzleGenerationStatus.isNotEmpty) ...<Widget>[
-                const SizedBox(height: 10),
-                Text(
-                  puzzleGenerationStatus,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              TextField(
-                controller: factController,
-                enabled: !isLocked,
-                textInputAction: TextInputAction.next,
-                maxLines: 2,
-                decoration: _sharedFieldDecoration(
-                  colorScheme,
-                  label: 'Fact Hint',
-                  icon: Icons.lightbulb_outline,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: creatorNameController,
-                enabled: !isLocked,
-                textCapitalization: TextCapitalization.words,
-                decoration: _sharedFieldDecoration(
-                  colorScheme,
-                  label: 'Creator Name',
-                  icon: Icons.badge_outlined,
-                ),
-              ),
-            ],
+            ),
           ],
-        );
-      },
+          const SizedBox(height: 12),
+          TextField(
+            controller: factController,
+            enabled: !isLocked,
+            textInputAction: TextInputAction.next,
+            maxLines: 2,
+            decoration: _sharedFieldDecoration(
+              colorScheme,
+              label: 'Fact Hint',
+              icon: Icons.lightbulb_outline,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: creatorNameController,
+            enabled: !isLocked,
+            textCapitalization: TextCapitalization.words,
+            decoration: _sharedFieldDecoration(
+              colorScheme,
+              label: 'Creator Name',
+              icon: Icons.badge_outlined,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
 
 class _CanvasEditorSection extends StatelessWidget {
   final DrawingController controller;
+  final ValueNotifier<bool> hasDrawingContentListenable;
   final TextEditingController solutionController;
   final ValueNotifier<String> solutionTextListenable;
   final TextEditingController factController;
@@ -1793,6 +1874,7 @@ class _CanvasEditorSection extends StatelessWidget {
 
   const _CanvasEditorSection({
     required this.controller,
+    required this.hasDrawingContentListenable,
     required this.solutionController,
     required this.solutionTextListenable,
     required this.factController,
@@ -1820,295 +1902,309 @@ class _CanvasEditorSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge(<Listenable>[
-        controller,
-        solutionTextListenable,
-        promptTextListenable,
-      ]),
-      builder: (context, _) {
-        final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
-        final isSolutionStepComplete =
-            solutionTextListenable.value.trim().length >=
-                _CreateLevelScreenState._minSolutionLength &&
-            controller.hasCommittedStrokes;
-        final canGeneratePuzzleNow = !isLocked &&
-            solutionTextListenable.value.trim().length >= 2 &&
-            promptTextListenable.value.trim().isNotEmpty &&
-            controller.hasCommittedStrokes;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        AnimatedBuilder(
+          animation: Listenable.merge(<Listenable>[
+            hasDrawingContentListenable,
+            solutionTextListenable,
+          ]),
+          builder: (context, _) {
+            final hasDrawingContent = hasDrawingContentListenable.value;
+            final isSolutionStepComplete =
+                solutionTextListenable.value.trim().length >=
+                        _CreateLevelScreenState._minSolutionLength &&
+                    hasDrawingContent;
+            final canEditCanvas = stagePreviewMode == _StagePreviewMode.solution &&
+                !isLocked &&
+                hasDrawingContent;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            AnimatedBuilder(
-              animation: controller,
-              builder: (context, _) {
-                final hasStrokes = controller.hasCommittedStrokes;
-                final canEditCanvas =
-                    stagePreviewMode == _StagePreviewMode.solution &&
-                        !isLocked &&
-                        hasStrokes;
-
-                return Row(
-                  children: <Widget>[
-                    SizedBox(
-                      width: 86,
-                      child: Row(
-                        children: <Widget>[
-                          _CompactActionButton(
-                            icon: Icons.undo_rounded,
-                            label: 'Undo',
-                            enabled: canEditCanvas,
-                            onPressed: controller.undo,
-                            dimension: 40,
-                          ),
-                          const SizedBox(width: 6),
-                          _CompactActionButton(
-                            icon: Icons.delete_outline_rounded,
-                            label: 'Delete',
-                            enabled: canEditCanvas,
-                            onPressed: controller.clear,
-                            dimension: 40,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Spacer(),
-                    const SizedBox(width: 8),
-                    _StageStepToggle(
-                      value: stagePreviewMode,
-                      canAccessPuzzleStep: isLocked || isSolutionStepComplete,
-                      textTheme: textTheme,
-                      onChanged: isLocked ? null : onSelectStagePreview,
-                    ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-            AspectRatio(
-              aspectRatio: 1,
-              child: stagePreviewMode == _StagePreviewMode.solution
-                  ? _DrawingStage(
-                      controller: controller,
-                      backgroundColor: canvasBackgroundColor,
-                      borderColor: colorScheme.outlineVariant,
-                      isLocked: isLocked,
-                      normalizePoint: normalizePoint,
-                      onInteractionChanged: onStageInteractionChanged,
-                    )
-                  : _PuzzleStage(
-                      puzzleBytes: puzzleBytes,
-                      existingPreviewUrlFuture: existingPuzzlePreviewUrlFuture,
-                      hasStoredPuzzleImage: hasStoredPuzzleImage,
-                      isGeneratingPuzzle: isGeneratingPuzzle,
-                      statusText: puzzleGenerationStatus,
-                      borderColor: colorScheme.outlineVariant,
-                      backgroundColor: canvasBackgroundColor,
-                      foregroundColor: colorScheme.onSurfaceVariant,
-                      solutionBackdrop: IgnorePointer(
-                        child: Opacity(
-                          opacity: 0.14,
-                          child: DrawingCanvas(
-                            controller: controller,
-                            backgroundColor: canvasBackgroundColor,
-                            paintBackground: false,
-                          ),
-                        ),
-                      ),
-                    ),
-            ),
-            const SizedBox(height: 8),
-            if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
-              AnimatedBuilder(
-                animation: controller,
-                builder: (context, _) {
-                  final selectedBrush = controller.selectedBrush;
-                  final currentOpacity = controller.currentOpacity;
-                  final currentWidth = controller.currentWidth;
-                  final canAdjustOpacity =
-                      selectedBrush != DrawingBrushType.eraser &&
-                          selectedBrush != DrawingBrushType.none;
-                  final canAdjustSize = selectedBrush != DrawingBrushType.none;
-
-                  return Column(
+            return Row(
+              children: <Widget>[
+                SizedBox(
+                  width: 86,
+                  child: Row(
                     children: <Widget>[
-                      SizedBox(
-                        height: 48,
-                        child: _BrushSelectorStrip(
-                          selectedBrush: selectedBrush,
-                          enabled: !isLocked,
-                          onSelectBrush: controller.selectBrush,
-                        ),
+                      _CompactActionButton(
+                        icon: Icons.undo_rounded,
+                        label: 'Undo',
+                        enabled: canEditCanvas,
+                        onPressed: controller.undo,
+                        dimension: 40,
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: _CompactSliderTile(
-                              label: selectedBrush == DrawingBrushType.none
-                                  ? 'Opacity'
-                                  : canAdjustOpacity
-                                      ? 'Opacity'
-                                      : 'Eraser',
-                              valueText: selectedBrush == DrawingBrushType.none
-                                  ? 'Off'
-                                  : canAdjustOpacity
-                                      ? '${(currentOpacity * 100).round()}%'
-                                      : 'On',
-                              child: Opacity(
-                                opacity: canAdjustOpacity ? 1 : 0.45,
-                                child: SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    trackHeight: 3,
-                                    thumbShape: const RoundSliderThumbShape(
-                                      enabledThumbRadius: 8,
-                                    ),
-                                    overlayShape: const RoundSliderOverlayShape(
-                                      overlayRadius: 14,
-                                    ),
-                                  ),
-                                  child: Slider(
-                                    value: currentOpacity,
-                                    min: 0.2,
-                                    max: 1.0,
-                                    divisions: 8,
-                                    onChanged: canAdjustOpacity
-                                        ? controller.setOpacity
-                                        : null,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _CompactSliderTile(
-                              label: 'Size',
-                              valueText: canAdjustSize
-                                  ? '${(currentWidth * 1000).round()}'
-                                  : 'Off',
-                              child: Opacity(
-                                opacity: canAdjustSize ? 1 : 0.45,
-                                child: SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    trackHeight: 3,
-                                    thumbShape: const RoundSliderThumbShape(
-                                      enabledThumbRadius: 8,
-                                    ),
-                                    overlayShape: const RoundSliderOverlayShape(
-                                      overlayRadius: 14,
-                                    ),
-                                  ),
-                                  child: Slider(
-                                    value: currentWidth,
-                                    min: 0.006,
-                                    max: 0.08,
-                                    divisions: 18,
-                                    onChanged: isLocked || !canAdjustSize
-                                        ? null
-                                        : controller.setBrushWidth,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                      const SizedBox(width: 6),
+                      _CompactActionButton(
+                        icon: Icons.delete_outline_rounded,
+                        label: 'Delete',
+                        enabled: canEditCanvas,
+                        onPressed: controller.clear,
+                        dimension: 40,
                       ),
                     ],
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: solutionController,
-                enabled: !isLocked,
-                textCapitalization: TextCapitalization.characters,
-                textInputAction: TextInputAction.next,
-                autocorrect: false,
-                enableSuggestions: false,
-                inputFormatters: <TextInputFormatter>[
-                  LengthLimitingTextInputFormatter(
-                      _CreateLevelScreenState._maxSolutionLength),
-                ],
-                style: textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: colorScheme.onSurface,
+                  ),
                 ),
-                decoration: _solutionFieldDecoration(colorScheme),
-              ),
-            ] else ...<Widget>[
-              TextField(
-                controller: promptController,
-                focusNode: generationPromptFocusNode,
-                enabled: !isLocked && !isGeneratingPuzzle,
-                textInputAction: TextInputAction.done,
-                maxLines: 2,
-                decoration: _sharedFieldDecoration(
-                  colorScheme,
-                  label: 'Puzzle Scene',
-                  icon: Icons.auto_awesome_outlined,
+                const Spacer(),
+                const SizedBox(width: 8),
+                _StageStepToggle(
+                  value: stagePreviewMode,
+                  canAccessPuzzleStep: isLocked || isSolutionStepComplete,
+                  textTheme: textTheme,
+                  onChanged: isLocked ? null : onSelectStagePreview,
                 ),
-              ),
-              const SizedBox(height: 6),
-              Row(
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        AspectRatio(
+          aspectRatio: 1,
+          child: stagePreviewMode == _StagePreviewMode.solution
+              ? _DrawingStage(
+                  controller: controller,
+                  backgroundColor: canvasBackgroundColor,
+                  borderColor: colorScheme.outlineVariant,
+                  isLocked: isLocked,
+                  normalizePoint: normalizePoint,
+                  onInteractionChanged: onStageInteractionChanged,
+                )
+              : _PuzzleStage(
+                  puzzleBytes: puzzleBytes,
+                  existingPreviewUrlFuture: existingPuzzlePreviewUrlFuture,
+                  hasStoredPuzzleImage: hasStoredPuzzleImage,
+                  isGeneratingPuzzle: isGeneratingPuzzle,
+                  statusText: puzzleGenerationStatus,
+                  borderColor: colorScheme.outlineVariant,
+                  backgroundColor: canvasBackgroundColor,
+                  foregroundColor: colorScheme.onSurfaceVariant,
+                  solutionBackdrop: IgnorePointer(
+                    child: Opacity(
+                      opacity: 0.14,
+                      child: DrawingCanvas(
+                        controller: controller,
+                        backgroundColor: canvasBackgroundColor,
+                        paintBackground: false,
+                      ),
+                    ),
+                  ),
+                ),
+        ),
+        const SizedBox(height: 8),
+        if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
+          AnimatedBuilder(
+            animation: controller,
+            builder: (context, _) {
+              final selectedBrush = controller.selectedBrush;
+              final currentOpacity = controller.currentOpacity;
+              final currentWidth = controller.currentWidth;
+              final canAdjustOpacity =
+                  selectedBrush != DrawingBrushType.eraser &&
+                      selectedBrush != DrawingBrushType.none &&
+                      selectedBrush != DrawingBrushType.text;
+              final canAdjustSize = selectedBrush != DrawingBrushType.none &&
+                  selectedBrush != DrawingBrushType.text;
+
+              return Column(
                 children: <Widget>[
                   SizedBox(
-                    width: 54,
-                    child: Text(
-                      'Hard',
-                      style: textTheme.labelMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    height: 48,
+                    child: _BrushSelectorStrip(
+                      brushes: const <DrawingBrushType>[
+                        DrawingBrushType.none,
+                        DrawingBrushType.pencil,
+                        DrawingBrushType.marker,
+                        DrawingBrushType.charcoal,
+                        DrawingBrushType.eraser,
+                      ],
+                      selectedBrush: selectedBrush,
+                      enabled: !isLocked,
+                      onSelectBrush: controller.selectBrush,
                     ),
                   ),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: 3,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 8,
+                  const SizedBox(height: 8),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: _CompactSliderTile(
+                          label: selectedBrush == DrawingBrushType.none ||
+                                  selectedBrush == DrawingBrushType.text
+                              ? 'Opacity'
+                              : canAdjustOpacity
+                                  ? 'Opacity'
+                                  : 'Eraser',
+                          valueText: selectedBrush == DrawingBrushType.none ||
+                                  selectedBrush == DrawingBrushType.text
+                              ? 'Off'
+                              : canAdjustOpacity
+                                  ? '${(currentOpacity * 100).round()}%'
+                                  : 'On',
+                          child: Opacity(
+                            opacity: canAdjustOpacity ? 1 : 0.45,
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 3,
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 8,
+                                ),
+                                overlayShape: const RoundSliderOverlayShape(
+                                  overlayRadius: 14,
+                                ),
+                              ),
+                              child: Slider(
+                                value: currentOpacity,
+                                min: 0.2,
+                                max: 1.0,
+                                divisions: 8,
+                                onChanged: canAdjustOpacity
+                                    ? controller.setOpacity
+                                    : null,
+                              ),
+                            ),
+                          ),
                         ),
-                        overlayShape: const RoundSliderOverlayShape(
-                          overlayRadius: 14,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _CompactSliderTile(
+                          label: 'Size',
+                          valueText: canAdjustSize
+                              ? '${(currentWidth * 1000).round()}'
+                              : 'Off',
+                          child: Opacity(
+                            opacity: canAdjustSize ? 1 : 0.45,
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 3,
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 8,
+                                ),
+                                overlayShape: const RoundSliderOverlayShape(
+                                  overlayRadius: 14,
+                                ),
+                              ),
+                              child: Slider(
+                                value: currentWidth,
+                                min: 0.006,
+                                max: 0.08,
+                                divisions: 18,
+                                onChanged: isLocked || !canAdjustSize
+                                    ? null
+                                    : controller.setBrushWidth,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      child: Slider(
-                        value: generationDifficulty,
-                        min: 0.1,
-                        max: 3.0,
-                        divisions: 29,
-                        onChanged: isLocked || isGeneratingPuzzle
-                            ? null
-                            : onGenerationDifficultyChanged,
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 54,
-                    child: Text(
-                      'Easy',
-                      textAlign: TextAlign.end,
-                      style: textTheme.labelMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    ],
                   ),
                 ],
-              ),
-              Align(
-                alignment: Alignment.center,
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: solutionController,
+            enabled: !isLocked,
+            textCapitalization: TextCapitalization.characters,
+            textInputAction: TextInputAction.next,
+            autocorrect: false,
+            enableSuggestions: false,
+            inputFormatters: <TextInputFormatter>[
+              LengthLimitingTextInputFormatter(
+                  _CreateLevelScreenState._maxSolutionLength),
+            ],
+            style: textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: colorScheme.onSurface,
+            ),
+            decoration: _solutionFieldDecoration(colorScheme),
+          ),
+        ] else ...<Widget>[
+          TextField(
+            controller: promptController,
+            focusNode: generationPromptFocusNode,
+            enabled: !isLocked && !isGeneratingPuzzle,
+            textInputAction: TextInputAction.done,
+            maxLines: 2,
+            decoration: _sharedFieldDecoration(
+              colorScheme,
+              label: 'Puzzle Scene',
+              icon: Icons.auto_awesome_outlined,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: <Widget>[
+              SizedBox(
+                width: 54,
                 child: Text(
-                  'Difficulty ${generationDifficulty.toStringAsFixed(1)}',
-                  style: textTheme.labelSmall?.copyWith(
+                  'Hard',
+                  style: textTheme.labelMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 3,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 8,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 14,
+                    ),
+                  ),
+                  child: Slider(
+                    value: generationDifficulty,
+                    min: 0.1,
+                    max: 3.0,
+                    divisions: 29,
+                    onChanged: isLocked || isGeneratingPuzzle
+                        ? null
+                        : onGenerationDifficultyChanged,
+                  ),
+                ),
+              ),
               SizedBox(
+                width: 54,
+                child: Text(
+                  'Easy',
+                  textAlign: TextAlign.end,
+                  style: textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Align(
+            alignment: Alignment.center,
+            child: Text(
+              'Difficulty ${generationDifficulty.toStringAsFixed(1)}',
+              style: textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          AnimatedBuilder(
+            animation: Listenable.merge(<Listenable>[
+              hasDrawingContentListenable,
+              solutionTextListenable,
+              promptTextListenable,
+            ]),
+            builder: (context, _) {
+              final hasDrawingContent = hasDrawingContentListenable.value;
+              final canGeneratePuzzleNow = !isLocked &&
+                  solutionTextListenable.value.trim().length >= 2 &&
+                  promptTextListenable.value.trim().isNotEmpty &&
+                  hasDrawingContent;
+              final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
+
+              return SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: isGeneratingPuzzle || !canGeneratePuzzleNow
@@ -2127,44 +2223,44 @@ class _CanvasEditorSection extends StatelessWidget {
                             : 'Generate Puzzle',
                   ),
                 ),
+              );
+            },
+          ),
+          if (puzzleGenerationStatus.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 10),
+            Text(
+              puzzleGenerationStatus,
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
               ),
-              if (puzzleGenerationStatus.isNotEmpty) ...<Widget>[
-                const SizedBox(height: 10),
-                Text(
-                  puzzleGenerationStatus,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              TextField(
-                controller: factController,
-                enabled: !isLocked,
-                textInputAction: TextInputAction.next,
-                maxLines: 2,
-                decoration: _sharedFieldDecoration(
-                  colorScheme,
-                  label: 'Fact Hint',
-                  icon: Icons.lightbulb_outline,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: creatorNameController,
-                enabled: !isLocked,
-                textCapitalization: TextCapitalization.words,
-                decoration: _sharedFieldDecoration(
-                  colorScheme,
-                  label: 'Creator Name',
-                  icon: Icons.badge_outlined,
-                ),
-              ),
-            ],
+            ),
           ],
-        );
-      },
+          const SizedBox(height: 12),
+          TextField(
+            controller: factController,
+            enabled: !isLocked,
+            textInputAction: TextInputAction.next,
+            maxLines: 2,
+            decoration: _sharedFieldDecoration(
+              colorScheme,
+              label: 'Fact Hint',
+              icon: Icons.lightbulb_outline,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: creatorNameController,
+            enabled: !isLocked,
+            textCapitalization: TextCapitalization.words,
+            decoration: _sharedFieldDecoration(
+              colorScheme,
+              label: 'Creator Name',
+              icon: Icons.badge_outlined,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -2360,7 +2456,8 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
     super.didUpdateWidget(oldWidget);
     final sourceChanged = oldWidget.sourceImageBytes != widget.sourceImageBytes;
     if (_gestureStartTransform == null &&
-        (sourceChanged || oldWidget.sourceTransform != widget.sourceTransform)) {
+        (sourceChanged ||
+            oldWidget.sourceTransform != widget.sourceTransform)) {
       _displayTransform = widget.sourceTransform;
     }
   }
@@ -2438,8 +2535,6 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
     return DecoratedBox(
       decoration: BoxDecoration(
         color: widget.backgroundColor,
@@ -2457,17 +2552,14 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                 constraints.maxHeight,
               );
               final hasSourceImage = widget.sourceImageBytes != null;
-              final canManipulateSource =
-                  hasSourceImage &&
+              final canManipulateSource = hasSourceImage &&
                   !widget.isLocked &&
                   !widget.isTransformInteractionLocked;
-              final showUploadTarget =
-                  !hasSourceImage &&
+              final showUploadTarget = !hasSourceImage &&
                   widget.sketchImageBytes == null &&
                   !widget.isLoading &&
                   !widget.isGeneratingSketch;
-              final showProcessedSketchOnly =
-                  widget.sketchImageBytes != null &&
+              final showProcessedSketchOnly = widget.sketchImageBytes != null &&
                   !_isManipulating &&
                   !widget.isLoading &&
                   !widget.isGeneratingSketch;
@@ -2499,15 +2591,11 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                   onTap: showUploadTarget && !widget.isLocked
                       ? widget.onPickImage
                       : null,
-                  onScaleStart: !canManipulateSource
-                      ? null
-                      : _handleScaleStart,
+                  onScaleStart: !canManipulateSource ? null : _handleScaleStart,
                   onScaleUpdate: !canManipulateSource
                       ? null
                       : (details) => _handleScaleUpdate(details, stageSize),
-                  onScaleEnd: !canManipulateSource
-                      ? null
-                      : _handleScaleEnd,
+                  onScaleEnd: !canManipulateSource ? null : _handleScaleEnd,
                   child: Stack(
                     fit: StackFit.expand,
                     children: <Widget>[
@@ -2533,8 +2621,8 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                             opacity: showProcessedSketchOnly
                                 ? 1
                                 : (widget.sourceImageBytes == null
-                                      ? 1
-                                      : (_isManipulating ? 0.34 : 0.66)),
+                                    ? 1
+                                    : (_isManipulating ? 0.34 : 0.66)),
                             child: Image.memory(
                               widget.sketchImageBytes!,
                               fit: BoxFit.cover,
@@ -2551,7 +2639,8 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                       if (widget.isLoading || widget.isGeneratingSketch)
                         DecoratedBox(
                           decoration: BoxDecoration(
-                            color: widget.backgroundColor.withValues(alpha: 0.72),
+                            color:
+                                widget.backgroundColor.withValues(alpha: 0.72),
                           ),
                           child: Center(
                             child: Column(
@@ -2563,17 +2652,9 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                                 ),
                                 if (widget.isLoading) ...<Widget>[
                                   const SizedBox(height: 14),
-                                  Padding(
-                                    padding:
-                                        const EdgeInsets.symmetric(horizontal: 24),
-                                    child: Text(
-                                      'Loading face image...',
-                                      textAlign: TextAlign.center,
-                                      style: textTheme.bodyMedium?.copyWith(
-                                        color: widget.foregroundColor,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
+                                  _StageStatusLabel(
+                                    text: 'Loading face image...',
+                                    foregroundColor: widget.foregroundColor,
                                   ),
                                 ],
                               ],
@@ -2725,7 +2806,6 @@ class _PuzzleStage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     final hasLocalImage = puzzleBytes != null;
     final showStoredImage = !hasLocalImage && hasStoredPuzzleImage;
     final progressText = statusText.isNotEmpty ? statusText : 'Generating...';
@@ -2808,16 +2888,9 @@ class _PuzzleStage extends StatelessWidget {
                           child: CircularProgressIndicator.adaptive(),
                         ),
                         const SizedBox(height: 14),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Text(
-                            progressText,
-                            textAlign: TextAlign.center,
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: foregroundColor,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
+                        _StageStatusLabel(
+                          text: progressText,
+                          foregroundColor: foregroundColor,
                         ),
                       ],
                     ),
@@ -2875,6 +2948,45 @@ class _StagePlaceholder extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StageStatusLabel extends StatelessWidget {
+  final String text;
+  final Color foregroundColor;
+
+  const _StageStatusLabel({
+    required this.text,
+    required this.foregroundColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: foregroundColor.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: foregroundColor.withValues(alpha: 0.18),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Text(
+            text,
+            textAlign: TextAlign.center,
+            style: textTheme.bodyMedium?.copyWith(
+              color: foregroundColor,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
       ),
     );
@@ -3013,44 +3125,44 @@ class _EditorStepProgress extends StatelessWidget {
         child: Row(
           children: <Widget>[
             Expanded(
-                child: _StepProgressTapArea(
-                  label: '1. Solution',
-                  progress: solutionProgress,
-                  isActive: solutionActive,
-                  enabled: true,
+              child: _StepProgressTapArea(
+                label: '1. Solution',
+                progress: solutionProgress,
+                isActive: solutionActive,
+                enabled: true,
                 colorScheme: colorScheme,
                 textTheme: textTheme,
-                  onTap: () => onStepSelected(_StagePreviewMode.solution),
-                  borderRadius: const BorderRadius.horizontal(
-                    left: Radius.circular(15),
-                  ),
-                  labelPadding: const EdgeInsets.symmetric(horizontal: 14),
-                  progressPadding: const EdgeInsets.only(left: 14),
+                onTap: () => onStepSelected(_StagePreviewMode.solution),
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(15),
                 ),
+                labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+                progressPadding: const EdgeInsets.only(left: 14),
               ),
+            ),
             Container(
               width: 1,
               height: double.infinity,
               color: colorScheme.outlineVariant.withValues(alpha: 0.56),
             ),
             Expanded(
-                child: _StepProgressTapArea(
-                  label: '2. Puzzle',
-                  progress: puzzleProgress,
-                  isActive: activeStep == _StagePreviewMode.puzzle,
-                  enabled: canAccessPuzzleStep,
+              child: _StepProgressTapArea(
+                label: '2. Puzzle',
+                progress: puzzleProgress,
+                isActive: activeStep == _StagePreviewMode.puzzle,
+                enabled: canAccessPuzzleStep,
                 colorScheme: colorScheme,
                 textTheme: textTheme,
-                  onTap: canAccessPuzzleStep
-                      ? () => onStepSelected(_StagePreviewMode.puzzle)
-                      : null,
-                  borderRadius: const BorderRadius.horizontal(
-                    right: Radius.circular(15),
-                  ),
-                  labelPadding: const EdgeInsets.symmetric(horizontal: 14),
-                  progressPadding: const EdgeInsets.only(right: 14),
+                onTap: canAccessPuzzleStep
+                    ? () => onStepSelected(_StagePreviewMode.puzzle)
+                    : null,
+                borderRadius: const BorderRadius.horizontal(
+                  right: Radius.circular(15),
                 ),
+                labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+                progressPadding: const EdgeInsets.only(right: 14),
               ),
+            ),
           ],
         ),
       ),
@@ -3189,6 +3301,8 @@ class _StepProgressSegment extends StatelessWidget {
 class _WordEditorSection extends StatelessWidget {
   final WordOverlayController controller;
   final DrawingController drawingController;
+  final ValueNotifier<bool> hasLettersListenable;
+  final ValueNotifier<bool> hasDrawingContentListenable;
   final TextEditingController solutionController;
   final ValueNotifier<String> solutionTextListenable;
   final TextEditingController creatorNameController;
@@ -3216,6 +3330,8 @@ class _WordEditorSection extends StatelessWidget {
   const _WordEditorSection({
     required this.controller,
     required this.drawingController,
+    required this.hasLettersListenable,
+    required this.hasDrawingContentListenable,
     required this.solutionController,
     required this.solutionTextListenable,
     required this.creatorNameController,
@@ -3254,30 +3370,27 @@ class _WordEditorSection extends StatelessWidget {
       ),
     );
 
-    return AnimatedBuilder(
-      animation: Listenable.merge(<Listenable>[
-        controller,
-        drawingController,
-        solutionTextListenable,
-        promptTextListenable,
-      ]),
-      builder: (context, _) {
-        final isSolutionStepComplete =
-            solutionTextListenable.value.trim().length >=
-                _CreateLevelScreenState._minSolutionLength &&
-            controller.hasLetters;
-        final canGeneratePuzzleNow = !isLocked &&
-            solutionTextListenable.value.trim().length >= 2 &&
-            promptTextListenable.value.trim().isNotEmpty &&
-            controller.hasLetters;
-        final canEditDrawing = stagePreviewMode == _StagePreviewMode.solution &&
-            !isLocked &&
-            drawingController.hasCommittedStrokes;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        AnimatedBuilder(
+          animation: Listenable.merge(<Listenable>[
+            hasLettersListenable,
+            hasDrawingContentListenable,
+            solutionTextListenable,
+          ]),
+          builder: (context, _) {
+            final hasLetters = hasLettersListenable.value;
+            final hasDrawingContent = hasDrawingContentListenable.value;
+            final isSolutionStepComplete =
+                solutionTextListenable.value.trim().length >=
+                        _CreateLevelScreenState._minSolutionLength &&
+                    hasLetters;
+            final canEditDrawing = stagePreviewMode == _StagePreviewMode.solution &&
+                !isLocked &&
+                hasDrawingContent;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
+            return Row(
               children: <Widget>[
                 SizedBox(
                   width: 86,
@@ -3309,311 +3422,342 @@ class _WordEditorSection extends StatelessWidget {
                   onChanged: isLocked ? null : onSelectStagePreview,
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-            AspectRatio(
-              aspectRatio: 1,
-              child: Stack(
-                fit: StackFit.expand,
-                children: <Widget>[
-                  stagePreviewMode == _StagePreviewMode.solution
-                      ? WordOverlayStage(
-                          controller: controller,
-                          drawingController: drawingController,
-                          isLocked: isLocked,
-                          normalizePoint: normalizePoint,
-                          onInteractionChanged: onStageInteractionChanged,
-                          borderColor: colorScheme.outlineVariant,
-                          backgroundColor: canvasBackgroundColor,
-                          foregroundColor: colorScheme.onSurfaceVariant,
-                        )
-                      : _PuzzleStage(
-                          puzzleBytes: puzzleBytes,
-                          existingPreviewUrlFuture:
-                              existingPuzzlePreviewUrlFuture,
-                          hasStoredPuzzleImage: hasStoredPuzzleImage,
-                          isGeneratingPuzzle: isGeneratingPuzzle,
-                          statusText: puzzleGenerationStatus,
-                          borderColor: colorScheme.outlineVariant,
-                          backgroundColor: canvasBackgroundColor,
-                          foregroundColor: colorScheme.onSurfaceVariant,
-                          solutionBackdrop: IgnorePointer(
-                            child: Opacity(
-                              opacity: 0.14,
-                              child: WordOverlayStage(
-                                controller: controller,
-                                drawingController: drawingController,
-                                isLocked: true,
-                                normalizePoint: null,
-                                onInteractionChanged: (_) {},
-                                borderColor: Colors.transparent,
-                                backgroundColor: Colors.transparent,
-                                foregroundColor: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        AspectRatio(
+          aspectRatio: 1,
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              stagePreviewMode == _StagePreviewMode.solution
+                  ? WordOverlayStage(
+                      controller: controller,
+                      drawingController: drawingController,
+                      isLocked: isLocked,
+                      normalizePoint: normalizePoint,
+                      onInteractionChanged: onStageInteractionChanged,
+                      borderColor: colorScheme.outlineVariant,
+                      backgroundColor: canvasBackgroundColor,
+                      foregroundColor: colorScheme.onSurfaceVariant,
+                    )
+                  : _PuzzleStage(
+                      puzzleBytes: puzzleBytes,
+                      existingPreviewUrlFuture: existingPuzzlePreviewUrlFuture,
+                      hasStoredPuzzleImage: hasStoredPuzzleImage,
+                      isGeneratingPuzzle: isGeneratingPuzzle,
+                      statusText: puzzleGenerationStatus,
+                      borderColor: colorScheme.outlineVariant,
+                      backgroundColor: canvasBackgroundColor,
+                      foregroundColor: colorScheme.onSurfaceVariant,
+                      solutionBackdrop: IgnorePointer(
+                        child: Opacity(
+                          opacity: 0.14,
+                          child: WordOverlayStage(
+                            controller: controller,
+                            drawingController: drawingController,
+                            isLocked: true,
+                            normalizePoint: null,
+                            onInteractionChanged: (_) {},
+                            borderColor: Colors.transparent,
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: colorScheme.onSurfaceVariant,
                           ),
-                        ),
-                  if (isLoadingInitialOverlay)
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: canvasBackgroundColor.withValues(alpha: 0.82),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: const Center(
-                        child: SizedBox.square(
-                          dimension: 26,
-                          child: CircularProgressIndicator.adaptive(),
                         ),
                       ),
                     ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
-              Builder(
-                builder: (context) {
-                  final selectedBrush = drawingController.selectedBrush;
-                  final currentOpacity = drawingController.currentOpacity;
-                  final currentWidth = drawingController.currentWidth;
-                  final canAdjustOpacity =
-                      selectedBrush != DrawingBrushType.eraser &&
-                          selectedBrush != DrawingBrushType.none;
-                  final canAdjustSize = selectedBrush != DrawingBrushType.none;
+              if (isLoadingInitialOverlay)
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: canvasBackgroundColor.withValues(alpha: 0.82),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Center(
+                    child: SizedBox.square(
+                      dimension: 26,
+                      child: CircularProgressIndicator.adaptive(),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
+          AnimatedBuilder(
+            animation: drawingController,
+            builder: (context, _) {
+              final selectedBrush = drawingController.selectedBrush;
+              final currentOpacity = drawingController.currentOpacity;
+              final currentWidth = drawingController.currentWidth;
+              final canAdjustOpacity =
+                  selectedBrush != DrawingBrushType.eraser &&
+                      selectedBrush != DrawingBrushType.none &&
+                      selectedBrush != DrawingBrushType.text;
+              final canAdjustSize = selectedBrush != DrawingBrushType.none &&
+                  selectedBrush != DrawingBrushType.text;
 
-                  return Column(
+              return Column(
+                children: <Widget>[
+                  SizedBox(
+                    height: 48,
+                    child: _BrushSelectorStrip(
+                      brushes: const <DrawingBrushType>[
+                        DrawingBrushType.none,
+                        DrawingBrushType.text,
+                        DrawingBrushType.pencil,
+                        DrawingBrushType.marker,
+                        DrawingBrushType.charcoal,
+                        DrawingBrushType.eraser,
+                      ],
+                      selectedBrush: selectedBrush,
+                      enabled: !isLocked,
+                      onSelectBrush: drawingController.selectBrush,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
                     children: <Widget>[
-                      SizedBox(
-                        height: 48,
-                        child: _BrushSelectorStrip(
-                          selectedBrush: selectedBrush,
-                          enabled: !isLocked,
-                          onSelectBrush: drawingController.selectBrush,
+                      Expanded(
+                        child: _CompactSliderTile(
+                          label: selectedBrush == DrawingBrushType.none ||
+                                  selectedBrush == DrawingBrushType.text
+                              ? 'Opacity'
+                              : canAdjustOpacity
+                                  ? 'Opacity'
+                                  : 'Eraser',
+                          valueText: selectedBrush == DrawingBrushType.none ||
+                                  selectedBrush == DrawingBrushType.text
+                              ? 'Off'
+                              : canAdjustOpacity
+                                  ? '${(currentOpacity * 100).round()}%'
+                                  : 'On',
+                          child: Opacity(
+                            opacity: canAdjustOpacity ? 1 : 0.45,
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 3,
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 8,
+                                ),
+                                overlayShape: const RoundSliderOverlayShape(
+                                  overlayRadius: 14,
+                                ),
+                              ),
+                              child: Slider(
+                                value: currentOpacity,
+                                min: 0.2,
+                                max: 1.0,
+                                divisions: 8,
+                                onChanged: canAdjustOpacity
+                                    ? drawingController.setOpacity
+                                    : null,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: _CompactSliderTile(
-                              label: selectedBrush == DrawingBrushType.none
-                                  ? 'Opacity'
-                                  : canAdjustOpacity
-                                      ? 'Opacity'
-                                      : 'Eraser',
-                              valueText: selectedBrush == DrawingBrushType.none
-                                  ? 'Off'
-                                  : canAdjustOpacity
-                                      ? '${(currentOpacity * 100).round()}%'
-                                      : 'On',
-                              child: Opacity(
-                                opacity: canAdjustOpacity ? 1 : 0.45,
-                                child: SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    trackHeight: 3,
-                                    thumbShape: const RoundSliderThumbShape(
-                                      enabledThumbRadius: 8,
-                                    ),
-                                    overlayShape: const RoundSliderOverlayShape(
-                                      overlayRadius: 14,
-                                    ),
-                                  ),
-                                  child: Slider(
-                                    value: currentOpacity,
-                                    min: 0.2,
-                                    max: 1.0,
-                                    divisions: 8,
-                                    onChanged: canAdjustOpacity
-                                        ? drawingController.setOpacity
-                                        : null,
-                                  ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _CompactSliderTile(
+                          label: 'Size',
+                          valueText: canAdjustSize
+                              ? '${(currentWidth * 1000).round()}'
+                              : 'Off',
+                          child: Opacity(
+                            opacity: canAdjustSize ? 1 : 0.45,
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 3,
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 8,
                                 ),
+                                overlayShape: const RoundSliderOverlayShape(
+                                  overlayRadius: 14,
+                                ),
+                              ),
+                              child: Slider(
+                                value: currentWidth,
+                                min: 0.006,
+                                max: 0.08,
+                                divisions: 18,
+                                onChanged: isLocked || !canAdjustSize
+                                    ? null
+                                    : drawingController.setBrushWidth,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _CompactSliderTile(
-                              label: 'Size',
-                              valueText: canAdjustSize
-                                  ? '${(currentWidth * 1000).round()}'
-                                  : 'Off',
-                              child: Opacity(
-                                opacity: canAdjustSize ? 1 : 0.45,
-                                child: SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    trackHeight: 3,
-                                    thumbShape: const RoundSliderThumbShape(
-                                      enabledThumbRadius: 8,
-                                    ),
-                                    overlayShape: const RoundSliderOverlayShape(
-                                      overlayRadius: 14,
-                                    ),
-                                  ),
-                                  child: Slider(
-                                    value: currentWidth,
-                                    min: 0.006,
-                                    max: 0.08,
-                                    divisions: 18,
-                                    onChanged: isLocked || !canAdjustSize
-                                        ? null
-                                        : drawingController.setBrushWidth,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ],
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: solutionController,
-                enabled: !isLocked,
-                textCapitalization: TextCapitalization.characters,
-                textInputAction: TextInputAction.next,
-                autocorrect: false,
-                enableSuggestions: false,
-                inputFormatters: <TextInputFormatter>[
-                  LengthLimitingTextInputFormatter(
-                      _CreateLevelScreenState._maxSolutionLength),
-                ],
-                style: textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: colorScheme.onSurface,
-                  letterSpacing: 0.5,
-                ),
-                decoration: _solutionFieldDecoration(
-                  colorScheme,
-                  hint: 'Type the word and letters appear on the stage.',
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Letter Weight',
-                style: textTheme.labelMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              SegmentedButton<int>(
-                style: compactSegmentStyle,
-                segments: kWordLetterWeightOptions
-                    .map(
-                      (option) => ButtonSegment<int>(
-                        value: option.value,
-                        label: Text(option.label),
-                      ),
-                    )
-                    .toList(growable: false),
-                selected: <int>{controller.fontWeightValue},
-                showSelectedIcon: false,
-                onSelectionChanged: isLocked
-                    ? null
-                    : (selection) =>
-                        controller.updateAllFontWeightValue(selection.first),
-              ),
-            ] else ...<Widget>[
-              TextField(
-                controller: promptController,
-                focusNode: generationPromptFocusNode,
-                enabled: !isLocked && !isGeneratingPuzzle,
-                maxLines: 2,
-                decoration: _sharedFieldDecoration(
-                  colorScheme,
-                  label: 'Puzzle Scene',
-                  icon: Icons.auto_awesome_outlined,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: <Widget>[
-                  SizedBox(
-                    width: 54,
-                    child: Text(
-                      'Hard',
-                      style: textTheme.labelMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: _EditorSlider(
-                      value: generationDifficulty,
-                      min: 0.35,
-                      max: 2.0,
-                      divisions: 13,
-                      onChanged: isLocked || isGeneratingPuzzle
-                          ? null
-                          : onGenerationDifficultyChanged,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 52,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        generationDifficulty.toStringAsFixed(2),
-                        style: textTheme.labelMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 12),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: solutionController,
+            enabled: !isLocked,
+            textCapitalization: TextCapitalization.characters,
+            textInputAction: TextInputAction.next,
+            autocorrect: false,
+            enableSuggestions: false,
+            inputFormatters: <TextInputFormatter>[
+              LengthLimitingTextInputFormatter(
+                  _CreateLevelScreenState._maxSolutionLength),
+            ],
+            style: textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: colorScheme.onSurface,
+              letterSpacing: 0.5,
+            ),
+            decoration: _solutionFieldDecoration(
+              colorScheme,
+              hint: 'Type the word and letters appear on the stage.',
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Letter Weight',
+            style: textTheme.labelMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          AnimatedBuilder(
+            animation: controller,
+            builder: (context, _) => SegmentedButton<int>(
+              style: compactSegmentStyle,
+              segments: kWordLetterWeightOptions
+                  .map(
+                    (option) => ButtonSegment<int>(
+                      value: option.value,
+                      label: Text(option.label),
+                    ),
+                  )
+                  .toList(growable: false),
+              selected: <int>{controller.fontWeightValue},
+              showSelectedIcon: false,
+              onSelectionChanged: isLocked
+                  ? null
+                  : (selection) =>
+                      controller.updateAllFontWeightValue(selection.first),
+            ),
+          ),
+        ] else ...<Widget>[
+          TextField(
+            controller: promptController,
+            focusNode: generationPromptFocusNode,
+            enabled: !isLocked && !isGeneratingPuzzle,
+            maxLines: 2,
+            decoration: _sharedFieldDecoration(
+              colorScheme,
+              label: 'Puzzle Scene',
+              icon: Icons.auto_awesome_outlined,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: <Widget>[
               SizedBox(
+                width: 54,
+                child: Text(
+                  'Hard',
+                  style: textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _EditorSlider(
+                  value: generationDifficulty,
+                  min: 0.35,
+                  max: 2.0,
+                  divisions: 13,
+                  onChanged: isLocked || isGeneratingPuzzle
+                      ? null
+                      : onGenerationDifficultyChanged,
+                ),
+              ),
+              SizedBox(
+                width: 52,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    generationDifficulty.toStringAsFixed(2),
+                    style: textTheme.labelMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          AnimatedBuilder(
+            animation: Listenable.merge(<Listenable>[
+              hasLettersListenable,
+              solutionTextListenable,
+              promptTextListenable,
+            ]),
+            builder: (context, _) {
+              final hasLetters = hasLettersListenable.value;
+              final canGeneratePuzzleNow = !isLocked &&
+                  solutionTextListenable.value.trim().length >= 2 &&
+                  promptTextListenable.value.trim().isNotEmpty &&
+                  hasLetters;
+              final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
+
+              return SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: isGeneratingPuzzle || !canGeneratePuzzleNow
                       ? null
                       : onGeneratePuzzle,
                   icon: Icon(
-                    (puzzleBytes != null || hasStoredPuzzleImage)
+                    hasPuzzlePreview
                         ? Icons.refresh_rounded
                         : Icons.auto_awesome_outlined,
                   ),
                   label: Text(
                     isGeneratingPuzzle
                         ? 'Generating...'
-                        : (puzzleBytes != null || hasStoredPuzzleImage)
+                        : hasPuzzlePreview
                             ? 'Regenerate Puzzle'
                             : 'Generate Puzzle',
                   ),
                 ),
+              );
+            },
+          ),
+          if (puzzleGenerationStatus.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 10),
+            Text(
+              puzzleGenerationStatus,
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
               ),
-              if (puzzleGenerationStatus.isNotEmpty) ...<Widget>[
-                const SizedBox(height: 10),
-                Text(
-                  puzzleGenerationStatus,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              TextField(
-                controller: creatorNameController,
-                enabled: !isLocked,
-                textCapitalization: TextCapitalization.words,
-                decoration: _sharedFieldDecoration(
-                  colorScheme,
-                  label: 'Creator Name',
-                  icon: Icons.badge_outlined,
-                ),
-              ),
-            ],
+            ),
           ],
-        );
-      },
+          const SizedBox(height: 12),
+          TextField(
+            controller: creatorNameController,
+            enabled: !isLocked,
+            textCapitalization: TextCapitalization.words,
+            decoration: _sharedFieldDecoration(
+              colorScheme,
+              label: 'Creator Name',
+              icon: Icons.badge_outlined,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -3828,6 +3972,8 @@ class _BrushButton extends StatelessWidget {
     switch (brush) {
       case DrawingBrushType.none:
         return Icons.pan_tool_alt_outlined;
+      case DrawingBrushType.text:
+        return Icons.text_fields_rounded;
       case DrawingBrushType.pencil:
         return Icons.edit_outlined;
       case DrawingBrushType.marker:
@@ -3842,9 +3988,8 @@ class _BrushButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final backgroundColor = selected
-        ? colorScheme.surface
-        : colorScheme.surfaceContainerLow;
+    final backgroundColor =
+        selected ? colorScheme.surface : colorScheme.surfaceContainerLow;
     final foregroundColor =
         selected ? colorScheme.primary : colorScheme.onSurface;
 
@@ -3894,11 +4039,13 @@ class _BrushButton extends StatelessWidget {
 }
 
 class _BrushSelectorStrip extends StatefulWidget {
+  final List<DrawingBrushType> brushes;
   final DrawingBrushType selectedBrush;
   final bool enabled;
   final ValueChanged<DrawingBrushType> onSelectBrush;
 
   const _BrushSelectorStrip({
+    required this.brushes,
     required this.selectedBrush,
     required this.enabled,
     required this.onSelectBrush,
@@ -3972,10 +4119,10 @@ class _BrushSelectorStripState extends State<_BrushSelectorStrip> {
         ListView.separated(
           controller: _scrollController,
           scrollDirection: Axis.horizontal,
-          itemCount: DrawingBrushType.values.length,
+          itemCount: widget.brushes.length,
           padding: EdgeInsets.zero,
           itemBuilder: (context, index) {
-            final brush = DrawingBrushType.values[index];
+            final brush = widget.brushes[index];
             return _BrushButton(
               brush: brush,
               selected: widget.selectedBrush == brush,
@@ -4237,7 +4384,8 @@ class _DeferredCompactSliderTile extends StatefulWidget {
       _DeferredCompactSliderTileState();
 }
 
-class _DeferredCompactSliderTileState extends State<_DeferredCompactSliderTile> {
+class _DeferredCompactSliderTileState
+    extends State<_DeferredCompactSliderTile> {
   late double _draftValue;
   bool _isDragging = false;
 
@@ -4270,9 +4418,8 @@ class _DeferredCompactSliderTileState extends State<_DeferredCompactSliderTile> 
             : (value) {
                 setState(() => _draftValue = value);
               },
-        onChangeStart: widget.enabled
-            ? (_) => setState(() => _isDragging = true)
-            : null,
+        onChangeStart:
+            widget.enabled ? (_) => setState(() => _isDragging = true) : null,
         onChangeEnd: !widget.enabled
             ? null
             : (value) {

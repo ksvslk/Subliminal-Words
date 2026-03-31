@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 enum DrawingBrushType {
   none,
+  text,
   pencil,
   marker,
   charcoal,
@@ -24,6 +25,8 @@ extension DrawingBrushTypeX on DrawingBrushType {
     switch (this) {
       case DrawingBrushType.none:
         return 'No Tool';
+      case DrawingBrushType.text:
+        return 'Text';
       case DrawingBrushType.pencil:
         return 'Pencil';
       case DrawingBrushType.marker:
@@ -38,6 +41,7 @@ extension DrawingBrushTypeX on DrawingBrushType {
   double get defaultOpacity {
     switch (this) {
       case DrawingBrushType.none:
+      case DrawingBrushType.text:
         return 1.0;
       case DrawingBrushType.pencil:
         return 0.9;
@@ -53,6 +57,7 @@ extension DrawingBrushTypeX on DrawingBrushType {
   double get defaultWidth {
     switch (this) {
       case DrawingBrushType.none:
+      case DrawingBrushType.text:
         return 0.012;
       case DrawingBrushType.pencil:
         return 0.012;
@@ -68,6 +73,7 @@ extension DrawingBrushTypeX on DrawingBrushType {
   Color get color {
     switch (this) {
       case DrawingBrushType.none:
+      case DrawingBrushType.text:
         return const Color(0xFF111111);
       case DrawingBrushType.pencil:
         return const Color(0xFF111111);
@@ -198,7 +204,9 @@ class DrawingController extends ChangeNotifier {
 
   DrawingBrushType get selectedBrush => _selectedBrush;
 
-  bool get canDraw => _selectedBrush != DrawingBrushType.none;
+  bool get canDraw =>
+      _selectedBrush != DrawingBrushType.none &&
+      _selectedBrush != DrawingBrushType.text;
 
   double get currentOpacity => _brushOpacities[_selectedBrush]!;
 

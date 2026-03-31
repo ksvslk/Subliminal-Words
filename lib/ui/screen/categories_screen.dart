@@ -4,8 +4,10 @@ import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/data/category.dart';
 import 'package:operation_hermes/data/pack.dart';
+import 'package:operation_hermes/data/sw_level.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+import 'my_levels_screen.dart';
 import 'packs_screen.dart';
 
 class CategoriesScreen extends StatelessWidget {
@@ -14,22 +16,147 @@ class CategoriesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final categories = context.watch<List<Category>>();
+    final showPlaceholders = categories.isEmpty;
+    final itemCount = showPlaceholders ? 4 : categories.length + 1;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Categories')),
-      body: () {
-        if (categories.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.all(16.0),
-          itemCount: categories.length,
-          itemBuilder: (context, index) {
-            final category = categories[index];
-            return _CategoryListItem(category: category);
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16.0),
+        itemCount: itemCount,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return const _MyLevelsListItem();
+          }
+          if (showPlaceholders) {
+            return const _CategoryListItem();
+          }
+          final category = categories[index - 1];
+          return _CategoryListItem(category: category);
+        },
+      ),
+    );
+  }
+}
+
+class _MyLevelsListItem extends StatelessWidget {
+  const _MyLevelsListItem();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final firebaseService = context.read<FirebaseService>();
+
+    return AspectRatio(
+      aspectRatio: 2 / 1,
+      child: Card(
+        elevation: 2,
+        clipBehavior: Clip.antiAlias,
+        margin: const EdgeInsets.only(bottom: 16.0),
+        child: InkWell(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const MyLevelsScreen(),
+              ),
+            );
           },
-        );
-      }(),
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: <Color>[
+                      colorScheme.primaryContainer,
+                      colorScheme.tertiaryContainer,
+                    ],
+                  ),
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 24),
+                  child: Icon(
+                    Icons.auto_awesome_motion_outlined,
+                    size: 108,
+                    color: colorScheme.onPrimaryContainer.withValues(alpha: 0.18),
+                  ),
+                ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: <Color>[
+                      colorScheme.surface.withValues(alpha: 0.08),
+                      colorScheme.surface.withValues(alpha: 0.38),
+                      colorScheme.surface.withValues(alpha: 0.78),
+                    ],
+                    stops: const <double>[0.0, 0.45, 1.0],
+                  ),
+                ),
+              ),
+              GridTile(
+                header: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Align(
+                    alignment: Alignment.topRight,
+                    child: StreamBuilder<List<SWLevel>>(
+                      stream: firebaseService.getMyLevelsStream(),
+                      builder: (context, snapshot) {
+                        final count = snapshot.data?.length ?? 0;
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surface.withValues(alpha: 0.82),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: colorScheme.outlineVariant,
+                            ),
+                          ),
+                          child: Text(
+                            '$count',
+                            style: textTheme.labelLarge?.copyWith(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                footer: GridTileBar(
+                  backgroundColor: colorScheme.surface.withValues(alpha: 0.72),
+                  title: Text(
+                    'My Levels',
+                    style: textTheme.titleMedium?.copyWith(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Play, edit, and submit your creations',
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                child: const SizedBox.expand(),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

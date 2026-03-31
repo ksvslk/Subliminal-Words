@@ -2,6 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
+import 'package:operation_hermes/editor/generation_image_budget.dart';
+
+const int _faceRenderSize = 1024;
+const int _faceSourceTargetBytes = 140 * 1024;
 
 class FaceSourceTransform {
   final double offsetX;
@@ -152,6 +156,15 @@ Future<Uint8List> generateFaceSketchPng({
   );
 }
 
+Future<Uint8List> compressFaceSketchWebp(Uint8List sketchPngBytes) async {
+  return compressGenerationImageWebp(
+    sketchPngBytes,
+    targetBytes: kGenerationPayloadTargetBytes,
+    dimension: _faceRenderSize,
+    failureLabel: 'face sketch',
+  );
+}
+
 Uint8List _normalizeFaceSourceImageIsolate(Uint8List sourceBytes) {
   final decoded = img.decodeImage(sourceBytes);
   if (decoded == null) {
@@ -159,19 +172,25 @@ Uint8List _normalizeFaceSourceImageIsolate(Uint8List sourceBytes) {
   }
 
   final baked = img.bakeOrientation(decoded);
-  final longestSide = math.max(baked.width, baked.height);
-  final normalized = longestSide > 1600
-      ? img.copyResize(
-          baked,
-          width: baked.width >= baked.height ? 1600 : null,
-          height: baked.height > baked.width ? 1600 : null,
-          interpolation: img.Interpolation.average,
-        )
-      : baked;
-
-  return Uint8List.fromList(
-    img.encodeJpg(normalized, quality: 92),
+  var normalized = _resizeLongestSide(
+    baked,
+    maxLongestSide: 1400,
   );
+  var encoded = _encodeJpegNearTarget(
+    normalized,
+    targetBytes: _faceSourceTargetBytes,
+  );
+
+  while (encoded.length > _faceSourceTargetBytes &&
+      math.max(normalized.width, normalized.height) > _faceRenderSize) {
+    normalized = _resizeByFactor(normalized, factor: 0.9);
+    encoded = _encodeJpegNearTarget(
+      normalized,
+      targetBytes: _faceSourceTargetBytes,
+    );
+  }
+
+  return encoded;
 }
 
 Uint8List _generateFaceSketchPngIsolate(Map<String, dynamic> payload) {
@@ -220,18 +239,15 @@ Uint8List _generateFaceSketchPngIsolate(Map<String, dynamic> payload) {
       final blurValue = blurred.getPixel(x, y).r.toDouble();
       final edgeValue = edges.getPixel(x, y).r.toDouble();
 
-      final dodged = blurValue >= 255
-          ? 255.0
-          : (baseValue * 255.0) / (255.0 - blurValue);
+      final dodged =
+          blurValue >= 255 ? 255.0 : (baseValue * 255.0) / (255.0 - blurValue);
 
-      var lineValue =
-          (dodged * (1 - (detailMix * 0.42))) + (baseValue * (detailMix * 0.42));
+      var lineValue = (dodged * (1 - (detailMix * 0.42))) +
+          (baseValue * (detailMix * 0.42));
 
       if (edgeValue > effectiveThreshold) {
-        final edgeConfidence =
-            (edgeValue - effectiveThreshold) / (255 - effectiveThreshold == 0
-                ? 1
-                : 255 - effectiveThreshold);
+        final edgeConfidence = (edgeValue - effectiveThreshold) /
+            (255 - effectiveThreshold == 0 ? 1 : 255 - effectiveThreshold);
         lineValue -= edgeConfidence.clamp(0.0, 1.0) *
             255.0 *
             settings.edgeStrength.clamp(0.0, 2.5);
@@ -255,7 +271,7 @@ img.Image _renderFaceSourceToSquare(
   img.Image source, {
   required FaceSourceTransform transform,
 }) {
-  const canvasSize = 1024;
+  const canvasSize = _faceRenderSize;
   final output = img.Image(width: canvasSize, height: canvasSize);
   img.fill(output, color: img.ColorRgb8(255, 255, 255));
 
@@ -263,8 +279,7 @@ img.Image _renderFaceSourceToSquare(
     canvasSize / source.width,
     canvasSize / source.height,
   );
-  final effectiveScale =
-      coverScale * transform.scale.clamp(0.25, 8.0);
+  final effectiveScale = coverScale * transform.scale.clamp(0.25, 8.0);
   final centerX = (canvasSize / 2) + (transform.offsetX * canvasSize);
   final centerY = (canvasSize / 2) + (transform.offsetY * canvasSize);
   final cosTheta = math.cos(transform.rotation);
@@ -302,6 +317,67 @@ img.Image _renderFaceSourceToSquare(
   }
 
   return output;
+}
+
+img.Image _resizeLongestSide(
+  img.Image source, {
+  required int maxLongestSide,
+}) {
+  final longestSide = math.max(source.width, source.height);
+  if (longestSide <= maxLongestSide) {
+    return source;
+  }
+
+  return img.copyResize(
+    source,
+    width: source.width >= source.height ? maxLongestSide : null,
+    height: source.height > source.width ? maxLongestSide : null,
+    interpolation: img.Interpolation.average,
+  );
+}
+
+img.Image _resizeByFactor(
+  img.Image source, {
+  required double factor,
+}) {
+  final width = math.max(1, (source.width * factor).round());
+  final height = math.max(1, (source.height * factor).round());
+  return img.copyResize(
+    source,
+    width: width,
+    height: height,
+    interpolation: img.Interpolation.average,
+  );
+}
+
+Uint8List _encodeJpegNearTarget(
+  img.Image source, {
+  required int targetBytes,
+}) {
+  const qualities = <int>[88, 82, 76, 70, 64, 58, 52, 46, 40];
+  Uint8List? bestUnderBudget;
+  var smallestUnderDelta = 1 << 30;
+  Uint8List? closestOverBudget;
+  var smallestOverDelta = 1 << 30;
+
+  for (final quality in qualities) {
+    final encoded = Uint8List.fromList(
+      img.encodeJpg(source, quality: quality),
+    );
+    final delta = encoded.length - targetBytes;
+    if (delta <= 0) {
+      final underDelta = -delta;
+      if (underDelta < smallestUnderDelta) {
+        smallestUnderDelta = underDelta;
+        bestUnderBudget = encoded;
+      }
+    } else if (delta < smallestOverDelta) {
+      smallestOverDelta = delta;
+      closestOverBudget = encoded;
+    }
+  }
+
+  return bestUnderBudget ?? closestOverBudget ?? Uint8List(0);
 }
 
 (int, int, int) _sampleBilinear(img.Image source, double x, double y) {

@@ -1,0 +1,5 @@
+{
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.compile.nullAnalysis.mode": "disabled",
+    "workbench.colorTheme": "Best Themes - Gruvbox Extra Dark"
+}

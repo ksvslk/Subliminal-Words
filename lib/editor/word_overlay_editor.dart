@@ -694,6 +694,207 @@ String _escapeXml(String value) {
       .replaceAll("'", '&apos;');
 }
 
+_LetterSelectionMetrics _measureWordLetterSelection(
+  WordOverlayLetter letter,
+  Size stageSize,
+) {
+  final scale = stageSize.width / 1024;
+  final visualFontSize = letter.fontSize * scale;
+  final outlineWidth =
+      wordLetterEditorOutlineStrokeWidth(letter.fontWeightValue);
+  final widthScale = wordLetterWidthScale(letter.fontWeightValue);
+  final textPainter = TextPainter(
+    text: TextSpan(
+      text: letter.letter,
+      style: TextStyle(
+        fontSize: visualFontSize,
+        fontWeight: wordLetterFontWeight(letter.fontWeightValue),
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+    textAlign: TextAlign.center,
+  )..layout();
+
+  final baseBounds = _measureWordGlyphBounds(
+    letter: letter,
+    textPainter: textPainter,
+    outlineWidth: outlineWidth,
+    widthScale: widthScale,
+  );
+  final frameBounds = _expandWordSelectionFrameBounds(baseBounds);
+  final corners = <Offset>[
+    frameBounds.topLeft,
+    frameBounds.topRight,
+    frameBounds.bottomRight,
+    frameBounds.bottomLeft,
+  ].map((corner) => _transformWordLocalPoint(corner, letter)).toList();
+  var minX = double.infinity;
+  var minY = double.infinity;
+  var maxX = double.negativeInfinity;
+  var maxY = double.negativeInfinity;
+  for (final corner in corners) {
+    minX = math.min(minX, corner.dx);
+    minY = math.min(minY, corner.dy);
+    maxX = math.max(maxX, corner.dx);
+    maxY = math.max(maxY, corner.dy);
+  }
+
+  return _LetterSelectionMetrics(
+    visualFontSize: visualFontSize,
+    baseBounds: baseBounds,
+    frameBounds: frameBounds,
+    transformedBounds: Rect.fromLTRB(minX, minY, maxX, maxY),
+  );
+}
+
+Rect _measureWordGlyphBounds({
+  required WordOverlayLetter letter,
+  required TextPainter textPainter,
+  required double outlineWidth,
+  required double widthScale,
+}) {
+  final selection = TextSelection(
+    baseOffset: 0,
+    extentOffset: letter.letter.length,
+  );
+  final boxes = textPainter.getBoxesForSelection(selection);
+  if (boxes.isEmpty) {
+    final fallbackBounds = Rect.fromCenter(
+      center: Offset.zero,
+      width: textPainter.width + (outlineWidth * 2),
+      height: textPainter.height + (outlineWidth * 2),
+    );
+    return _applyWordWidthScale(
+      _tightenWordGlyphBounds(letter, fallbackBounds),
+      widthScale,
+    );
+  }
+
+  var minX = double.infinity;
+  var minY = double.infinity;
+  var maxX = double.negativeInfinity;
+  var maxY = double.negativeInfinity;
+  for (final box in boxes) {
+    minX = math.min(minX, box.left);
+    minY = math.min(minY, box.top);
+    maxX = math.max(maxX, box.right);
+    maxY = math.max(maxY, box.bottom);
+  }
+
+  final rawBounds = Rect.fromLTRB(
+    minX - (textPainter.width / 2) - outlineWidth,
+    minY - (textPainter.height / 2) - outlineWidth,
+    maxX - (textPainter.width / 2) + outlineWidth,
+    maxY - (textPainter.height / 2) + outlineWidth,
+  );
+  return _applyWordWidthScale(
+    _tightenWordGlyphBounds(letter, rawBounds),
+    widthScale,
+  );
+}
+
+Rect _tightenWordGlyphBounds(WordOverlayLetter letter, Rect rawBounds) {
+  final grapheme = letter.letter.trim();
+  if (grapheme.isEmpty) {
+    return rawBounds;
+  }
+
+  final uppercaseOnly = grapheme == grapheme.toUpperCase() &&
+      grapheme != grapheme.toLowerCase();
+  final hasDescender = RegExp(r'[gjpqyQJ]').hasMatch(grapheme);
+  final horizontalInset = rawBounds.width * 0.11;
+  final topInset = rawBounds.height * (uppercaseOnly ? 0.2 : 0.24);
+  final bottomInset = rawBounds.height * (hasDescender ? 0.08 : 0.2);
+
+  final tightened = Rect.fromLTRB(
+    rawBounds.left + horizontalInset,
+    rawBounds.top + topInset,
+    rawBounds.right - horizontalInset,
+    rawBounds.bottom - bottomInset,
+  );
+
+  final minWidth = math.max(10.0, rawBounds.width * 0.2);
+  final minHeight = math.max(14.0, rawBounds.height * 0.3);
+  final nextWidth = math.max(minWidth, tightened.width);
+  final nextHeight = math.max(minHeight, tightened.height);
+
+  return Rect.fromCenter(
+    center: tightened.center,
+    width: nextWidth,
+    height: nextHeight,
+  );
+}
+
+Rect _expandWordSelectionFrameBounds(Rect baseBounds) {
+  final outwardPadding =
+      math.max(4.0, math.min(8.0, baseBounds.shortestSide * 0.07));
+  return baseBounds.inflate(outwardPadding);
+}
+
+Rect _applyWordWidthScale(Rect bounds, double widthScale) {
+  if ((widthScale - 1).abs() < 0.001) {
+    return bounds;
+  }
+  return Rect.fromCenter(
+    center: bounds.center,
+    width: bounds.width * widthScale,
+    height: bounds.height,
+  );
+}
+
+Offset _transformWordLocalPoint(Offset point, WordOverlayLetter letter) {
+  final scaled = Offset(point.dx * letter.scaleX, point.dy * letter.scaleY);
+  final skewX = math.tan(letter.skewXDegrees * math.pi / 180);
+  final skewY = math.tan(letter.skewYDegrees * math.pi / 180);
+  final skewed = Offset(
+    scaled.dx + (skewX * scaled.dy),
+    (skewY * scaled.dx) + scaled.dy,
+  );
+  final rotation = letter.rotationDegrees * math.pi / 180;
+  final cosTheta = math.cos(rotation);
+  final sinTheta = math.sin(rotation);
+  return Offset(
+    (skewed.dx * cosTheta) - (skewed.dy * sinTheta),
+    (skewed.dx * sinTheta) + (skewed.dy * cosTheta),
+  );
+}
+
+List<Offset> _buildSelectionCornerPoints({
+  required Rect baseBounds,
+  required Offset center,
+  required WordOverlayLetter letter,
+}) {
+  return <Offset>[
+    baseBounds.topLeft,
+    baseBounds.topRight,
+    baseBounds.bottomRight,
+    baseBounds.bottomLeft,
+  ].map((point) => center + _transformWordLocalPoint(point, letter)).toList();
+}
+
+bool _pointInPolygon(Offset point, List<Offset> polygon) {
+  if (polygon.length < 3) {
+    return false;
+  }
+
+  var inside = false;
+  for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    final pointI = polygon[i];
+    final pointJ = polygon[j];
+    final intersects = ((pointI.dy > point.dy) != (pointJ.dy > point.dy)) &&
+        (point.dx <
+            ((pointJ.dx - pointI.dx) * (point.dy - pointI.dy)) /
+                    ((pointJ.dy - pointI.dy).abs() < 0.000001
+                        ? 0.000001
+                        : (pointJ.dy - pointI.dy)) +
+                pointI.dx);
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 class WordOverlayStage extends StatefulWidget {
   final WordOverlayController controller;
   final DrawingController? drawingController;
@@ -759,6 +960,37 @@ class _WordOverlayStageState extends State<WordOverlayStage> {
     widget.onInteractionChanged(false);
   }
 
+  void _selectLetterAtLocalPosition(Offset localPosition, Size size) {
+    if (widget.isLocked) {
+      return;
+    }
+
+    final selectedId = widget.controller.selectedLetterId;
+    final orderedLetters = <WordOverlayLetter>[
+      ...widget.controller.letters.where((letter) => letter.id != selectedId),
+      ...widget.controller.letters.where((letter) => letter.id == selectedId),
+    ];
+
+    for (final letter in orderedLetters.reversed) {
+      final metrics = _measureWordLetterSelection(letter, size);
+      final stageCenter = Offset(
+        letter.normalizedCenter.dx * size.width,
+        letter.normalizedCenter.dy * size.height,
+      );
+      final selectionPoints = _buildSelectionCornerPoints(
+        baseBounds: metrics.frameBounds.inflate(6),
+        center: stageCenter,
+        letter: letter,
+      );
+      if (_pointInPolygon(localPosition, selectionPoints)) {
+        widget.controller.selectLetter(letter.id);
+        return;
+      }
+    }
+
+    widget.controller.selectLetter(null);
+  }
+
   @override
   void dispose() {
     if (_activeDrawingPointerId != null) {
@@ -785,10 +1017,20 @@ class _WordOverlayStageState extends State<WordOverlayStage> {
             builder: (context, constraints) {
               final size = Size(constraints.maxWidth, constraints.maxHeight);
               final drawingController = widget.drawingController;
-              final isDrawingMode = _canDraw;
 
-              return Listener(
-                behavior: HitTestBehavior.opaque,
+              return AnimatedBuilder(
+                animation: Listenable.merge(<Listenable>[
+                  if (drawingController != null) drawingController,
+                ]),
+                builder: (context, _) {
+                  final isDrawingMode = _canDraw;
+                  final isNoToolMode = !widget.isLocked &&
+                      drawingController?.selectedBrush == DrawingBrushType.none;
+
+                  return IgnorePointer(
+                    ignoring: isNoToolMode,
+                    child: Listener(
+                  behavior: HitTestBehavior.opaque,
                 onPointerDown: (event) {
                   if (isDrawingMode) {
                     _startStroke(event, size);
@@ -817,9 +1059,10 @@ class _WordOverlayStageState extends State<WordOverlayStage> {
                 },
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: isDrawingMode
+                  onTapDown: isDrawingMode
                       ? null
-                      : () => widget.controller.selectLetter(null),
+                      : (details) =>
+                          _selectLetterAtLocalPosition(details.localPosition, size),
                   child: RepaintBoundary(
                     child: Stack(
                       key: _stageKey,
@@ -895,9 +1138,12 @@ class _WordOverlayStageState extends State<WordOverlayStage> {
                     ),
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
+        );
+      },
+    ),
         ),
       ),
     );
@@ -958,6 +1204,9 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
   @override
   void didUpdateWidget(covariant _WordLetterHandle oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!oldWidget.selected && widget.selected) {
+      _selectedAt = DateTime.now();
+    }
     if (!widget.selected || oldWidget.selected != widget.selected) {
       _transformMode = _TransformMode.resize;
     }
@@ -1000,155 +1249,11 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
   }
 
   _LetterSelectionMetrics _measureSelection(WordOverlayLetter letter) {
-    final scale = widget.size.width / 1024;
-    final visualFontSize = letter.fontSize * scale;
-    final outlineWidth =
-        wordLetterEditorOutlineStrokeWidth(letter.fontWeightValue);
-    final widthScale = wordLetterWidthScale(letter.fontWeightValue);
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: letter.letter,
-        style: TextStyle(
-          fontSize: visualFontSize,
-          fontWeight: wordLetterFontWeight(letter.fontWeightValue),
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-      textAlign: TextAlign.center,
-    )..layout();
-    final baseBounds = _measureGlyphBounds(
-      textPainter: textPainter,
-      outlineWidth: outlineWidth,
-      widthScale: widthScale,
-    );
-    final frameBounds = _expandSelectionFrameBounds(baseBounds);
-    final corners = <Offset>[
-      frameBounds.topLeft,
-      frameBounds.topRight,
-      frameBounds.bottomRight,
-      frameBounds.bottomLeft,
-    ].map((corner) => _transformLocalPoint(corner, letter)).toList();
-    var minX = double.infinity;
-    var minY = double.infinity;
-    var maxX = double.negativeInfinity;
-    var maxY = double.negativeInfinity;
-    for (final corner in corners) {
-      minX = math.min(minX, corner.dx);
-      minY = math.min(minY, corner.dy);
-      maxX = math.max(maxX, corner.dx);
-      maxY = math.max(maxY, corner.dy);
-    }
-    return _LetterSelectionMetrics(
-      visualFontSize: visualFontSize,
-      baseBounds: baseBounds,
-      frameBounds: frameBounds,
-      transformedBounds: Rect.fromLTRB(minX, minY, maxX, maxY),
-    );
-  }
-
-  Rect _measureGlyphBounds({
-    required TextPainter textPainter,
-    required double outlineWidth,
-    required double widthScale,
-  }) {
-    final selection = TextSelection(
-      baseOffset: 0,
-      extentOffset: _currentLetter.letter.length,
-    );
-    final boxes = textPainter.getBoxesForSelection(selection);
-    if (boxes.isEmpty) {
-      final fallbackBounds = Rect.fromCenter(
-        center: Offset.zero,
-        width: textPainter.width + (outlineWidth * 2),
-        height: textPainter.height + (outlineWidth * 2),
-      );
-      return _applyWidthScale(_tightenGlyphBounds(fallbackBounds), widthScale);
-    }
-
-    var minX = double.infinity;
-    var minY = double.infinity;
-    var maxX = double.negativeInfinity;
-    var maxY = double.negativeInfinity;
-    for (final box in boxes) {
-      minX = math.min(minX, box.left);
-      minY = math.min(minY, box.top);
-      maxX = math.max(maxX, box.right);
-      maxY = math.max(maxY, box.bottom);
-    }
-
-    final rawBounds = Rect.fromLTRB(
-      minX - (textPainter.width / 2) - outlineWidth,
-      minY - (textPainter.height / 2) - outlineWidth,
-      maxX - (textPainter.width / 2) + outlineWidth,
-      maxY - (textPainter.height / 2) + outlineWidth,
-    );
-    return _applyWidthScale(_tightenGlyphBounds(rawBounds), widthScale);
-  }
-
-  Rect _tightenGlyphBounds(Rect rawBounds) {
-    final grapheme = _currentLetter.letter.trim();
-    if (grapheme.isEmpty) {
-      return rawBounds;
-    }
-
-    final uppercaseOnly = grapheme == grapheme.toUpperCase() &&
-        grapheme != grapheme.toLowerCase();
-    final hasDescender = RegExp(r'[gjpqyQJ]').hasMatch(grapheme);
-    final horizontalInset = rawBounds.width * 0.11;
-    final topInset = rawBounds.height * (uppercaseOnly ? 0.2 : 0.24);
-    final bottomInset = rawBounds.height * (hasDescender ? 0.08 : 0.2);
-
-    final tightened = Rect.fromLTRB(
-      rawBounds.left + horizontalInset,
-      rawBounds.top + topInset,
-      rawBounds.right - horizontalInset,
-      rawBounds.bottom - bottomInset,
-    );
-
-    final minWidth = math.max(10.0, rawBounds.width * 0.2);
-    final minHeight = math.max(14.0, rawBounds.height * 0.3);
-    final nextWidth = math.max(minWidth, tightened.width);
-    final nextHeight = math.max(minHeight, tightened.height);
-
-    return Rect.fromCenter(
-      center: tightened.center,
-      width: nextWidth,
-      height: nextHeight,
-    );
-  }
-
-  Rect _expandSelectionFrameBounds(Rect baseBounds) {
-    final outwardPadding =
-        math.max(4.0, math.min(8.0, baseBounds.shortestSide * 0.07));
-    return baseBounds.inflate(outwardPadding);
-  }
-
-  Rect _applyWidthScale(Rect bounds, double widthScale) {
-    if ((widthScale - 1).abs() < 0.001) {
-      return bounds;
-    }
-    return Rect.fromCenter(
-      center: bounds.center,
-      width: bounds.width * widthScale,
-      height: bounds.height,
-    );
+    return _measureWordLetterSelection(letter, widget.size);
   }
 
   Offset _transformLocalPoint(Offset point, WordOverlayLetter letter) {
-    final scaled = Offset(point.dx * letter.scaleX, point.dy * letter.scaleY);
-    final skewX = math.tan(letter.skewXDegrees * math.pi / 180);
-    final skewY = math.tan(letter.skewYDegrees * math.pi / 180);
-    final skewed = Offset(
-      scaled.dx + (skewX * scaled.dy),
-      (skewY * scaled.dx) + scaled.dy,
-    );
-    final rotation = letter.rotationDegrees * math.pi / 180;
-    final cosTheta = math.cos(rotation);
-    final sinTheta = math.sin(rotation);
-    return Offset(
-      (skewed.dx * cosTheta) - (skewed.dy * sinTheta),
-      (skewed.dx * sinTheta) + (skewed.dy * cosTheta),
-    );
+    return _transformWordLocalPoint(point, letter);
   }
 
   void _startRotation(Offset globalPosition) {
@@ -1320,6 +1425,9 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     if (widget.isLocked) {
       return;
     }
+    if (!widget.selected) {
+      return;
+    }
     if (_consumeNextTapAfterSelection) {
       _consumeNextTapAfterSelection = false;
       return;
@@ -1333,11 +1441,6 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
       _toggleTransformMode();
       return;
     }
-    widget.onTap();
-    setState(() {
-      _transformMode = _TransformMode.resize;
-    });
-    _selectedAt = DateTime.now();
   }
 
   void _onMovePointerDown(PointerDownEvent event) {
@@ -1598,7 +1701,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
                   child: IgnorePointer(
                     child: CustomPaint(
                       painter: _SelectionFramePainter(
-                        points: _selectionCornerPoints(
+                        points: _buildSelectionCornerPoints(
                           baseBounds: frameBounds,
                           center: Offset(centerX, centerY),
                           letter: letter,
@@ -1609,7 +1712,7 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
                   ),
                 ),
               if (selected && !isLocked)
-                for (final handle in _visibleHandlesForMode(_transformMode))
+                for (final handle in _visibleHandles(_transformMode, bounds))
                   Positioned(
                     left: centerX +
                         _handleLocalPoint(frameBounds, handle, letter).dx -
@@ -1669,19 +1772,6 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     );
     return _transformLocalPoint(basePoint, letter);
   }
-
-  List<Offset> _selectionCornerPoints({
-    required Rect baseBounds,
-    required Offset center,
-    required WordOverlayLetter letter,
-  }) {
-    return <Offset>[
-      baseBounds.topLeft,
-      baseBounds.topRight,
-      baseBounds.bottomRight,
-      baseBounds.bottomLeft,
-    ].map((point) => center + _transformLocalPoint(point, letter)).toList();
-  }
 }
 
 enum _ResizeHandle {
@@ -1706,18 +1796,21 @@ enum _TransformMode {
   rotate,
 }
 
-Iterable<_ResizeHandle> _visibleHandlesForMode(_TransformMode mode) {
-  switch (mode) {
-    case _TransformMode.resize:
-      return _ResizeHandle.values;
-    case _TransformMode.rotate:
-      return const <_ResizeHandle>[
-        _ResizeHandle.topLeft,
-        _ResizeHandle.topRight,
-        _ResizeHandle.bottomLeft,
-        _ResizeHandle.bottomRight,
-      ];
+Iterable<_ResizeHandle> _visibleHandles(
+  _TransformMode mode,
+  Rect bounds,
+) {
+  if (mode == _TransformMode.rotate ||
+      bounds.width < 64.0 ||
+      bounds.height < 64.0) {
+    return const <_ResizeHandle>[
+      _ResizeHandle.topLeft,
+      _ResizeHandle.topRight,
+      _ResizeHandle.bottomLeft,
+      _ResizeHandle.bottomRight,
+    ];
   }
+  return _ResizeHandle.values;
 }
 
 class _LetterSelectionMetrics {
