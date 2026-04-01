@@ -53,6 +53,18 @@ class FirebaseService {
     return _db.collection('userLevels').doc(uid).collection('levels');
   }
 
+  Future<void> _deleteStoragePathIfExists(String storagePath) async {
+    if (storagePath.isEmpty) {
+      return;
+    }
+
+    try {
+      await _storage.ref(storagePath).delete();
+    } catch (_) {
+      // Missing or already-removed draft assets should not block cleanup.
+    }
+  }
+
   Future<String> getDownloadUrl(String storagePath) async {
     if (storagePath.isEmpty) {
       return '';
@@ -553,9 +565,10 @@ class FirebaseService {
     required String answer,
     required String factText,
     required Uint8List sourceImageBytes,
-    required Uint8List solutionImageBytes,
+    Uint8List? solutionImageBytes,
     Uint8List? puzzleImageBytes,
     bool allowReuseExistingPuzzle = true,
+    bool persistSolutionAsset = false,
     required Map<String, dynamic> editorData,
   }) async {
     final uid = currentUserId;
@@ -568,6 +581,7 @@ class FirebaseService {
 
     int levelNr = 1;
     DateTime? existingCreatedAt;
+    String existingSolutionPath = '';
     String existingPuzzlePath = '';
     String existingPuzzleThumbnailPath = '';
     bool canReuseExistingPuzzle = false;
@@ -582,6 +596,7 @@ class FirebaseService {
         }
         levelNr = existingData['nr'] ?? 1;
         existingCreatedAt = (existingData['createdAt'] as Timestamp?)?.toDate();
+        existingSolutionPath = existingData['solutionPath'] as String? ?? '';
         canReuseExistingPuzzle = allowReuseExistingPuzzle &&
             _hasStoredReviewReadyPuzzleImage(existingData);
         existingPuzzlePath = existingData['puzzlePath'] as String? ?? '';
@@ -611,18 +626,22 @@ class FirebaseService {
       ),
     );
 
-    final solutionRef = _storage.ref('$storageBase/solution.webp');
-    await solutionRef.putData(
-      solutionImageBytes,
-      SettableMetadata(
-        contentType: 'image/webp',
-        customMetadata: <String, String>{
-          'ownerUid': uid,
-          'editorMode': UserLevelEditorMode.photoSketch,
-          'assetRole': 'solution',
-        },
-      ),
-    );
+    String solutionPath = '';
+    if (persistSolutionAsset && solutionImageBytes != null) {
+      final solutionRef = _storage.ref('$storageBase/solution.webp');
+      await solutionRef.putData(
+        solutionImageBytes,
+        SettableMetadata(
+          contentType: 'image/webp',
+          customMetadata: <String, String>{
+            'ownerUid': uid,
+            'editorMode': UserLevelEditorMode.photoSketch,
+            'assetRole': 'solution',
+          },
+        ),
+      );
+      solutionPath = solutionRef.fullPath;
+    }
 
     String puzzlePath = '';
     String puzzleThumbnailPath = '';
@@ -677,7 +696,7 @@ class FirebaseService {
       'hints': <String, dynamic>{'fact': factText.trim()},
       'puzzlePath': puzzlePath,
       'puzzleThumbnailPath': puzzleThumbnailPath,
-      'solutionPath': solutionRef.fullPath,
+      'solutionPath': solutionPath,
       'tooltipStart': '',
       'tooltipEnd': '',
       'isEnabled': true,
@@ -691,7 +710,49 @@ class FirebaseService {
       'modifiedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
+    if (!persistSolutionAsset && existingSolutionPath.isNotEmpty) {
+      await _deleteStoragePathIfExists(existingSolutionPath);
+    }
+
     return docRef.id;
+  }
+
+  Future<void> deleteMyLevel(String levelId) async {
+    final uid = currentUserId;
+    if (uid == null || uid.isEmpty) {
+      throw StateError('You need to be signed in before deleting a level.');
+    }
+
+    final docRef = _userLevelsCollection(uid).doc(levelId);
+    final existingDoc = await docRef.get();
+    if (!existingDoc.exists || existingDoc.data() == null) {
+      return;
+    }
+
+    final levelData = existingDoc.data()!;
+    if (levelData['isLocked'] == true) {
+      throw StateError('Submitted levels are locked and cannot be deleted.');
+    }
+
+    final editorData =
+        Map<String, dynamic>.from(levelData['editorData'] ?? const {});
+    final storagePaths = <String>{
+      levelData['solutionPath'] as String? ?? '',
+      levelData['puzzlePath'] as String? ?? '',
+      levelData['puzzleThumbnailPath'] as String? ?? '',
+      editorData['sourceImagePath'] as String? ?? '',
+      'user-levels/$uid/$levelId/source.jpg',
+      'user-levels/$uid/$levelId/solution.webp',
+      'user-levels/$uid/$levelId/solution.svg',
+      'user-levels/$uid/$levelId/puzzle.webp',
+      'user-levels/$uid/$levelId/puzzle_thumb.webp',
+    }..removeWhere((path) => path.trim().isEmpty);
+
+    for (final storagePath in storagePaths) {
+      await _deleteStoragePathIfExists(storagePath);
+    }
+
+    await docRef.delete();
   }
 
   Future<String> saveWordLevel({

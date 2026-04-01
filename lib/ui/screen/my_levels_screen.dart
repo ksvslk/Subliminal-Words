@@ -31,6 +31,29 @@ class MyLevelsScreen extends StatelessWidget {
     return 'Could not submit this level for review right now. Please try again.';
   }
 
+  String _friendlyDeleteError(Object error) {
+    final message =
+        error.toString().replaceFirst('Exception: ', '').toLowerCase();
+    if (message.contains('signed in') ||
+        message.contains('permission') ||
+        message.contains('unauth') ||
+        message.contains('forbidden')) {
+      return 'Could not delete this draft right now. Please reopen Subliminal Words and try again.';
+    }
+    if (message.contains('locked')) {
+      return 'Submitted levels cannot be deleted.';
+    }
+    if (message.contains('network') ||
+        message.contains('connection') ||
+        message.contains('timed out') ||
+        message.contains('timeout') ||
+        message.contains('temporarily unavailable') ||
+        message.contains('service unavailable')) {
+      return 'Could not delete this draft right now. Check your connection and try again.';
+    }
+    return 'Could not delete this draft right now. Please try again.';
+  }
+
   Future<void> _openEditor(BuildContext context, {SWLevel? level}) async {
     if (level == null) {
       await openCreateLevelFlow(context);
@@ -63,6 +86,45 @@ class MyLevelsScreen extends StatelessWidget {
     } catch (error) {
       messenger.showSnackBar(
         SnackBar(content: Text(_friendlySubmitError(error))),
+      );
+    }
+  }
+
+  Future<void> _deleteLevel(BuildContext context, SWLevel level) async {
+    final shouldDelete = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Delete draft?'),
+            content: Text(
+              'Delete "${level.name.isEmpty ? 'Untitled Level' : level.name}" from My Levels?',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!shouldDelete || !context.mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<FirebaseService>().deleteMyLevel(level.documentId);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Draft deleted.')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(_friendlyDeleteError(error))),
       );
     }
   }
@@ -307,6 +369,13 @@ class MyLevelsScreen extends StatelessWidget {
                                 : () => _submitLevel(context, level),
                             icon: const Icon(Icons.publish_outlined),
                             label: const Text('Submit'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: level.isLocked
+                                ? null
+                                : () => _deleteLevel(context, level),
+                            icon: const Icon(Icons.delete_outline_rounded),
+                            label: const Text('Delete'),
                           ),
                         ],
                       ),

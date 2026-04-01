@@ -128,15 +128,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   bool _isProcessingFaceSourceImage = false;
   bool _isGeneratingFaceSketch = false;
   bool _isGeneratingAfterManipulate = false;
-  bool _isGeneratingFaceSketchFastPreview = false;
-  bool _hasPendingFaceSketchFastPreview = false;
   bool _isFaceTransformInteractionLocked = false;
   double _generationDifficulty = 1.5;
   String _puzzleGenerationStatus = '';
   Uint8List? _generatedPuzzleImageBytes;
   Uint8List? _faceSourceImageBytes;
   Uint8List? _faceSketchImageBytes;
-  Uint8List? _faceSketchFastPreviewBytes;
   Size? _faceSourceImageSize;
   _StagePreviewMode _stagePreviewMode = _StagePreviewMode.solution;
   bool _hasPuzzleInvalidatedByEdit = false;
@@ -146,7 +143,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   int _puzzleInputRevision = 0;
   int _activeGenerationToken = 0;
   int _faceSketchRequestId = 0;
-  int _faceSketchFastPreviewRequestId = 0;
   String? _currentLevelId;
   late String _editorMode;
   late FaceSketchSettings _faceSketchSettings;
@@ -466,14 +462,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     _scheduleFaceSketchGeneration();
   }
 
-  void _updateFaceSketchSettingsLive(FaceSketchSettings settings) {
-    if (_isLocked) {
-      return;
-    }
-    setState(() => _faceSketchSettings = settings);
-    _scheduleFaceSketchFastPreview();
-  }
-
   void _updateFaceSourceTransform(FaceSourceTransform transform) {
     if (_isLocked || _faceSourceImageBytes == null) {
       return;
@@ -557,7 +545,13 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   void _finishFaceSourceTransform() {
-    // Transform is driven natively by UI layout, no generation needed on release.
+    if (_isLocked || _faceSourceImageBytes == null) {
+      return;
+    }
+
+    _invalidatePuzzlePreview();
+    setState(() => _isGeneratingAfterManipulate = true);
+    _scheduleFaceSketchGeneration(immediate: true);
   }
 
   void _scheduleFaceSketchGeneration({bool immediate = false}) {
@@ -616,52 +610,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     }
   }
 
-  void _scheduleFaceSketchFastPreview() {
-    if (_isGeneratingFaceSketchFastPreview) {
-      _hasPendingFaceSketchFastPreview = true;
-      return;
-    }
-    unawaited(_generateFaceSketchFastPreview());
-  }
-
-  Future<void> _generateFaceSketchFastPreview() async {
-    _isGeneratingFaceSketchFastPreview = true;
-    _hasPendingFaceSketchFastPreview = false;
-
-    try {
-      final sourceBytes = _faceSourceImageBytes;
-      if (sourceBytes == null) {
-        return;
-      }
-
-      final requestId = ++_faceSketchFastPreviewRequestId;
-      final sketchPngBytes = await generateFaceSketchPng(
-        sourceBytes: sourceBytes,
-        settings: _faceSketchSettings,
-        transform: _faceSourceTransform,
-        renderSize: 256,
-      );
-      final sketchBytes = await compressFaceSketchWebp(sketchPngBytes);
-      
-      if (!mounted ||
-          requestId != _faceSketchFastPreviewRequestId ||
-          (_faceSketchImageBytes != null && _faceSketchRequestId > requestId)) {
-        return;
-      }
-
-      setState(() {
-        _faceSketchFastPreviewBytes = sketchBytes;
-      });
-    } catch (_) {
-      // Ignore fast preview errors
-    } finally {
-      _isGeneratingFaceSketchFastPreview = false;
-      if (_hasPendingFaceSketchFastPreview) {
-        _scheduleFaceSketchFastPreview();
-      }
-    }
-  }
-
   Future<Uint8List?> _loadStorageBytes(String storagePath) async {
     if (storagePath.isEmpty) {
       return null;
@@ -712,9 +660,17 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           : await _loadStorageBytes(sourceImagePath);
       final sourceSize =
           sourceBytes == null ? null : await _decodeImageSize(sourceBytes);
-      final sketchBytes = initialLevel.solutionPath.isEmpty
-          ? null
-          : await _loadStorageBytes(initialLevel.solutionPath);
+      Uint8List? sketchBytes;
+      if (sourceBytes != null) {
+        final regeneratedSketchPng = await generateFaceSketchPng(
+          sourceBytes: sourceBytes,
+          settings: _faceSketchSettings,
+          transform: _faceSourceTransform,
+        );
+        sketchBytes = await compressFaceSketchWebp(regeneratedSketchPng);
+      } else if (initialLevel.solutionPath.isNotEmpty) {
+        sketchBytes = await _loadStorageBytes(initialLevel.solutionPath);
+      }
 
       if (!mounted) {
         return;
@@ -916,7 +872,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           : _editorMode == UserLevelEditorMode.photoSketch
               ? await compressGenerationImageWebp(
                   await generateHighFidelityFaceSketchSquare(
-                    sourceBytes: _faceSketchImageBytes!,
+                    sourceBytes: _faceSourceImageBytes!,
                     settings: _faceSketchSettings,
                     transform: _faceSourceTransform,
                   ),
@@ -1165,14 +1121,15 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           'generationPrompt': _generationPromptController.text.trim(),
           'generationDifficulty': _generationDifficulty,
         };
-        final solutionImageBytes = _faceSketchImageBytes ??
-            await compressFaceSketchWebp(
-              await generateFaceSketchPng(
-                sourceBytes: _faceSourceImageBytes!,
-                settings: _faceSketchSettings,
-                transform: _faceSourceTransform,
-              ),
-            );
+        final solutionImageBytes = submitAfterSave
+            ? await compressFaceSketchWebp(
+                await generateFaceSketchPng(
+                  sourceBytes: _faceSourceImageBytes!,
+                  settings: _faceSketchSettings,
+                  transform: _faceSourceTransform,
+                ),
+              )
+            : null;
 
         levelId = await firebaseService.savePhotoSketchLevel(
           levelId: _currentLevelId,
@@ -1180,9 +1137,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           answer: _answerController.text,
           factText: _factController.text,
           sourceImageBytes: _faceSourceImageBytes!,
-          solutionImageBytes: solutionImageBytes,
+          solutionImageBytes: submitAfterSave ? solutionImageBytes : null,
           puzzleImageBytes: _generatedPuzzleImageBytes,
           allowReuseExistingPuzzle: !_hasPuzzleInvalidatedByEdit,
+          persistSolutionAsset: submitAfterSave,
           editorData: editorData,
         );
       } else {
@@ -1515,8 +1473,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                           ? _FaceEditorSection(
                               sourceImageBytes: _faceSourceImageBytes,
                               sourceImageSize: _faceSourceImageSize,
-                              sketchImageBytes: _faceSketchFastPreviewBytes ??
-                                  _faceSketchImageBytes,
+                              sketchImageBytes: _faceSketchImageBytes,
                               sourceTransform: _faceSourceTransform,
                               solutionController: _answerController,
                               solutionTextListenable: _answerTextNotifier,
@@ -1563,8 +1520,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                               onGenerationDifficultyChanged: (value) =>
                                   setState(() => _generationDifficulty = value),
                               onSettingsChanged: _updateFaceSketchSettings,
-                              onLiveSettingsChanged:
-                                  _updateFaceSketchSettingsLive,
+                              onLiveSettingsChanged: null,
                             )
                           : _CanvasEditorSection(
                               controller: _drawingController,
@@ -1797,49 +1753,15 @@ class _FaceEditorSection extends StatelessWidget {
                   foregroundColor: colorScheme.onSurfaceVariant,
                   solutionBackdrop: sketchImageBytes == null
                       ? null
-                      : LayoutBuilder(
-                          builder: (context, constraints) {
-                            final stageSize = Size(
-                              constraints.maxWidth,
-                              constraints.maxHeight,
-                            );
-                            final sourceSize = sourceImageSize ?? const Size(1024, 1024);
-                            final coverScale = math.max(
-                              stageSize.width / sourceSize.width,
-                              stageSize.height / sourceSize.height,
-                            );
-                            final effectiveScale = coverScale * sourceTransform.scale;
-                            final drawWidth = sourceSize.width * effectiveScale;
-                            final drawHeight = sourceSize.height * effectiveScale;
-                            final center = Offset(
-                              (stageSize.width / 2) + (sourceTransform.offsetX * stageSize.width),
-                              (stageSize.height / 2) + (sourceTransform.offsetY * stageSize.height),
-                            );
-
-                            return IgnorePointer(
-                              child: Opacity(
-                                opacity: 0.14,
-                                child: Stack(
-                                  children: <Widget>[
-                                    Positioned(
-                                      left: center.dx - (drawWidth / 2),
-                                      top: center.dy - (drawHeight / 2),
-                                      width: drawWidth,
-                                      height: drawHeight,
-                                      child: Transform.rotate(
-                                        angle: sourceTransform.rotation,
-                                        child: Image.memory(
-                                          sketchImageBytes!,
-                                          fit: BoxFit.fill,
-                                          gaplessPlayback: true,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
+                      : IgnorePointer(
+                          child: Opacity(
+                            opacity: 0.14,
+                            child: Image.memory(
+                              sketchImageBytes!,
+                              fit: BoxFit.cover,
+                              gaplessPlayback: true,
+                            ),
+                          ),
                         ),
                 ),
         ),
@@ -2728,6 +2650,27 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
   Offset _gestureStartFocalPoint = Offset.zero;
   int _activePointers = 0;
 
+  bool get _isInteracting =>
+      _gestureStartTransform != null || _activePointers > 0;
+
+  static const double _minFaceScale = 1.0;
+  static const double _maxFaceScale = 12.0;
+
+  FaceSourceTransform _clampDisplayTransform(
+    FaceSourceTransform transform,
+    Size stageSize,
+  ) {
+    final sourceSize = widget.sourceImageSize ?? const Size(1024, 1024);
+    return clampFaceTransformToCoverSquare(
+      transform: transform,
+      sourceWidth: sourceSize.width,
+      sourceHeight: sourceSize.height,
+      canvasSize: math.min(stageSize.width, stageSize.height),
+      minScale: _minFaceScale,
+      maxScale: _maxFaceScale,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2765,17 +2708,29 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
       return;
     }
 
+    final sourceSize = widget.sourceImageSize ?? const Size(1024, 1024);
+    final nextRotation = startTransform.rotation + details.rotation;
+    final unclampedTransform = startTransform.copyWith(
+      offsetX: startTransform.offsetX +
+          ((details.localFocalPoint.dx - _gestureStartFocalPoint.dx) /
+              size.width),
+      offsetY: startTransform.offsetY +
+          ((details.localFocalPoint.dy - _gestureStartFocalPoint.dy) /
+              size.height),
+      scale: startTransform.scale * details.scale,
+      rotation: nextRotation,
+    );
+    final clampedTransform = clampFaceTransformToCoverSquare(
+      transform: unclampedTransform,
+      sourceWidth: sourceSize.width,
+      sourceHeight: sourceSize.height,
+      canvasSize: math.min(size.width, size.height),
+      minScale: _minFaceScale,
+      maxScale: _maxFaceScale,
+    );
+
     setState(() {
-      _displayTransform = startTransform.copyWith(
-        offsetX: startTransform.offsetX +
-            ((details.localFocalPoint.dx - _gestureStartFocalPoint.dx) /
-                size.width),
-        offsetY: startTransform.offsetY +
-            ((details.localFocalPoint.dy - _gestureStartFocalPoint.dy) /
-                size.height),
-        scale: (startTransform.scale * details.scale).clamp(0.01, 100.0),
-        rotation: startTransform.rotation + details.rotation,
-      );
+      _displayTransform = clampedTransform;
     });
   }
 
@@ -2843,22 +2798,25 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                   !widget.isLoading &&
                   !widget.isGeneratingSketch;
 
-              final showSourceImage =
-                  hasSourceImage && widget.sketchImageBytes == null;
-              final sourceSize =
-                  widget.sourceImageSize ?? const Size(1024, 1024);
+              final showSourceImage = hasSourceImage &&
+                  (widget.sketchImageBytes == null || _isInteracting);
+              final sourceSize = widget.sourceImageSize ?? const Size(1024, 1024);
+              final clampedDisplayTransform = _clampDisplayTransform(
+                _displayTransform,
+                stageSize,
+              );
               final coverScale = math.max(
                 stageSize.width / sourceSize.width,
                 stageSize.height / sourceSize.height,
               );
-              final effectiveScale = coverScale * _displayTransform.scale;
+              final effectiveScale = coverScale * clampedDisplayTransform.scale;
               final drawWidth = sourceSize.width * effectiveScale;
               final drawHeight = sourceSize.height * effectiveScale;
               final center = Offset(
                 (stageSize.width / 2) +
-                    (_displayTransform.offsetX * stageSize.width),
+                    (clampedDisplayTransform.offsetX * stageSize.width),
                 (stageSize.height / 2) +
-                    (_displayTransform.offsetY * stageSize.height),
+                    (clampedDisplayTransform.offsetY * stageSize.height),
               );
 
               return Listener(
@@ -2887,13 +2845,13 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                         child: AnimatedSwitcher(
                           duration: const Duration(milliseconds: 400),
                           switchInCurve: Curves.easeOutCubic,
-                          child: showSourceImage
-                              ? Transform.rotate(
-                                  key: const ValueKey('source_image'),
-                                  angle: _displayTransform.rotation,
-                                  child: Image.memory(
-                                    widget.sourceImageBytes!,
-                                    fit: BoxFit.fill,
+                              child: showSourceImage
+                                  ? Transform.rotate(
+                                      key: const ValueKey('source_image'),
+                                      angle: clampedDisplayTransform.rotation,
+                                      child: Image.memory(
+                                        widget.sourceImageBytes!,
+                                        fit: BoxFit.fill,
                                     gaplessPlayback: true,
                                     filterQuality: FilterQuality.high,
                                   ),
@@ -2901,52 +2859,105 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                               : const SizedBox.shrink(key: ValueKey('empty_source')),
                         ),
                       ),
-                      Positioned(
-                        left: center.dx - (drawWidth / 2),
-                        top: center.dy - (drawHeight / 2),
-                        width: drawWidth,
-                        height: drawHeight,
-                        child: IgnorePointer(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 350),
-                            switchInCurve: Curves.easeOutCubic,
-                            child: widget.sketchImageBytes != null
-                                ? Transform.rotate(
-                                    angle: _displayTransform.rotation,
-                                    child: Image.memory(
+                      if (!_isInteracting)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 350),
+                              switchInCurve: Curves.easeOutCubic,
+                              child: widget.sketchImageBytes != null
+                                  ? Image.memory(
                                       widget.sketchImageBytes!,
-                                      key: ValueKey(widget.sketchImageBytes.hashCode),
-                                      fit: BoxFit.fill,
+                                      key: ValueKey(
+                                        widget.sketchImageBytes.hashCode,
+                                      ),
+                                      fit: BoxFit.cover,
                                       gaplessPlayback: true,
+                                    )
+                                  : const SizedBox.shrink(
+                                      key: ValueKey('empty_sketch'),
                                     ),
-                                  )
-                                : const SizedBox.shrink(key: ValueKey('empty_sketch')),
+                            ),
                           ),
                         ),
-                      ),
                       if (showUploadTarget)
                         _FaceUploadStagePlaceholder(
                           borderColor: widget.borderColor,
                           foregroundColor: widget.foregroundColor,
                           backgroundColor: widget.backgroundColor,
                         ),
-                      if (widget.isLoading ||
-                          widget.isGeneratingTransform ||
-                          widget.isGeneratingSketch)
+                      if ((widget.isLoading ||
+                              widget.isGeneratingTransform ||
+                              widget.isGeneratingSketch) &&
+                          !showUploadTarget)
                         Positioned(
-                          left: -2,
-                          top: -2,
-                          right: -2,
-                          bottom: -2,
+                          top: 14,
+                          left: 14,
+                          right: 14,
                           child: IgnorePointer(
-                          child: Shimmer.fromColors(
-                              baseColor: widget.foregroundColor.withValues(
-                                alpha: 0.1,
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .inverseSurface
+                                      .withValues(alpha: 0.94),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outline
+                                        .withValues(alpha: 0.95),
+                                  ),
+                                  boxShadow: <BoxShadow>[
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.18),
+                                      blurRadius: 14,
+                                      offset: const Offset(0, 6),
+                                    ),
+                                  ],
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      SizedBox.square(
+                                        dimension: 16,
+                                        child:
+                                            CircularProgressIndicator.adaptive(
+                                          strokeWidth: 2.2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                            Theme.of(context)
+                                                .colorScheme
+                                                .onInverseSurface,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        widget.isLoading
+                                            ? 'Loading face...'
+                                            : 'Updating sketch...',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelMedium
+                                            ?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onInverseSurface,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              highlightColor: widget.foregroundColor.withValues(
-                                alpha: 0.35,
-                              ),
-                              child: Container(color: Colors.white),
                             ),
                           ),
                         ),

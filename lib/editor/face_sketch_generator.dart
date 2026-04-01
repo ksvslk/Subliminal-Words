@@ -350,6 +350,66 @@ Uint8List _generateFaceSketchPngIsolate(Map<String, dynamic> payload) {
   return Uint8List.fromList(img.encodePng(output));
 }
 
+FaceSourceTransform clampFaceTransformToCoverSquare({
+  required FaceSourceTransform transform,
+  required double sourceWidth,
+  required double sourceHeight,
+  required double canvasSize,
+  double minScale = 1.0,
+  double maxScale = 12.0,
+}) {
+  final clampedRotation = transform.rotation;
+  final minimumScale = _minimumUserScaleToCoverSquare(
+    sourceWidth: sourceWidth,
+    sourceHeight: sourceHeight,
+    canvasSize: canvasSize,
+    rotation: clampedRotation,
+  );
+  final clampedScale = transform.scale
+      .clamp(math.max(minScale, minimumScale), maxScale)
+      .toDouble();
+  final coverScale = math.max(canvasSize / sourceWidth, canvasSize / sourceHeight);
+  final effectiveScale = coverScale * clampedScale;
+  final halfWidth = (sourceWidth * effectiveScale) / 2;
+  final halfHeight = (sourceHeight * effectiveScale) / 2;
+  final cosTheta = math.cos(clampedRotation);
+  final sinTheta = math.sin(clampedRotation);
+
+  var minA = double.negativeInfinity;
+  var maxA = double.infinity;
+  var minB = double.negativeInfinity;
+  var maxB = double.infinity;
+
+  for (final corner in <(double, double)>[
+    (0, 0),
+    (canvasSize, 0),
+    (0, canvasSize),
+    (canvasSize, canvasSize),
+  ]) {
+    final cornerA = (cosTheta * corner.$1) + (sinTheta * corner.$2);
+    final cornerB = (sinTheta * corner.$1) - (cosTheta * corner.$2);
+    minA = math.max(minA, cornerA - halfWidth);
+    maxA = math.min(maxA, cornerA + halfWidth);
+    minB = math.max(minB, cornerB - halfHeight);
+    maxB = math.min(maxB, cornerB + halfHeight);
+  }
+
+  final desiredCenterX = (canvasSize / 2) + (transform.offsetX * canvasSize);
+  final desiredCenterY = (canvasSize / 2) + (transform.offsetY * canvasSize);
+  final desiredA = (cosTheta * desiredCenterX) + (sinTheta * desiredCenterY);
+  final desiredB = (sinTheta * desiredCenterX) - (cosTheta * desiredCenterY);
+  final clampedA = desiredA.clamp(minA, maxA).toDouble();
+  final clampedB = desiredB.clamp(minB, maxB).toDouble();
+  final clampedCenterX = (cosTheta * clampedA) + (sinTheta * clampedB);
+  final clampedCenterY = (sinTheta * clampedA) - (cosTheta * clampedB);
+
+  return transform.copyWith(
+    scale: clampedScale,
+    offsetX: (clampedCenterX - (canvasSize / 2)) / canvasSize,
+    offsetY: (clampedCenterY - (canvasSize / 2)) / canvasSize,
+  );
+}
+
 img.Image _renderFaceSourceToSquare(
   img.Image source, {
   required FaceSourceTransform transform,
@@ -358,15 +418,21 @@ img.Image _renderFaceSourceToSquare(
   final output = img.Image(width: canvasSize, height: canvasSize);
   img.fill(output, color: img.ColorRgb8(255, 255, 255));
 
+  final clampedTransform = clampFaceTransformToCoverSquare(
+    transform: transform,
+    sourceWidth: source.width.toDouble(),
+    sourceHeight: source.height.toDouble(),
+    canvasSize: canvasSize.toDouble(),
+  );
   final coverScale = math.max(
     canvasSize / source.width,
     canvasSize / source.height,
   );
-  final effectiveScale = coverScale * transform.scale.clamp(0.35, 12.0);
-  final centerX = (canvasSize / 2) + (transform.offsetX * canvasSize);
-  final centerY = (canvasSize / 2) + (transform.offsetY * canvasSize);
-  final cosTheta = math.cos(transform.rotation);
-  final sinTheta = math.sin(transform.rotation);
+  final effectiveScale = coverScale * clampedTransform.scale;
+  final centerX = (canvasSize / 2) + (clampedTransform.offsetX * canvasSize);
+  final centerY = (canvasSize / 2) + (clampedTransform.offsetY * canvasSize);
+  final cosTheta = math.cos(clampedTransform.rotation);
+  final sinTheta = math.sin(clampedTransform.rotation);
   final halfWidth = source.width / 2.0;
   final halfHeight = source.height / 2.0;
 
@@ -400,6 +466,27 @@ img.Image _renderFaceSourceToSquare(
   }
 
   return output;
+}
+
+double _minimumUserScaleToCoverSquare({
+  required double sourceWidth,
+  required double sourceHeight,
+  required double canvasSize,
+  required double rotation,
+}) {
+  final coverScale = math.max(canvasSize / sourceWidth, canvasSize / sourceHeight);
+  final cosTheta = math.cos(rotation).abs();
+  final sinTheta = math.sin(rotation).abs();
+
+  final rotatedWidth = (sourceWidth * cosTheta) + (sourceHeight * sinTheta);
+  final rotatedHeight = (sourceWidth * sinTheta) + (sourceHeight * cosTheta);
+
+  final requiredScale = math.max(
+    canvasSize / rotatedWidth,
+    canvasSize / rotatedHeight,
+  );
+
+  return (requiredScale / coverScale).clamp(1.0, 12.0);
 }
 
 img.Image _resizeLongestSide(
