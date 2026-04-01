@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -282,16 +283,46 @@ class FirebaseService {
   }
 
   Stream<List<SWLevel>> getMyLevelsStream() {
-    final uid = currentUserId;
-    if (uid == null || uid.isEmpty) {
-      return Stream<List<SWLevel>>.value(const <SWLevel>[]);
-    }
+    return Stream<List<SWLevel>>.multi((controller) {
+      StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? levelsSub;
 
-    return _userLevelsCollection(uid).orderBy('nr').snapshots().map(
-        (snapshot) => snapshot.docs
-            .map(
-                (doc) => SWLevel.fromFirestore(doc.id, 'my-levels', doc.data()))
-            .toList());
+      void bindUser(User? user) {
+        levelsSub?.cancel();
+        final uid = user?.uid;
+        if (uid == null || uid.isEmpty) {
+          controller.add(const <SWLevel>[]);
+          return;
+        }
+
+        levelsSub = _userLevelsCollection(uid).snapshots().listen((snapshot) {
+          final levels = snapshot.docs
+              .map(
+                (doc) => SWLevel.fromFirestore(doc.id, 'my-levels', doc.data()),
+              )
+              .toList();
+
+          levels.sort((a, b) {
+            final modifiedCompare = b.modifiedAt.compareTo(a.modifiedAt);
+            if (modifiedCompare != 0) {
+              return modifiedCompare;
+            }
+            return b.nr.compareTo(a.nr);
+          });
+
+          _log.info('Loaded ${levels.length} creator-owned levels for uid=$uid');
+          controller.add(levels);
+        }, onError: controller.addError);
+      }
+
+      bindUser(FirebaseAuth.instance.currentUser);
+      final authSub =
+          FirebaseAuth.instance.authStateChanges().listen(bindUser, onError: controller.addError);
+
+      controller.onCancel = () async {
+        await levelsSub?.cancel();
+        await authSub.cancel();
+      };
+    });
   }
 
   Future<SWLevel?> getMyLevelByNumber(int nr) async {

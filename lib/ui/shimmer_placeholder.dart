@@ -18,9 +18,9 @@ class ShimmerLoadingPlaceholder extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Shimmer.fromColors(
-      baseColor: colorScheme.surfaceContainer,
-      highlightColor: colorScheme.surface,
-      direction: ShimmerDirection.btt,
+      baseColor: colorScheme.surface,
+      highlightColor: colorScheme.surfaceContainerHighest,
+      direction: ShimmerDirection.ltr,
       child: Container(
         width: width,
         height: height,

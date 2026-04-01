@@ -1,3 +1,4 @@
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
@@ -9,6 +10,26 @@ import 'package:provider/provider.dart';
 
 class MyLevelsScreen extends StatelessWidget {
   const MyLevelsScreen({super.key});
+
+  String _friendlySubmitError(Object error) {
+    final message =
+        error.toString().replaceFirst('Exception: ', '').toLowerCase();
+    if (message.contains('signed in') ||
+        message.contains('permission') ||
+        message.contains('unauth') ||
+        message.contains('forbidden')) {
+      return 'Could not submit this level right now. Please reopen Subliminal Words and try again.';
+    }
+    if (message.contains('network') ||
+        message.contains('connection') ||
+        message.contains('timed out') ||
+        message.contains('timeout') ||
+        message.contains('temporarily unavailable') ||
+        message.contains('service unavailable')) {
+      return 'Could not submit this level right now. Check your connection and try again.';
+    }
+    return 'Could not submit this level for review right now. Please try again.';
+  }
 
   Future<void> _openEditor(BuildContext context, {SWLevel? level}) async {
     if (level == null) {
@@ -41,8 +62,7 @@ class MyLevelsScreen extends StatelessWidget {
       );
     } catch (error) {
       messenger.showSnackBar(
-        SnackBar(
-            content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(content: Text(_friendlySubmitError(error))),
       );
     }
   }
@@ -51,13 +71,24 @@ class MyLevelsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final firebaseService = context.read<FirebaseService>();
     final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Levels')),
+      appBar: AppBar(
+        title: const AutoSizeText(
+          'My Levels',
+          maxLines: 1,
+          minFontSize: 14,
+        ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openEditor(context),
         icon: const Icon(Icons.draw_outlined),
-        label: const Text('Create'),
+        label: const AutoSizeText(
+          'Create',
+          maxLines: 1,
+          minFontSize: 10,
+        ),
       ),
       body: StreamBuilder<List<SWLevel>>(
         stream: firebaseService.getMyLevelsStream(),
@@ -66,29 +97,102 @@ class MyLevelsScreen extends StatelessWidget {
 
           if (snapshot.connectionState == ConnectionState.waiting &&
               levels.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      CircularProgressIndicator(
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Loading your levels...',
+                        textAlign: TextAlign.center,
+                        style: textTheme.titleMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+
+          if (snapshot.hasError && levels.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 320),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Icon(
+                        Icons.cloud_off_outlined,
+                        size: 48,
+                        color: colorScheme.onSurface,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Could not load your levels right now.',
+                        textAlign: TextAlign.center,
+                        style: textTheme.titleMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Check your connection and reopen My Levels.',
+                        textAlign: TextAlign.center,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
           }
 
           if (levels.isEmpty) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    const Icon(Icons.auto_awesome_motion_outlined, size: 48),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'You do not have any custom levels yet.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: () => _openEditor(context),
-                      icon: const Icon(Icons.draw_outlined),
-                      label: const Text('Create Your First Level'),
-                    ),
-                  ],
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 320),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Icon(
+                        Icons.auto_awesome_motion_outlined,
+                        size: 48,
+                        color: colorScheme.onSurface,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'You do not have any custom levels yet.',
+                        textAlign: TextAlign.center,
+                        style: textTheme.titleMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: () => _openEditor(context),
+                        icon: const Icon(Icons.draw_outlined),
+                        label: const Text('Create Your First Level'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -106,7 +210,7 @@ class MyLevelsScreen extends StatelessWidget {
 
               return Card(
                 elevation: 0,
-                color: colorScheme.surfaceContainerLow,
+                color: colorScheme.surfaceContainerHigh,
                 surfaceTintColor: Colors.transparent,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
@@ -118,79 +222,91 @@ class MyLevelsScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           Expanded(
                             child: Text(
-                              level.name,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w800),
+                              level.name.isEmpty ? 'Untitled Level' : level.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: textTheme.titleMedium?.copyWith(
+                                color: colorScheme.onSurface,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
-                          Chip(
-                            label: Text(statusLabel),
-                            backgroundColor: colorScheme.secondaryContainer,
-                            labelStyle: TextStyle(
-                              color: colorScheme.onSecondaryContainer,
-                              fontWeight: FontWeight.w700,
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
                             ),
-                            visualDensity: VisualDensity.compact,
+                            decoration: BoxDecoration(
+                              color: colorScheme.secondaryContainer,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              statusLabel,
+                              style: textTheme.labelMedium?.copyWith(
+                                color: colorScheme.onSecondaryContainer,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 8),
                       Text(
                         'Type: ${UserLevelEditorMode.labelFor(level.editorMode)}',
-                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
-                      if (level.creatorName.isNotEmpty)
+                      if (level.creatorName.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 4),
                         Text(
                           'Level by ${level.creatorName}',
-                          style: TextStyle(color: colorScheme.onSurfaceVariant),
-                        ),
-                      if (!hasPuzzleImage) ...<Widget>[
-                        const SizedBox(height: 6),
-                        Text(
-                          'Add the real puzzle image before playing or submitting.',
-                          style: TextStyle(color: colorScheme.onSurfaceVariant),
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
-                      const SizedBox(height: 12),
-                      Row(
+                      if (!hasPuzzleImage) ...<Widget>[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Add the real puzzle image before playing or submitting.',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
                         children: <Widget>[
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: hasPuzzleImage
-                                  ? () => _playLevel(context, level)
-                                  : null,
-                              icon: const Icon(Icons.play_arrow_outlined),
-                              label: const Text('Play'),
-                            ),
+                          OutlinedButton.icon(
+                            onPressed:
+                                hasPuzzleImage ? () => _playLevel(context, level) : null,
+                            icon: const Icon(Icons.play_arrow_outlined),
+                            label: const Text('Play'),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: level.isLocked
-                                  ? null
-                                  : () => _openEditor(context, level: level),
-                              icon: const Icon(Icons.edit_outlined),
-                              label: const Text('Edit'),
-                            ),
+                          OutlinedButton.icon(
+                            onPressed: level.isLocked
+                                ? null
+                                : () => _openEditor(context, level: level),
+                            icon: const Icon(Icons.edit_outlined),
+                            label: const Text('Edit'),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: !hasPuzzleImage ||
-                                      level.isLocked ||
-                                      level.submissionStatus ==
-                                          UserLevelSubmissionStatus
-                                              .pendingReview
-                                  ? null
-                                  : () => _submitLevel(context, level),
-                              icon: const Icon(Icons.publish_outlined),
-                              label: const Text('Submit'),
-                            ),
+                          FilledButton.icon(
+                            onPressed: !hasPuzzleImage ||
+                                    level.isLocked ||
+                                    level.submissionStatus ==
+                                        UserLevelSubmissionStatus.pendingReview
+                                ? null
+                                : () => _submitLevel(context, level),
+                            icon: const Icon(Icons.publish_outlined),
+                            label: const Text('Submit'),
                           ),
                         ],
                       ),

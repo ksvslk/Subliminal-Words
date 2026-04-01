@@ -145,6 +145,7 @@ Future<Uint8List> generateFaceSketchPng({
   required Uint8List sourceBytes,
   required FaceSketchSettings settings,
   FaceSourceTransform transform = const FaceSourceTransform(),
+  int renderSize = _faceRenderSize,
 }) {
   return compute(
     _generateFaceSketchPngIsolate,
@@ -152,6 +153,7 @@ Future<Uint8List> generateFaceSketchPng({
       'sourceBytes': sourceBytes,
       'settings': settings.toJson(),
       'transform': transform.toJson(),
+      'renderSize': renderSize,
     },
   );
 }
@@ -163,6 +165,85 @@ Future<Uint8List> compressFaceSketchWebp(Uint8List sketchPngBytes) async {
     dimension: _faceRenderSize,
     failureLabel: 'face sketch',
   );
+}
+
+Future<Uint8List> generateHighFidelityFaceSketchSquare({
+  required Uint8List sourceBytes,
+  required FaceSketchSettings settings,
+  required FaceSourceTransform transform,
+}) async {
+  return compute(
+    _generateHighFidelityFaceSketchSquareIsolate,
+    <String, dynamic>{
+      'sourceBytes': sourceBytes,
+      'settings': settings.toJson(),
+      'transform': transform.toJson(),
+    },
+  );
+}
+
+Uint8List _generateHighFidelityFaceSketchSquareIsolate(Map<String, dynamic> payload) {
+  final sourceBytes = payload['sourceBytes'] as Uint8List;
+  final settings = FaceSketchSettings.fromJson(
+    payload['settings'] as Map<dynamic, dynamic>?,
+  );
+  final transform = FaceSourceTransform.fromJson(
+    payload['transform'] as Map<dynamic, dynamic>?,
+  );
+
+  final decoded = img.decodeImage(sourceBytes);
+  if (decoded == null) {
+    throw StateError('Invalid source image for high-fidelity puzzle generation.');
+  }
+
+  final baked = img.bakeOrientation(decoded);
+  final base = _renderFaceSourceToSquare(
+    baked,
+    transform: transform,
+    canvasSize: _faceRenderSize,
+  );
+  
+  img.grayscale(base);
+  img.contrast(base, contrast: settings.contrast * 100);
+
+  final blurred = img.Image.from(base, noAnimation: true);
+  img.invert(blurred);
+  img.gaussianBlur(blurred, radius: settings.blurAmount.round().clamp(1, 16));
+
+  final edges = img.Image.from(base, noAnimation: true);
+  img.gaussianBlur(edges, radius: settings.noiseReduction.round().clamp(0, 8));
+  img.sobel(edges);
+
+  final output = img.Image.from(base, noAnimation: true);
+  final detailMix = (settings.detailBoost / 3).clamp(0.0, 1.0);
+  final effectiveThreshold = (settings.edgeThreshold - 16).clamp(0, 255);
+
+  for (var y = 0; y < output.height; y += 1) {
+    for (var x = 0; x < output.width; x += 1) {
+      final baseValue = base.getPixel(x, y).r.toDouble();
+      final blurValue = blurred.getPixel(x, y).r.toDouble();
+      final edgeValue = edges.getPixel(x, y).r.toDouble();
+
+      final dodged = blurValue >= 255 ? 255.0 : (baseValue * 255.0) / (255.0 - blurValue);
+      var lineValue = (dodged * (1 - (detailMix * 0.42))) + (baseValue * (detailMix * 0.42));
+
+      if (edgeValue > effectiveThreshold) {
+        final edgeConfidence = (edgeValue - effectiveThreshold) /
+            (255 - effectiveThreshold == 0 ? 1 : 255 - effectiveThreshold);
+        lineValue -= edgeConfidence.clamp(0.0, 1.0) *
+            255.0 *
+            settings.edgeStrength.clamp(0.0, 2.5);
+      }
+
+      final clamped = lineValue.clamp(0.0, 255.0).round();
+      output.setPixelRgba(x, y, clamped, clamped, clamped, 255);
+    }
+  }
+
+  img.normalize(output, min: 0, max: 255);
+  img.luminanceThreshold(output, threshold: (settings.inkLevel / 255).clamp(0.0, 1.0));
+
+  return Uint8List.fromList(img.encodePng(output));
 }
 
 Uint8List _normalizeFaceSourceImageIsolate(Uint8List sourceBytes) {
@@ -201,6 +282,7 @@ Uint8List _generateFaceSketchPngIsolate(Map<String, dynamic> payload) {
   final transform = FaceSourceTransform.fromJson(
     payload['transform'] as Map<dynamic, dynamic>?,
   );
+  final renderSize = payload['renderSize'] as int? ?? _faceRenderSize;
 
   final decoded = img.decodeImage(sourceBytes);
   if (decoded == null) {
@@ -211,6 +293,7 @@ Uint8List _generateFaceSketchPngIsolate(Map<String, dynamic> payload) {
   final base = _renderFaceSourceToSquare(
     baked,
     transform: transform,
+    canvasSize: renderSize,
   );
   img.grayscale(base);
   img.contrast(base, contrast: settings.contrast * 100);
@@ -270,8 +353,8 @@ Uint8List _generateFaceSketchPngIsolate(Map<String, dynamic> payload) {
 img.Image _renderFaceSourceToSquare(
   img.Image source, {
   required FaceSourceTransform transform,
+  required int canvasSize,
 }) {
-  const canvasSize = _faceRenderSize;
   final output = img.Image(width: canvasSize, height: canvasSize);
   img.fill(output, color: img.ColorRgb8(255, 255, 255));
 
@@ -279,7 +362,7 @@ img.Image _renderFaceSourceToSquare(
     canvasSize / source.width,
     canvasSize / source.height,
   );
-  final effectiveScale = coverScale * transform.scale.clamp(0.25, 8.0);
+  final effectiveScale = coverScale * transform.scale.clamp(0.35, 12.0);
   final centerX = (canvasSize / 2) + (transform.offsetX * canvasSize);
   final centerY = (canvasSize / 2) + (transform.offsetY * canvasSize);
   final cosTheta = math.cos(transform.rotation);
