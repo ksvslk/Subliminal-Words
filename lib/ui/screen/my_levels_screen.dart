@@ -4,12 +4,17 @@ import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:operation_hermes/data/user_level_metadata.dart';
+import 'package:operation_hermes/ui/app_scaffold_messenger.dart';
 import 'package:operation_hermes/ui/create_level_flow.dart';
 import 'package:operation_hermes/ui/screen/create_level_screen.dart';
 import 'package:provider/provider.dart';
 
 class MyLevelsScreen extends StatelessWidget {
   const MyLevelsScreen({super.key});
+
+  void _showActionBlocked(BuildContext context, String message) {
+    showAppSnackBar(message);
+  }
 
   String _friendlySubmitError(Object error) {
     final message =
@@ -60,9 +65,15 @@ class MyLevelsScreen extends StatelessWidget {
       return;
     }
 
+    final latestLevel =
+        await context.read<FirebaseService>().getMyLevel(level.documentId);
+    if (!context.mounted) {
+      return;
+    }
+
     await Navigator.of(context).push(
       MaterialPageRoute<bool>(
-        builder: (_) => CreateLevelScreen(initialLevel: level),
+        builder: (_) => CreateLevelScreen(initialLevel: latestLevel ?? level),
       ),
     );
   }
@@ -75,18 +86,13 @@ class MyLevelsScreen extends StatelessWidget {
   }
 
   Future<void> _submitLevel(BuildContext context, SWLevel level) async {
-    final messenger = ScaffoldMessenger.of(context);
     try {
       await context
           .read<FirebaseService>()
           .submitUserLevelForReview(level.documentId);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Level submitted for review.')),
-      );
+      showAppSnackBar('Level submitted for review.');
     } catch (error) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(_friendlySubmitError(error))),
-      );
+      showAppSnackBar(_friendlySubmitError(error));
     }
   }
 
@@ -116,16 +122,11 @@ class MyLevelsScreen extends StatelessWidget {
       return;
     }
 
-    final messenger = ScaffoldMessenger.of(context);
     try {
       await context.read<FirebaseService>().deleteMyLevel(level.documentId);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Draft deleted.')),
-      );
+      showAppSnackBar('Draft deleted.');
     } catch (error) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(_friendlyDeleteError(error))),
-      );
+      showAppSnackBar(_friendlyDeleteError(error));
     }
   }
 
@@ -343,39 +344,57 @@ class MyLevelsScreen extends StatelessWidget {
                         ),
                       ],
                       const SizedBox(height: 14),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
+                      Row(
                         children: <Widget>[
-                          OutlinedButton.icon(
-                            onPressed:
-                                hasPuzzleImage ? () => _playLevel(context, level) : null,
-                            icon: const Icon(Icons.play_arrow_outlined),
-                            label: const Text('Play'),
+                          _LevelActionIconButton(
+                            tooltip: 'Play',
+                            icon: Icons.play_arrow_outlined,
+                            enabled: hasPuzzleImage,
+                            onPressed: () => _playLevel(context, level),
+                            onUnavailable: () => _showActionBlocked(
+                              context,
+                              'Generate a puzzle first before playing this level.',
+                            ),
                           ),
-                          OutlinedButton.icon(
-                            onPressed: level.isLocked
-                                ? null
-                                : () => _openEditor(context, level: level),
-                            icon: const Icon(Icons.edit_outlined),
-                            label: const Text('Edit'),
+                          const SizedBox(width: 8),
+                          _LevelActionIconButton(
+                            tooltip: 'Edit',
+                            icon: Icons.edit_outlined,
+                            enabled: !level.isLocked,
+                            onPressed: () => _openEditor(context, level: level),
+                            onUnavailable: () => _showActionBlocked(
+                              context,
+                              'Submitted levels are locked and can no longer be edited.',
+                            ),
                           ),
-                          FilledButton.icon(
-                            onPressed: !hasPuzzleImage ||
-                                    level.isLocked ||
-                                    level.submissionStatus ==
-                                        UserLevelSubmissionStatus.pendingReview
-                                ? null
-                                : () => _submitLevel(context, level),
-                            icon: const Icon(Icons.publish_outlined),
-                            label: const Text('Submit'),
+                          const SizedBox(width: 8),
+                          _LevelActionIconButton(
+                            tooltip: 'Submit for Review',
+                            icon: Icons.publish_outlined,
+                            enabled: hasPuzzleImage &&
+                                !level.isLocked &&
+                                level.submissionStatus !=
+                                    UserLevelSubmissionStatus.pendingReview,
+                            onPressed: () => _submitLevel(context, level),
+                            onUnavailable: () => _showActionBlocked(
+                              context,
+                              !hasPuzzleImage
+                                  ? 'Generate a puzzle first before submitting for review.'
+                                  : 'This level is already submitted and waiting for review.',
+                            ),
+                            isPrimary: true,
                           ),
-                          OutlinedButton.icon(
-                            onPressed: level.isLocked
-                                ? null
-                                : () => _deleteLevel(context, level),
-                            icon: const Icon(Icons.delete_outline_rounded),
-                            label: const Text('Delete'),
+                          const SizedBox(width: 8),
+                          _LevelActionIconButton(
+                            tooltip: 'Delete Draft',
+                            icon: Icons.delete_outline_rounded,
+                            enabled: !level.isLocked,
+                            onPressed: () => _deleteLevel(context, level),
+                            onUnavailable: () => _showActionBlocked(
+                              context,
+                              'Submitted levels cannot be deleted.',
+                            ),
+                            isDestructive: true,
                           ),
                         ],
                       ),
@@ -386,6 +405,74 @@ class MyLevelsScreen extends StatelessWidget {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _LevelActionIconButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onPressed;
+  final VoidCallback? onUnavailable;
+  final bool isPrimary;
+  final bool isDestructive;
+
+  const _LevelActionIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.enabled,
+    required this.onPressed,
+    this.onUnavailable,
+    this.isPrimary = false,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final backgroundColor = isPrimary
+        ? colorScheme.primaryContainer
+        : isDestructive
+            ? colorScheme.errorContainer.withValues(alpha: enabled ? 1 : 0.45)
+            : colorScheme.surfaceContainerHighest;
+    final foregroundColor = !enabled
+        ? colorScheme.onSurfaceVariant.withValues(alpha: 0.38)
+        : isPrimary
+            ? colorScheme.onPrimaryContainer
+            : isDestructive
+                ? colorScheme.onErrorContainer
+                : colorScheme.onSurface;
+    final borderColor = isPrimary
+        ? colorScheme.primary.withValues(alpha: 0.34)
+        : isDestructive
+            ? colorScheme.error.withValues(alpha: enabled ? 0.28 : 0.14)
+            : colorScheme.outlineVariant;
+
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 400),
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: tooltip,
+          child: Material(
+            color: backgroundColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: borderColor),
+            ),
+          child: InkWell(
+            onTap: enabled ? onPressed : onUnavailable,
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              width: 42,
+              height: 42,
+              child: Icon(icon, size: 20, color: foregroundColor),
+            ),
+          ),
+        ),
       ),
     );
   }

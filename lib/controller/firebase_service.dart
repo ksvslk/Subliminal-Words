@@ -60,8 +60,24 @@ class FirebaseService {
 
     try {
       await _storage.ref(storagePath).delete();
+      _urlCache.remove(storagePath);
     } catch (_) {
       // Missing or already-removed draft assets should not block cleanup.
+    }
+  }
+
+  Future<Uint8List?> getStorageBytes(
+    String storagePath, {
+    int maxSizeBytes = 8 * 1024 * 1024,
+  }) async {
+    if (storagePath.isEmpty) {
+      return null;
+    }
+
+    try {
+      return await _storage.ref(storagePath).getData(maxSizeBytes);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -926,22 +942,22 @@ class FirebaseService {
       },
     };
 
-    const maxWarmupRetries = 2;
-    const maxTotalWait = Duration(seconds: 95);
+    const maxWarmupRetries = 4;
+    const maxTotalWait = Duration(seconds: 150);
+    const warmupTimeoutMessage =
+        'Puzzle generation is taking longer than usual. Please try again in a moment.';
     final totalWait = Stopwatch()..start();
-    onStatusChanged?.call('Waking generator...');
+    onStatusChanged?.call('Preparing puzzle...');
 
     for (var generationAttempt = 0;
         generationAttempt <= maxWarmupRetries;
         generationAttempt += 1) {
       if (totalWait.elapsed >= maxTotalWait) {
-        throw StateError(
-          'The generator is taking longer than usual to start. Please try again in a moment.',
-        );
+        throw StateError(warmupTimeoutMessage);
       }
 
       if (generationAttempt > 0) {
-        onStatusChanged?.call('Generator is still warming up... trying again.');
+        onStatusChanged?.call('Still preparing puzzle...');
       }
 
       final startData = await _startRunpodGeneration(
@@ -956,9 +972,7 @@ class FirebaseService {
       var transientFailures = 0;
       for (var attempt = 0; attempt < 80; attempt += 1) {
         if (totalWait.elapsed >= maxTotalWait) {
-          throw StateError(
-            'The generator is taking longer than usual to start. Please try again in a moment.',
-          );
+          throw StateError(warmupTimeoutMessage);
         }
 
         await Future<void>.delayed(
@@ -981,8 +995,7 @@ class FirebaseService {
               error,
               stackTrace,
             );
-            onStatusChanged
-                ?.call('Loading generator... this can take a moment.');
+            onStatusChanged?.call('Still preparing puzzle...');
             continue;
           }
           rethrow;
@@ -1016,12 +1029,9 @@ class FirebaseService {
                 (statusData['retryAfterMs'] as num?)?.round() ?? 5000;
             if (totalWait.elapsed + Duration(milliseconds: retryAfterMs) >=
                 maxTotalWait) {
-              throw StateError(
-                'The generator is still warming up. Please try again in a moment.',
-              );
+              throw StateError(warmupTimeoutMessage);
             }
-            onStatusChanged
-                ?.call('Generator is still starting up... retrying.');
+            onStatusChanged?.call('Still preparing puzzle...');
             await Future<void>.delayed(Duration(milliseconds: retryAfterMs));
             break;
           }
@@ -1035,7 +1045,7 @@ class FirebaseService {
     }
 
     throw StateError(
-      'The generator is still warming up. Please try again in a moment.',
+      warmupTimeoutMessage,
     );
   }
 
@@ -1049,7 +1059,7 @@ class FirebaseService {
     for (var attempt = 0; attempt < 3; attempt += 1) {
       try {
         if (attempt > 0) {
-          onStatusChanged?.call('Trying the generator again...');
+          onStatusChanged?.call('Still preparing puzzle...');
         }
         return await _postRunpodProxy(
           '/api/generate-run',
@@ -1068,7 +1078,7 @@ class FirebaseService {
           error,
           stackTrace,
         );
-        onStatusChanged?.call('Waking the generator...');
+        onStatusChanged?.call('Preparing puzzle...');
         await Future<void>.delayed(Duration(seconds: 2 + attempt * 2));
       }
     }
@@ -1092,7 +1102,6 @@ class FirebaseService {
         message.contains('timeout') ||
         message.contains('rate limit') ||
         message.contains('too many requests') ||
-        message.contains('too large') ||
         message.contains('(408)') ||
         message.contains('(409)') ||
         message.contains('(429)') ||
@@ -1133,33 +1142,30 @@ class FirebaseService {
     switch (status.toUpperCase()) {
       case 'IN_QUEUE':
       case 'QUEUED':
-        if (elapsed >= const Duration(seconds: 35)) {
-          return 'Loading generator models... first run can take about a minute.';
+        if (elapsed >= const Duration(seconds: 55)) {
+          return 'Still preparing puzzle...';
         }
-        return generationAttempt == 0
-            ? 'Waiting for generator slot...'
-            : 'Waiting for generator to finish warming up...';
+        return 'Preparing puzzle...';
       case 'IN_PROGRESS':
       case 'PROCESSING':
       case 'RUNNING':
-        if (elapsed >= const Duration(seconds: 35) &&
-            generationAttempt > 0) {
-          return 'Generator is up and finishing the puzzle...';
+        if (elapsed >= const Duration(seconds: 80)) {
+          return 'Finishing puzzle...';
         }
         return generationAttempt == 0
             ? 'Creating puzzle...'
-            : 'Generator is up, creating puzzle...';
+            : 'Still creating puzzle...';
       case 'COMPLETED':
         return 'Puzzle ready';
       case 'FAILED':
       case 'CANCELLED':
         return retryable
-            ? 'Generator is still warming up...'
+            ? 'Still preparing puzzle...'
             : 'Puzzle generation failed.';
       default:
         return generationAttempt == 0
-            ? 'Checking generator status...'
-            : 'Still waiting for generator...';
+            ? 'Preparing puzzle...'
+            : 'Still preparing puzzle...';
     }
   }
 

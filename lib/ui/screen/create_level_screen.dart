@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -6,7 +7,6 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:operation_hermes/data/user_level_metadata.dart';
@@ -16,9 +16,9 @@ import 'package:operation_hermes/editor/drawing_canvas.dart';
 import 'package:operation_hermes/editor/face_sketch_generator.dart';
 import 'package:operation_hermes/editor/generation_image_budget.dart';
 import 'package:operation_hermes/editor/word_overlay_editor.dart';
+import 'package:operation_hermes/ui/app_scaffold_messenger.dart';
 import 'package:operation_hermes/ui/shimmer_placeholder.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 import 'package:image_picker/image_picker.dart';
 
 enum _StagePreviewMode {
@@ -156,7 +156,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       !_hasPuzzleInvalidatedByEdit;
   bool get _hasPuzzleImageForReview =>
       _generatedPuzzleImageBytes != null || _hasStoredPuzzleImage;
-  bool get _canSubmitForReview => _validateInputs(forSubmission: true) == null;
+  bool get _isSolutionEditingLocked =>
+      !_isLocked && _hasPuzzleImageForReview;
   bool get _hasDraftStageContent =>
       _editorMode == UserLevelEditorMode.highlight
           ? _wordOverlayController.hasLetters ||
@@ -374,7 +375,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         _wordDrawingController.selectBrush(DrawingBrushType.text);
       }
     }
-    _handleGenerationInputsChanged();
+    _invalidatePuzzlePreview();
   }
 
   void _handleCreatorNameChanged() {
@@ -391,7 +392,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       return;
     }
     _factTextNotifier.value = text;
-    _handleGenerationInputsChanged();
   }
 
   void _handleGenerationPromptChanged() {
@@ -400,11 +400,16 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       return;
     }
     _generationPromptTextNotifier.value = text;
-    _handleGenerationInputsChanged();
+    _invalidatePuzzlePreview(returnToSolutionStep: false);
   }
 
-  void _handleGenerationInputsChanged() {
-    _invalidatePuzzlePreview();
+  void _updateGenerationDifficulty(double value) {
+    if (_generationDifficulty == value) {
+      return;
+    }
+
+    setState(() => _generationDifficulty = value);
+    _invalidatePuzzlePreview(returnToSolutionStep: false);
   }
 
   Future<void> _pickFaceSourceImage() async {
@@ -467,7 +472,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       return;
     }
 
-    setState(() => _faceSourceTransform = transform);
+    setState(() => _faceSourceTransform = _sanitizedFaceTransform(transform));
   }
 
   void _discardFaceSourceImage() {
@@ -586,7 +591,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       final sketchPngBytes = await generateFaceSketchPng(
         sourceBytes: sourceBytes,
         settings: _faceSketchSettings,
-        transform: _faceSourceTransform,
+        transform: _sanitizedFaceTransform(_faceSourceTransform),
       );
       final sketchBytes = await compressFaceSketchWebp(sketchPngBytes);
       if (!mounted || requestId != _faceSketchRequestId) {
@@ -616,17 +621,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     }
 
     final firebaseService = context.read<FirebaseService>();
-    final url = await firebaseService.getDownloadUrl(storagePath);
-    if (url.isEmpty) {
-      return null;
-    }
-
-    final response = await http.get(Uri.parse(url));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      return null;
-    }
-
-    return response.bodyBytes;
+    return firebaseService.getStorageBytes(storagePath);
   }
 
   Future<Size?> _decodeImageSize(Uint8List bytes) async {
@@ -660,14 +655,26 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           : await _loadStorageBytes(sourceImagePath);
       final sourceSize =
           sourceBytes == null ? null : await _decodeImageSize(sourceBytes);
+      final loadedTransform = FaceSourceTransform.fromJson(
+        editorData['faceSourceTransform'] as Map<dynamic, dynamic>?,
+      );
+      final clampedTransform = sourceSize == null
+          ? loadedTransform
+          : sanitizeFaceTransform(transform: loadedTransform);
       Uint8List? sketchBytes;
       if (sourceBytes != null) {
-        final regeneratedSketchPng = await generateFaceSketchPng(
-          sourceBytes: sourceBytes,
-          settings: _faceSketchSettings,
-          transform: _faceSourceTransform,
-        );
-        sketchBytes = await compressFaceSketchWebp(regeneratedSketchPng);
+        try {
+          final regeneratedSketchPng = await generateFaceSketchPng(
+            sourceBytes: sourceBytes,
+            settings: _faceSketchSettings,
+            transform: clampedTransform,
+          );
+          sketchBytes = await compressFaceSketchWebp(regeneratedSketchPng);
+        } catch (_) {
+          if (initialLevel.solutionPath.isNotEmpty) {
+            sketchBytes = await _loadStorageBytes(initialLevel.solutionPath);
+          }
+        }
       } else if (initialLevel.solutionPath.isNotEmpty) {
         sketchBytes = await _loadStorageBytes(initialLevel.solutionPath);
       }
@@ -680,9 +687,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         _faceSourceImageBytes = sourceBytes;
         _faceSourceImageSize = sourceSize;
         _faceSketchImageBytes = sketchBytes;
-        _faceSourceTransform = FaceSourceTransform.fromJson(
-          editorData['faceSourceTransform'] as Map<dynamic, dynamic>?,
-        );
+        _faceSourceTransform = clampedTransform;
       });
     } catch (_) {
       // If older drafts are missing the original face source, the editor can
@@ -694,7 +699,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     }
   }
 
-  void _invalidatePuzzlePreview() {
+  void _invalidatePuzzlePreview({bool returnToSolutionStep = true}) {
     _puzzleInputRevision += 1;
 
     if (_generatedPuzzleImageBytes == null && !_hasStoredPuzzleImage) {
@@ -708,11 +713,79 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     setState(() {
       _generatedPuzzleImageBytes = null;
       _hasPuzzleInvalidatedByEdit = true;
-      _stagePreviewMode = _StagePreviewMode.solution;
+      if (returnToSolutionStep) {
+        _stagePreviewMode = _StagePreviewMode.solution;
+      }
       if (!_isGeneratingPuzzle) {
         _puzzleGenerationStatus = '';
       }
     });
+  }
+
+  Future<void> _confirmUnlockSolutionEditing() async {
+    if (!_isSolutionEditingLocked || !mounted) {
+      return;
+    }
+
+    final shouldClearPuzzle = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Edit solution?'),
+            content: const Text(
+              'Editing the solution will clear the current puzzle and you will need to generate it again.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Edit Solution'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!mounted || !shouldClearPuzzle) {
+      return;
+    }
+
+    _invalidatePuzzlePreview();
+  }
+
+  Future<bool> _confirmLeaveWhileGenerating() async {
+    if (!_isGeneratingPuzzle || !mounted) {
+      return true;
+    }
+
+    final shouldLeave = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Leave puzzle generation?'),
+            content: const Text(
+              'Puzzle generation is still running. Leaving now will stop waiting here, and you may need to generate again later.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Stay'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Leave'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    return shouldLeave;
+  }
+
+  FaceSourceTransform _sanitizedFaceTransform(FaceSourceTransform transform) {
+    return sanitizeFaceTransform(transform: transform);
   }
 
   Future<void> _loadExistingWordLetters() async {
@@ -730,18 +803,13 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
     try {
       final firebaseService = context.read<FirebaseService>();
-      final svgUrl =
-          await firebaseService.getDownloadUrl(initialLevel.solutionPath);
-      if (svgUrl.isEmpty) {
+      final svgBytes =
+          await firebaseService.getStorageBytes(initialLevel.solutionPath);
+      if (svgBytes == null || svgBytes.isEmpty) {
         return;
       }
 
-      final response = await http.get(Uri.parse(svgUrl));
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError('Could not load the existing word overlay.');
-      }
-
-      final letters = parseWordOverlayLetters(response.body);
+      final letters = parseWordOverlayLetters(utf8.decode(svgBytes));
       if (!mounted || letters.isEmpty) {
         return;
       }
@@ -826,7 +894,17 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   Future<void> _generatePuzzle() async {
-    if (_isLocked || _isGeneratingPuzzle || _isSaving) {
+    if (_isLocked) {
+      _showSnack('Submitted levels are locked and can no longer be edited.');
+      return;
+    }
+
+    if (_isGeneratingPuzzle) {
+      _showSnack('Puzzle generation is already running.');
+      return;
+    }
+
+    if (_isSaving) {
       if (_isSaving) {
         _showSnack('Wait for the level to finish saving first.');
       }
@@ -860,44 +938,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     });
 
     try {
-      final solutionBytes = _editorMode == UserLevelEditorMode.highlight
-          ? await compressGenerationImageWebp(
-              await exportWordOverlayAsPng(
-                letters: _wordOverlayController.letters,
-                strokes: _wordDrawingController.strokes,
-                backgroundColor: _generationExportBackground,
-              ),
-              failureLabel: 'word solution image',
-            )
-          : _editorMode == UserLevelEditorMode.photoSketch
-              ? await compressGenerationImageWebp(
-                  await generateHighFidelityFaceSketchSquare(
-                    sourceBytes: _faceSourceImageBytes!,
-                    settings: _faceSketchSettings,
-                    transform: _faceSourceTransform,
-                  ),
-                  failureLabel: 'face solution projection',
-                )
-              : await compressGenerationImageWebp(
-                  await exportDrawingAsPng(
-                    strokes: _drawingController.strokes,
-                    backgroundColor: _generationExportBackground,
-                  ),
-                  failureLabel: 'object solution image',
-                );
-
-      final puzzleBytes = await firebaseService.generateDrawObjectPuzzle(
-        solutionImageBytes: solutionBytes,
-        solutionFileName: '1.webp',
-        solutionMimeType: 'image/webp',
+      final sourceImageBytes = await _buildPuzzleGenerationSourceImage();
+      final puzzleBytes = await _runPuzzleGenerationWithAdaptiveCompression(
+        firebaseService: firebaseService,
+        generationToken: generationToken,
+        sourceImageBytes: sourceImageBytes,
         prompt: prompt,
-        difficulty: _generationDifficulty,
-        onStatusChanged: (status) {
-          if (!mounted || generationToken != _activeGenerationToken) {
-            return;
-          }
-          setState(() => _puzzleGenerationStatus = status);
-        },
       );
 
       if (!mounted) {
@@ -938,6 +984,92 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         setState(() => _isGeneratingPuzzle = false);
       }
     }
+  }
+
+  Future<Uint8List> _buildPuzzleGenerationSourceImage() async {
+    if (_editorMode == UserLevelEditorMode.highlight) {
+      return exportWordOverlayAsPng(
+        letters: _wordOverlayController.letters,
+        strokes: _wordDrawingController.strokes,
+        backgroundColor: _generationExportBackground,
+      );
+    }
+
+    if (_editorMode == UserLevelEditorMode.photoSketch) {
+      return generateHighFidelityFaceSketchSquare(
+        sourceBytes: _faceSourceImageBytes!,
+        settings: _faceSketchSettings,
+        transform: _sanitizedFaceTransform(_faceSourceTransform),
+      );
+    }
+
+    return exportDrawingAsPng(
+      strokes: _drawingController.strokes,
+      backgroundColor: _generationExportBackground,
+    );
+  }
+
+  Future<Uint8List> _runPuzzleGenerationWithAdaptiveCompression({
+    required FirebaseService firebaseService,
+    required int generationToken,
+    required Uint8List sourceImageBytes,
+    required String prompt,
+  }) async {
+    const targets = <int>[kGenerationPayloadTargetBytes, 38 * 1024, 28 * 1024];
+    Object? lastError;
+
+    for (var i = 0; i < targets.length; i += 1) {
+      if (mounted && generationToken == _activeGenerationToken) {
+        setState(() {
+          _puzzleGenerationStatus = i == 0
+              ? 'Preparing puzzle...'
+              : 'Preparing a lighter image...';
+        });
+      }
+
+      final solutionBytes = await compressGenerationImageWebp(
+        sourceImageBytes,
+        targetBytes: targets[i],
+        failureLabel: switch (_editorMode) {
+          UserLevelEditorMode.highlight => 'word solution image',
+          UserLevelEditorMode.photoSketch => 'face solution projection',
+          _ => 'object solution image',
+        },
+      );
+
+      try {
+        return await firebaseService.generateDrawObjectPuzzle(
+          solutionImageBytes: solutionBytes,
+          solutionFileName: '1.webp',
+          solutionMimeType: 'image/webp',
+          prompt: prompt,
+          difficulty: _generationDifficulty,
+          onStatusChanged: (status) {
+            if (!mounted || generationToken != _activeGenerationToken) {
+              return;
+            }
+            setState(() => _puzzleGenerationStatus = status);
+          },
+        );
+      } catch (error) {
+        lastError = error;
+        if (!_shouldRetryPuzzleGenerationWithSmallerImage(error) ||
+            i == targets.length - 1) {
+          rethrow;
+        }
+      }
+    }
+
+    throw lastError ?? StateError('Could not generate the puzzle right now.');
+  }
+
+  bool _shouldRetryPuzzleGenerationWithSmallerImage(Object error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('too large') ||
+        message.contains('(413)') ||
+        message.contains('payload') ||
+        message.contains('too detailed') ||
+        message.contains('solution image');
   }
 
   String? _validateGenerationInputs() {
@@ -1077,6 +1209,16 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   Future<void> _save({required bool submitAfterSave}) async {
+    if (_isLocked) {
+      _showSnack('Submitted levels are locked and can no longer be edited.');
+      return;
+    }
+
+    if (_isSaving) {
+      _showSnack('This level is already saving.');
+      return;
+    }
+
     if (_isGeneratingPuzzle) {
       _showSnack('Wait for puzzle generation to finish before saving.');
       return;
@@ -1115,9 +1257,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           editorData: editorData,
         );
       } else if (_editorMode == UserLevelEditorMode.photoSketch) {
+        final clampedTransform = _sanitizedFaceTransform(_faceSourceTransform);
         final editorData = <String, dynamic>{
           'faceSketchSettings': _faceSketchSettings.toJson(),
-          'faceSourceTransform': _faceSourceTransform.toJson(),
+          'faceSourceTransform': clampedTransform.toJson(),
           'generationPrompt': _generationPromptController.text.trim(),
           'generationDifficulty': _generationDifficulty,
         };
@@ -1126,7 +1269,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                 await generateFaceSketchPng(
                   sourceBytes: _faceSourceImageBytes!,
                   settings: _faceSketchSettings,
-                  transform: _faceSourceTransform,
+                  transform: clampedTransform,
                 ),
               )
             : null;
@@ -1256,10 +1399,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
       case _CreatorErrorContext.puzzleGeneration:
         if (isWarmupDelay) {
-          return 'The puzzle generator is still warming up. Please try again in a moment.';
+          return 'Puzzle generation is taking a bit longer than usual. Please try again in a moment.';
         }
         if (isTooLarge) {
-          return 'The solution image is still too detailed to generate a puzzle. Try simplifying it a bit.';
+          return 'This puzzle image is still too detailed right now. Try a simpler image or scene.';
         }
         if (isAuthIssue) {
           return 'Could not reach the puzzle generator right now. Please reopen Subliminal Words and try again.';
@@ -1290,9 +1433,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    showAppSnackBar(message);
   }
 
   void _handleStageInteractionChanged(bool isInteracting) {
@@ -1326,7 +1467,18 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
     return Theme(
       data: editorTheme,
-      child: Scaffold(
+      child: PopScope(
+        canPop: !_isGeneratingPuzzle,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) {
+            return;
+          }
+
+          if (await _confirmLeaveWhileGenerating() && context.mounted) {
+            Navigator.of(context).pop(result);
+          }
+        },
+        child: Scaffold(
         backgroundColor: colorScheme.surface,
         appBar: AppBar(
           backgroundColor: colorScheme.surface,
@@ -1378,9 +1530,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                       children: <Widget>[
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: _isSaving ||
-                                    _isGeneratingPuzzle ||
-                                    _isLocked
+                            onPressed: _isSaving
                                 ? null
                                 : () => _save(submitAfterSave: false),
                             child: AutoSizeText(
@@ -1394,13 +1544,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: FilledButton(
-                            onPressed: _isSaving ||
-                                    _isGeneratingPuzzle ||
-                                    _isLocked ||
-                                    !_canSubmitForReview ||
-                                    (_editorMode ==
-                                            UserLevelEditorMode.photoSketch &&
-                                        _isGeneratingFaceSketch)
+                            onPressed: _isSaving
                                 ? null
                                 : () => _save(submitAfterSave: true),
                             child: AutoSizeText(
@@ -1450,6 +1594,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                           colorScheme: colorScheme,
                           canvasBackgroundColor: canvasBackgroundColor,
                           isLocked: _isLocked,
+                          isSolutionLocked: _isSolutionEditingLocked,
                           isLoadingInitialOverlay: _isLoadingWordEditorData,
                           stagePreviewMode: _stagePreviewMode,
                           puzzleBytes: _generatedPuzzleImageBytes,
@@ -1464,10 +1609,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                           normalizePoint: _normalizePoint,
                           onSelectStagePreview: _selectStagePreview,
                           onGeneratePuzzle: _generatePuzzle,
-                          onGenerationDifficultyChanged: (value) => setState(
-                            () => _generationDifficulty = value,
-                          ),
+                          onGenerationDifficultyChanged:
+                              _updateGenerationDifficulty,
                           generationPromptFocusNode: _generationPromptFocusNode,
+                          onUnlockSolutionEditing:
+                              _confirmUnlockSolutionEditing,
                         )
                       : _editorMode == UserLevelEditorMode.photoSketch
                           ? _FaceEditorSection(
@@ -1488,6 +1634,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                               colorScheme: colorScheme,
                               canvasBackgroundColor: canvasBackgroundColor,
                               isLocked: _isLocked,
+                              isSolutionLocked: _isSolutionEditingLocked,
                               isLoadingSourceImage: _isLoadingFaceEditorData || _isProcessingFaceSourceImage,
                               isGeneratingSketch: _isGeneratingFaceSketch,
                               isGeneratingTransform: _isGeneratingAfterManipulate,
@@ -1517,10 +1664,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                                   _handleStageInteractionChanged,
                               onSelectStagePreview: _selectStagePreview,
                               onGeneratePuzzle: _generatePuzzle,
-                              onGenerationDifficultyChanged: (value) =>
-                                  setState(() => _generationDifficulty = value),
+                              onGenerationDifficultyChanged:
+                                  _updateGenerationDifficulty,
                               onSettingsChanged: _updateFaceSketchSettings,
                               onLiveSettingsChanged: null,
+                              onUnlockSolutionEditing:
+                                  _confirmUnlockSolutionEditing,
                             )
                           : _CanvasEditorSection(
                               controller: _drawingController,
@@ -1537,6 +1686,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                               colorScheme: colorScheme,
                               canvasBackgroundColor: canvasBackgroundColor,
                               isLocked: _isLocked,
+                              isSolutionLocked: _isSolutionEditingLocked,
                               stagePreviewMode: _stagePreviewMode,
                               puzzleBytes: _generatedPuzzleImageBytes,
                               existingPuzzlePreviewUrlFuture:
@@ -1550,10 +1700,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                                   _handleStageInteractionChanged,
                               onSelectStagePreview: _selectStagePreview,
                               onGeneratePuzzle: _generatePuzzle,
-                              onGenerationDifficultyChanged: (value) =>
-                                  setState(() => _generationDifficulty = value),
+                              onGenerationDifficultyChanged:
+                                  _updateGenerationDifficulty,
                               generationPromptFocusNode:
                                   _generationPromptFocusNode,
+                              onUnlockSolutionEditing:
+                                  _confirmUnlockSolutionEditing,
                             ),
                 ),
                 if (_isLocked) ...<Widget>[
@@ -1563,6 +1715,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );
@@ -1585,6 +1738,7 @@ class _FaceEditorSection extends StatelessWidget {
   final ColorScheme colorScheme;
   final Color canvasBackgroundColor;
   final bool isLocked;
+  final bool isSolutionLocked;
   final bool isLoadingSourceImage;
   final bool isGeneratingSketch;
   final bool isGeneratingTransform;
@@ -1609,6 +1763,7 @@ class _FaceEditorSection extends StatelessWidget {
   final ValueChanged<double> onGenerationDifficultyChanged;
   final ValueChanged<FaceSketchSettings> onSettingsChanged;
   final ValueChanged<FaceSketchSettings>? onLiveSettingsChanged;
+  final VoidCallback onUnlockSolutionEditing;
 
   const _FaceEditorSection({
     required this.sourceImageBytes,
@@ -1626,6 +1781,7 @@ class _FaceEditorSection extends StatelessWidget {
     required this.colorScheme,
     required this.canvasBackgroundColor,
     required this.isLocked,
+    required this.isSolutionLocked,
     required this.isLoadingSourceImage,
     required this.isGeneratingSketch,
     required this.isGeneratingTransform,
@@ -1650,11 +1806,13 @@ class _FaceEditorSection extends StatelessWidget {
     required this.onGenerationDifficultyChanged,
     required this.onSettingsChanged,
     this.onLiveSettingsChanged,
+    required this.onUnlockSolutionEditing,
   });
 
   @override
   Widget build(BuildContext context) {
     final hasFaceSketch = sketchImageBytes != null;
+    final solutionControlsLocked = isLocked || isSolutionLocked;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1676,10 +1834,19 @@ class _FaceEditorSection extends StatelessWidget {
                       _CompactActionButton(
                         icon: Icons.restart_alt_rounded,
                         label: 'Reset',
-                        enabled: !isLocked &&
+                        enabled: !solutionControlsLocked &&
                             !isGeneratingSketch &&
                             sourceImageBytes != null,
                         onPressed: onResetImageTransform,
+                        disabledMessage: sourceImageBytes == null
+                            ? 'Add a face photo first.'
+                            : isSolutionLocked
+                                ? 'Unlock the solution first to edit it.'
+                                : isGeneratingSketch
+                                    ? 'Wait for the sketch to finish updating.'
+                                    : isLocked
+                                        ? 'Submitted levels are locked and can no longer be edited.'
+                                        : null,
                         dimension: 40,
                       ),
                       const SizedBox(width: 6),
@@ -1690,20 +1857,38 @@ class _FaceEditorSection extends StatelessWidget {
                         label: isTransformInteractionLocked
                             ? 'Frame Locked'
                             : 'Lock Frame',
-                        enabled: !isLocked &&
+                        enabled: !solutionControlsLocked &&
                             !isGeneratingSketch &&
                             sourceImageBytes != null,
                         onPressed: onToggleTransformInteractionLock,
+                        disabledMessage: sourceImageBytes == null
+                            ? 'Add a face photo first.'
+                            : isSolutionLocked
+                                ? 'Unlock the solution first to edit it.'
+                                : isGeneratingSketch
+                                    ? 'Wait for the sketch to finish updating.'
+                                    : isLocked
+                                        ? 'Submitted levels are locked and can no longer be edited.'
+                                        : null,
                         dimension: 40,
                       ),
                       const SizedBox(width: 6),
                       _CompactActionButton(
                         icon: Icons.delete_outline_rounded,
                         label: 'Discard',
-                        enabled: !isLocked &&
+                        enabled: !solutionControlsLocked &&
                             !isGeneratingSketch &&
                             sourceImageBytes != null,
                         onPressed: onDiscardImage,
+                        disabledMessage: sourceImageBytes == null
+                            ? 'Add a face photo first.'
+                            : isSolutionLocked
+                                ? 'Unlock the solution first to edit it.'
+                                : isGeneratingSketch
+                                    ? 'Wait for the sketch to finish updating.'
+                                    : isLocked
+                                        ? 'Submitted levels are locked and can no longer be edited.'
+                                        : null,
                         dimension: 40,
                       ),
                     ],
@@ -1714,7 +1899,7 @@ class _FaceEditorSection extends StatelessWidget {
                   value: stagePreviewMode,
                   canAccessPuzzleStep: isLocked || isSolutionStepComplete,
                   textTheme: textTheme,
-                  onChanged: isLocked ? null : onSelectStagePreview,
+                  onChanged: onSelectStagePreview,
                 ),
               ],
             );
@@ -1736,7 +1921,7 @@ class _FaceEditorSection extends StatelessWidget {
                   borderColor: colorScheme.outlineVariant,
                   backgroundColor: canvasBackgroundColor,
                   foregroundColor: colorScheme.onSurfaceVariant,
-                  isLocked: isLocked,
+                  isLocked: solutionControlsLocked,
                   onPickImage: onPickImage,
                   onTransformChanged: onSourceTransformChanged,
                   onTransformEnded: onSourceTransformEnded,
@@ -1767,9 +1952,16 @@ class _FaceEditorSection extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
+          if (isSolutionLocked) ...<Widget>[
+            _SolutionPuzzleLinkNotice(
+              colorScheme: colorScheme,
+              onUnlock: onUnlockSolutionEditing,
+            ),
+            const SizedBox(height: 12),
+          ],
           TextField(
             controller: solutionController,
-            enabled: !isLocked,
+            enabled: !solutionControlsLocked,
             textCapitalization: TextCapitalization.characters,
             textInputAction: TextInputAction.next,
             autocorrect: false,
@@ -1795,7 +1987,7 @@ class _FaceEditorSection extends StatelessWidget {
                   min: 1.2,
                   max: 4.0,
                   divisions: 28,
-                  enabled: sourceImageBytes != null && !isLocked,
+                  enabled: sourceImageBytes != null && !solutionControlsLocked,
                   valueTextBuilder: (value) => value.toStringAsFixed(1),
                   onChanged: (value) => onSettingsChanged(
                     settings.copyWith(contrast: value),
@@ -1813,7 +2005,7 @@ class _FaceEditorSection extends StatelessWidget {
                   min: 1,
                   max: 12,
                   divisions: 22,
-                  enabled: sourceImageBytes != null && !isLocked,
+                  enabled: sourceImageBytes != null && !solutionControlsLocked,
                   valueTextBuilder: (value) => value.toStringAsFixed(1),
                   onChanged: (value) => onSettingsChanged(
                     settings.copyWith(blurAmount: value),
@@ -1835,7 +2027,7 @@ class _FaceEditorSection extends StatelessWidget {
                   min: 0.6,
                   max: 2.2,
                   divisions: 32,
-                  enabled: sourceImageBytes != null && !isLocked,
+                  enabled: sourceImageBytes != null && !solutionControlsLocked,
                   valueTextBuilder: (value) => value.toStringAsFixed(2),
                   onChanged: (value) => onSettingsChanged(
                     settings.copyWith(edgeStrength: value),
@@ -1853,7 +2045,7 @@ class _FaceEditorSection extends StatelessWidget {
                   min: 92,
                   max: 212,
                   divisions: 24,
-                  enabled: sourceImageBytes != null && !isLocked,
+                  enabled: sourceImageBytes != null && !solutionControlsLocked,
                   valueTextBuilder: (value) => value.round().toString(),
                   onChanged: (value) => onSettingsChanged(
                     settings.copyWith(inkLevel: value.round()),
@@ -1875,7 +2067,7 @@ class _FaceEditorSection extends StatelessWidget {
                   min: 0.5,
                   max: 3.0,
                   divisions: 25,
-                  enabled: sourceImageBytes != null && !isLocked,
+                  enabled: sourceImageBytes != null && !solutionControlsLocked,
                   valueTextBuilder: (value) => value.toStringAsFixed(1),
                   onChanged: (value) => onSettingsChanged(
                     settings.copyWith(detailBoost: value),
@@ -1893,7 +2085,7 @@ class _FaceEditorSection extends StatelessWidget {
                   min: 0,
                   max: 4,
                   divisions: 16,
-                  enabled: sourceImageBytes != null && !isLocked,
+                  enabled: sourceImageBytes != null && !solutionControlsLocked,
                   valueTextBuilder: (value) => value.toStringAsFixed(1),
                   onChanged: (value) => onSettingsChanged(
                     settings.copyWith(noiseReduction: value),
@@ -1982,20 +2174,12 @@ class _FaceEditorSection extends StatelessWidget {
               promptTextListenable,
             ]),
             builder: (context, _) {
-              final canGeneratePuzzleNow = !isLocked &&
-                  !isGeneratingSketch &&
-                  solutionTextListenable.value.trim().length >=
-                      _CreateLevelScreenState._minSolutionLength &&
-                  promptTextListenable.value.trim().isNotEmpty &&
-                  hasFaceSketch;
               final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
 
               return SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: isGeneratingPuzzle || !canGeneratePuzzleNow
-                      ? null
-                      : onGeneratePuzzle,
+                  onPressed: onGeneratePuzzle,
                   icon: Icon(
                     hasPuzzlePreview
                         ? Icons.refresh_rounded
@@ -2065,6 +2249,7 @@ class _CanvasEditorSection extends StatelessWidget {
   final ColorScheme colorScheme;
   final Color canvasBackgroundColor;
   final bool isLocked;
+  final bool isSolutionLocked;
   final _StagePreviewMode stagePreviewMode;
   final Uint8List? puzzleBytes;
   final Future<String>? existingPuzzlePreviewUrlFuture;
@@ -2077,6 +2262,7 @@ class _CanvasEditorSection extends StatelessWidget {
   final ValueChanged<_StagePreviewMode> onSelectStagePreview;
   final VoidCallback onGeneratePuzzle;
   final ValueChanged<double> onGenerationDifficultyChanged;
+  final VoidCallback onUnlockSolutionEditing;
 
   const _CanvasEditorSection({
     required this.controller,
@@ -2092,6 +2278,7 @@ class _CanvasEditorSection extends StatelessWidget {
     required this.colorScheme,
     required this.canvasBackgroundColor,
     required this.isLocked,
+    required this.isSolutionLocked,
     required this.stagePreviewMode,
     required this.puzzleBytes,
     required this.existingPuzzlePreviewUrlFuture,
@@ -2104,10 +2291,12 @@ class _CanvasEditorSection extends StatelessWidget {
     required this.onSelectStagePreview,
     required this.onGeneratePuzzle,
     required this.onGenerationDifficultyChanged,
+    required this.onUnlockSolutionEditing,
   });
 
   @override
   Widget build(BuildContext context) {
+    final solutionControlsLocked = isLocked || isSolutionLocked;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -2122,9 +2311,10 @@ class _CanvasEditorSection extends StatelessWidget {
                 solutionTextListenable.value.trim().length >=
                         _CreateLevelScreenState._minSolutionLength &&
                     hasDrawingContent;
-            final canEditCanvas = stagePreviewMode == _StagePreviewMode.solution &&
-                !isLocked &&
-                hasDrawingContent;
+            final canEditCanvas =
+                stagePreviewMode == _StagePreviewMode.solution &&
+                    !solutionControlsLocked &&
+                    hasDrawingContent;
 
             return Row(
               children: <Widget>[
@@ -2137,6 +2327,11 @@ class _CanvasEditorSection extends StatelessWidget {
                         label: 'Undo',
                         enabled: canEditCanvas,
                         onPressed: controller.undo,
+                        disabledMessage: isLocked
+                            ? 'Submitted levels are locked and can no longer be edited.'
+                            : isSolutionLocked
+                                ? 'Unlock the solution first to edit it.'
+                                : 'Nothing to undo yet.',
                         dimension: 40,
                       ),
                       const SizedBox(width: 6),
@@ -2145,6 +2340,11 @@ class _CanvasEditorSection extends StatelessWidget {
                         label: 'Delete',
                         enabled: canEditCanvas,
                         onPressed: controller.clear,
+                        disabledMessage: isLocked
+                            ? 'Submitted levels are locked and can no longer be edited.'
+                            : isSolutionLocked
+                                ? 'Unlock the solution first to edit it.'
+                                : 'Nothing to clear yet.',
                         dimension: 40,
                       ),
                     ],
@@ -2156,7 +2356,7 @@ class _CanvasEditorSection extends StatelessWidget {
                   value: stagePreviewMode,
                   canAccessPuzzleStep: isLocked || isSolutionStepComplete,
                   textTheme: textTheme,
-                  onChanged: isLocked ? null : onSelectStagePreview,
+                  onChanged: onSelectStagePreview,
                 ),
               ],
             );
@@ -2170,7 +2370,7 @@ class _CanvasEditorSection extends StatelessWidget {
                   controller: controller,
                   backgroundColor: canvasBackgroundColor,
                   borderColor: colorScheme.outlineVariant,
-                  isLocked: isLocked,
+                  isLocked: solutionControlsLocked,
                   normalizePoint: normalizePoint,
                   onInteractionChanged: onStageInteractionChanged,
                 )
@@ -2197,6 +2397,13 @@ class _CanvasEditorSection extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
+          if (isSolutionLocked) ...<Widget>[
+            _SolutionPuzzleLinkNotice(
+              colorScheme: colorScheme,
+              onUnlock: onUnlockSolutionEditing,
+            ),
+            const SizedBox(height: 12),
+          ],
           AnimatedBuilder(
             animation: controller,
             builder: (context, _) {
@@ -2223,7 +2430,7 @@ class _CanvasEditorSection extends StatelessWidget {
                         DrawingBrushType.eraser,
                       ],
                       selectedBrush: selectedBrush,
-                      enabled: !isLocked,
+                      enabled: !solutionControlsLocked,
                       onSelectBrush: controller.selectBrush,
                     ),
                   ),
@@ -2262,6 +2469,7 @@ class _CanvasEditorSection extends StatelessWidget {
                                 max: 1.0,
                                 divisions: 8,
                                 onChanged: canAdjustOpacity
+                                    && !solutionControlsLocked
                                     ? controller.setOpacity
                                     : null,
                               ),
@@ -2293,7 +2501,8 @@ class _CanvasEditorSection extends StatelessWidget {
                                 min: 0.006,
                                 max: 0.08,
                                 divisions: 18,
-                                onChanged: isLocked || !canAdjustSize
+                                onChanged: solutionControlsLocked ||
+                                        !canAdjustSize
                                     ? null
                                     : controller.setBrushWidth,
                               ),
@@ -2310,7 +2519,7 @@ class _CanvasEditorSection extends StatelessWidget {
           const SizedBox(height: 12),
           TextField(
             controller: solutionController,
-            enabled: !isLocked,
+            enabled: !solutionControlsLocked,
             textCapitalization: TextCapitalization.characters,
             textInputAction: TextInputAction.next,
             autocorrect: false,
@@ -2403,19 +2612,12 @@ class _CanvasEditorSection extends StatelessWidget {
               promptTextListenable,
             ]),
             builder: (context, _) {
-              final hasDrawingContent = hasDrawingContentListenable.value;
-              final canGeneratePuzzleNow = !isLocked &&
-                  solutionTextListenable.value.trim().length >= 2 &&
-                  promptTextListenable.value.trim().isNotEmpty &&
-                  hasDrawingContent;
               final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
 
               return SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: isGeneratingPuzzle || !canGeneratePuzzleNow
-                      ? null
-                      : onGeneratePuzzle,
+                  onPressed: onGeneratePuzzle,
                   icon: Icon(
                     hasPuzzlePreview
                         ? Icons.refresh_rounded
@@ -2647,27 +2849,90 @@ class _FaceSolutionStage extends StatefulWidget {
 class _FaceSolutionStageState extends State<_FaceSolutionStage> {
   late FaceSourceTransform _displayTransform;
   FaceSourceTransform? _gestureStartTransform;
-  Offset _gestureStartFocalPoint = Offset.zero;
+  Offset? _gestureStartLocalImagePoint;
+  Offset? _primaryPointerDownPosition;
   int _activePointers = 0;
 
   bool get _isInteracting =>
       _gestureStartTransform != null || _activePointers > 0;
 
-  static const double _minFaceScale = 1.0;
+  static const double _minFaceScale = 0.2;
   static const double _maxFaceScale = 12.0;
 
-  FaceSourceTransform _clampDisplayTransform(
+  FaceSourceTransform _sanitizeDisplayTransform(
+    FaceSourceTransform transform,
+  ) {
+    return sanitizeFaceTransform(
+      transform: transform,
+      minScale: _minFaceScale,
+      maxScale: _maxFaceScale,
+    );
+  }
+
+  double _coverScale(Size stageSize, Size sourceSize) {
+    return math.max(
+      stageSize.width / sourceSize.width,
+      stageSize.height / sourceSize.height,
+    );
+  }
+
+  Offset _rotateOffset(Offset offset, double angle) {
+    final cosTheta = math.cos(angle);
+    final sinTheta = math.sin(angle);
+    return Offset(
+      (offset.dx * cosTheta) - (offset.dy * sinTheta),
+      (offset.dx * sinTheta) + (offset.dy * cosTheta),
+    );
+  }
+
+  Offset _stageCenterFromTransform(
     FaceSourceTransform transform,
     Size stageSize,
   ) {
-    final sourceSize = widget.sourceImageSize ?? const Size(1024, 1024);
-    return clampFaceTransformToCoverSquare(
-      transform: transform,
-      sourceWidth: sourceSize.width,
-      sourceHeight: sourceSize.height,
-      canvasSize: math.min(stageSize.width, stageSize.height),
-      minScale: _minFaceScale,
-      maxScale: _maxFaceScale,
+    return Offset(
+      (stageSize.width / 2) + (transform.offsetX * stageSize.width),
+      (stageSize.height / 2) + (transform.offsetY * stageSize.height),
+    );
+  }
+
+  double _effectiveScale(
+    FaceSourceTransform transform,
+    Size stageSize,
+    Size sourceSize,
+  ) {
+    return _coverScale(stageSize, sourceSize) * transform.scale;
+  }
+
+  Offset _imageLocalPointForStagePoint(
+    Offset stagePoint,
+    FaceSourceTransform transform,
+    Size stageSize,
+    Size sourceSize,
+  ) {
+    final center = _stageCenterFromTransform(transform, stageSize);
+    final effectiveScale = _effectiveScale(transform, stageSize, sourceSize);
+    final delta = stagePoint - center;
+    final unrotated = _rotateOffset(delta, -transform.rotation);
+    return unrotated / effectiveScale;
+  }
+
+  FaceSourceTransform _transformKeepingLocalPointAtStagePoint({
+    required FaceSourceTransform baseTransform,
+    required Offset localImagePoint,
+    required Offset stagePoint,
+    required Size stageSize,
+    required Size sourceSize,
+  }) {
+    final sanitized = _sanitizeDisplayTransform(baseTransform);
+    final effectiveScale = _effectiveScale(sanitized, stageSize, sourceSize);
+    final rotatedLocal = _rotateOffset(
+      localImagePoint * effectiveScale,
+      sanitized.rotation,
+    );
+    final center = stagePoint - rotatedLocal;
+    return sanitized.copyWith(
+      offsetX: (center.dx - (stageSize.width / 2)) / stageSize.width,
+      offsetY: (center.dy - (stageSize.height / 2)) / stageSize.height,
     );
   }
 
@@ -2684,24 +2949,37 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
     if (_gestureStartTransform == null &&
         (sourceChanged ||
             oldWidget.sourceTransform != widget.sourceTransform)) {
-      _displayTransform = widget.sourceTransform;
+      _displayTransform = _sanitizeDisplayTransform(widget.sourceTransform);
     }
   }
 
-  void _handleScaleStart(ScaleStartDetails details) {
+  void _handleScaleStart(ScaleStartDetails details, Size stageSize) {
     if (widget.isLocked ||
         widget.isTransformInteractionLocked ||
         widget.sourceImageBytes == null) {
       return;
     }
 
-    _gestureStartTransform = _displayTransform;
-    _gestureStartFocalPoint = details.localFocalPoint;
+    final startTransform = _sanitizeDisplayTransform(_displayTransform);
+    _displayTransform = startTransform;
+    _gestureStartTransform = startTransform;
+    final sourceSize = widget.sourceImageSize ?? const Size(1024, 1024);
+    final anchorPoint = _activePointers <= 1 && _primaryPointerDownPosition != null
+        ? _primaryPointerDownPosition!
+        : details.localFocalPoint;
+    _gestureStartLocalImagePoint = _imageLocalPointForStagePoint(
+      anchorPoint,
+      startTransform,
+      stageSize,
+      sourceSize,
+    );
   }
 
   void _handleScaleUpdate(ScaleUpdateDetails details, Size size) {
     final startTransform = _gestureStartTransform;
+    final startLocalImagePoint = _gestureStartLocalImagePoint;
     if (startTransform == null ||
+        startLocalImagePoint == null ||
         widget.isLocked ||
         widget.isTransformInteractionLocked ||
         widget.sourceImageBytes == null) {
@@ -2710,27 +2988,19 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
 
     final sourceSize = widget.sourceImageSize ?? const Size(1024, 1024);
     final nextRotation = startTransform.rotation + details.rotation;
-    final unclampedTransform = startTransform.copyWith(
-      offsetX: startTransform.offsetX +
-          ((details.localFocalPoint.dx - _gestureStartFocalPoint.dx) /
-              size.width),
-      offsetY: startTransform.offsetY +
-          ((details.localFocalPoint.dy - _gestureStartFocalPoint.dy) /
-              size.height),
-      scale: startTransform.scale * details.scale,
-      rotation: nextRotation,
-    );
-    final clampedTransform = clampFaceTransformToCoverSquare(
-      transform: unclampedTransform,
-      sourceWidth: sourceSize.width,
-      sourceHeight: sourceSize.height,
-      canvasSize: math.min(size.width, size.height),
-      minScale: _minFaceScale,
-      maxScale: _maxFaceScale,
+    final nextTransform = _transformKeepingLocalPointAtStagePoint(
+      baseTransform: startTransform.copyWith(
+        scale: startTransform.scale * details.scale,
+        rotation: nextRotation,
+      ),
+      localImagePoint: startLocalImagePoint,
+      stagePoint: details.localFocalPoint,
+      stageSize: size,
+      sourceSize: sourceSize,
     );
 
     setState(() {
-      _displayTransform = clampedTransform;
+      _displayTransform = _sanitizeDisplayTransform(nextTransform);
     });
   }
 
@@ -2740,6 +3010,7 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
     }
 
     _gestureStartTransform = null;
+    _gestureStartLocalImagePoint = null;
     if (_activePointers == 0) {
       widget.onInteractionChanged(false);
     }
@@ -2754,6 +3025,9 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
       return;
     }
 
+    if (_activePointers == 0) {
+      _primaryPointerDownPosition = event.localPosition;
+    }
     _activePointers += 1;
     widget.onInteractionChanged(true);
   }
@@ -2766,6 +3040,9 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
     }
 
     _activePointers = math.max(0, _activePointers - 1);
+    if (_activePointers == 0) {
+      _primaryPointerDownPosition = null;
+    }
     if (_activePointers == 0 && _gestureStartTransform == null) {
       widget.onInteractionChanged(false);
     }
@@ -2798,12 +3075,16 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                   !widget.isLoading &&
                   !widget.isGeneratingSketch;
 
-              final showSourceImage = hasSourceImage &&
-                  (widget.sketchImageBytes == null || _isInteracting);
+              final showLiveSourcePreview = hasSourceImage &&
+                  (widget.sketchImageBytes == null ||
+                      _isInteracting ||
+                      widget.isGeneratingTransform);
+              final showProcessedSketch = widget.sketchImageBytes != null &&
+                  !_isInteracting &&
+                  !widget.isGeneratingTransform;
               final sourceSize = widget.sourceImageSize ?? const Size(1024, 1024);
-              final clampedDisplayTransform = _clampDisplayTransform(
+              final clampedDisplayTransform = _sanitizeDisplayTransform(
                 _displayTransform,
-                stageSize,
               );
               final coverScale = math.max(
                 stageSize.width / sourceSize.width,
@@ -2829,7 +3110,9 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                   onTap: showUploadTarget && !widget.isLocked
                       ? widget.onPickImage
                       : null,
-                  onScaleStart: !canManipulateSource ? null : _handleScaleStart,
+                  onScaleStart: !canManipulateSource
+                      ? null
+                      : (details) => _handleScaleStart(details, stageSize),
                   onScaleUpdate: !canManipulateSource
                       ? null
                       : (details) => _handleScaleUpdate(details, stageSize),
@@ -2837,46 +3120,44 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: <Widget>[
-                      Positioned(
-                        left: center.dx - (drawWidth / 2),
-                        top: center.dy - (drawHeight / 2),
-                        width: drawWidth,
-                        height: drawHeight,
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 400),
-                          switchInCurve: Curves.easeOutCubic,
-                              child: showSourceImage
-                                  ? Transform.rotate(
-                                      key: const ValueKey('source_image'),
-                                      angle: clampedDisplayTransform.rotation,
-                                      child: Image.memory(
-                                        widget.sourceImageBytes!,
-                                        fit: BoxFit.fill,
-                                    gaplessPlayback: true,
-                                    filterQuality: FilterQuality.high,
-                                  ),
-                                )
-                              : const SizedBox.shrink(key: ValueKey('empty_source')),
+                      if (hasSourceImage)
+                        Positioned(
+                          left: center.dx - (drawWidth / 2),
+                          top: center.dy - (drawHeight / 2),
+                          width: drawWidth,
+                          height: drawHeight,
+                          child: IgnorePointer(
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 180),
+                              curve: Curves.easeOutCubic,
+                              opacity: showLiveSourcePreview ? 1 : 0,
+                              child: Transform.rotate(
+                                angle: clampedDisplayTransform.rotation,
+                                child: Image.memory(
+                                  widget.sourceImageBytes!,
+                                  fit: BoxFit.fill,
+                                  gaplessPlayback: true,
+                                  filterQuality: FilterQuality.high,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                      if (!_isInteracting)
+                      if (showProcessedSketch)
                         Positioned.fill(
                           child: IgnorePointer(
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 350),
-                              switchInCurve: Curves.easeOutCubic,
-                              child: widget.sketchImageBytes != null
-                                  ? Image.memory(
-                                      widget.sketchImageBytes!,
-                                      key: ValueKey(
-                                        widget.sketchImageBytes.hashCode,
-                                      ),
-                                      fit: BoxFit.cover,
-                                      gaplessPlayback: true,
-                                    )
-                                  : const SizedBox.shrink(
-                                      key: ValueKey('empty_sketch'),
-                                    ),
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutCubic,
+                              opacity: showProcessedSketch ? 1 : 0,
+                              child: Image.memory(
+                                widget.sketchImageBytes!,
+                                key: ValueKey(
+                                  widget.sketchImageBytes.hashCode,
+                                ),
+                                fit: BoxFit.cover,
+                                gaplessPlayback: true,
+                              ),
                             ),
                           ),
                         ),
@@ -3184,17 +3465,10 @@ class _PuzzleStage extends StatelessWidget {
               if (isGeneratingPuzzle)
                 DecoratedBox(
                   decoration: BoxDecoration(
-                    color: backgroundColor.withValues(alpha: 0.84),
+                    color: Colors.black.withValues(alpha: 0.42),
                   ),
                   child: Center(
-                    child: Shimmer.fromColors(
-                      baseColor: foregroundColor.withValues(alpha: 0.4),
-                      highlightColor: Theme.of(context).colorScheme.onSurface,
-                      child: _StageStatusLabel(
-                        text: progressText,
-                        foregroundColor: foregroundColor,
-                      ),
-                    ),
+                    child: _StageStatusLabel(text: progressText),
                   ),
                 ),
             ],
@@ -3257,35 +3531,43 @@ class _StagePlaceholder extends StatelessWidget {
 
 class _StageStatusLabel extends StatelessWidget {
   final String text;
-  final Color foregroundColor;
 
   const _StageStatusLabel({
     required this.text,
-    required this.foregroundColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: foregroundColor.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(14),
+          color: colorScheme.inverseSurface.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: foregroundColor.withValues(alpha: 0.18),
+            color: colorScheme.outline.withValues(alpha: 0.92),
+            width: 1.2,
           ),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.24),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Text(
             text,
             textAlign: TextAlign.center,
             style: textTheme.bodyMedium?.copyWith(
-              color: foregroundColor,
-              fontWeight: FontWeight.w700,
+              color: colorScheme.onInverseSurface,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.1,
             ),
           ),
         ),
@@ -3379,7 +3661,6 @@ class _StageStepToggle extends StatelessWidget {
         ButtonSegment<_StagePreviewMode>(
           value: _StagePreviewMode.puzzle,
           label: Text('2. Puzzle'),
-          enabled: canAccessPuzzleStep,
         ),
       ],
       selected: <_StagePreviewMode>{value},
@@ -3454,9 +3735,7 @@ class _EditorStepProgress extends StatelessWidget {
                 enabled: canAccessPuzzleStep,
                 colorScheme: colorScheme,
                 textTheme: textTheme,
-                onTap: canAccessPuzzleStep
-                    ? () => onStepSelected(_StagePreviewMode.puzzle)
-                    : null,
+                onTap: () => onStepSelected(_StagePreviewMode.puzzle),
                 borderRadius: const BorderRadius.horizontal(
                   right: Radius.circular(15),
                 ),
@@ -3614,6 +3893,7 @@ class _WordEditorSection extends StatelessWidget {
   final ColorScheme colorScheme;
   final Color canvasBackgroundColor;
   final bool isLocked;
+  final bool isSolutionLocked;
   final bool isLoadingInitialOverlay;
   final _StagePreviewMode stagePreviewMode;
   final Uint8List? puzzleBytes;
@@ -3627,6 +3907,7 @@ class _WordEditorSection extends StatelessWidget {
   final ValueChanged<_StagePreviewMode> onSelectStagePreview;
   final VoidCallback onGeneratePuzzle;
   final ValueChanged<double> onGenerationDifficultyChanged;
+  final VoidCallback onUnlockSolutionEditing;
 
   const _WordEditorSection({
     required this.controller,
@@ -3643,6 +3924,7 @@ class _WordEditorSection extends StatelessWidget {
     required this.colorScheme,
     required this.canvasBackgroundColor,
     required this.isLocked,
+    required this.isSolutionLocked,
     required this.isLoadingInitialOverlay,
     required this.stagePreviewMode,
     required this.puzzleBytes,
@@ -3656,10 +3938,12 @@ class _WordEditorSection extends StatelessWidget {
     required this.onSelectStagePreview,
     required this.onGeneratePuzzle,
     required this.onGenerationDifficultyChanged,
+    required this.onUnlockSolutionEditing,
   });
 
   @override
   Widget build(BuildContext context) {
+    final solutionControlsLocked = isLocked || isSolutionLocked;
     final compactSegmentStyle = ButtonStyle(
       visualDensity: VisualDensity.compact,
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -3687,9 +3971,10 @@ class _WordEditorSection extends StatelessWidget {
                 solutionTextListenable.value.trim().length >=
                         _CreateLevelScreenState._minSolutionLength &&
                     hasLetters;
-            final canEditDrawing = stagePreviewMode == _StagePreviewMode.solution &&
-                !isLocked &&
-                hasDrawingContent;
+            final canEditDrawing =
+                stagePreviewMode == _StagePreviewMode.solution &&
+                    !solutionControlsLocked &&
+                    hasDrawingContent;
 
             return Row(
               children: <Widget>[
@@ -3702,6 +3987,11 @@ class _WordEditorSection extends StatelessWidget {
                         label: 'Undo',
                         enabled: canEditDrawing,
                         onPressed: drawingController.undo,
+                        disabledMessage: isLocked
+                            ? 'Submitted levels are locked and can no longer be edited.'
+                            : isSolutionLocked
+                                ? 'Unlock the solution first to edit it.'
+                                : 'Nothing to undo yet.',
                         dimension: 40,
                       ),
                       const SizedBox(width: 6),
@@ -3710,6 +4000,11 @@ class _WordEditorSection extends StatelessWidget {
                         label: 'Delete',
                         enabled: canEditDrawing,
                         onPressed: drawingController.clear,
+                        disabledMessage: isLocked
+                            ? 'Submitted levels are locked and can no longer be edited.'
+                            : isSolutionLocked
+                                ? 'Unlock the solution first to edit it.'
+                                : 'Nothing to clear yet.',
                         dimension: 40,
                       ),
                     ],
@@ -3720,7 +4015,7 @@ class _WordEditorSection extends StatelessWidget {
                   value: stagePreviewMode,
                   canAccessPuzzleStep: isLocked || isSolutionStepComplete,
                   textTheme: textTheme,
-                  onChanged: isLocked ? null : onSelectStagePreview,
+                  onChanged: onSelectStagePreview,
                 ),
               ],
             );
@@ -3736,7 +4031,7 @@ class _WordEditorSection extends StatelessWidget {
                   ? WordOverlayStage(
                       controller: controller,
                       drawingController: drawingController,
-                      isLocked: isLocked,
+                      isLocked: solutionControlsLocked,
                       normalizePoint: normalizePoint,
                       onInteractionChanged: onStageInteractionChanged,
                       borderColor: colorScheme.outlineVariant,
@@ -3768,7 +4063,7 @@ class _WordEditorSection extends StatelessWidget {
                         ),
                       ),
                     ),
-              if (isLoadingInitialOverlay)
+          if (isLoadingInitialOverlay)
                 const Positioned(
                   left: -2,
                   top: -2,
@@ -3785,6 +4080,13 @@ class _WordEditorSection extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
+          if (isSolutionLocked) ...<Widget>[
+            _SolutionPuzzleLinkNotice(
+              colorScheme: colorScheme,
+              onUnlock: onUnlockSolutionEditing,
+            ),
+            const SizedBox(height: 12),
+          ],
           AnimatedBuilder(
             animation: drawingController,
             builder: (context, _) {
@@ -3812,7 +4114,7 @@ class _WordEditorSection extends StatelessWidget {
                         DrawingBrushType.eraser,
                       ],
                       selectedBrush: selectedBrush,
-                      enabled: !isLocked,
+                      enabled: !solutionControlsLocked,
                       onSelectBrush: drawingController.selectBrush,
                     ),
                   ),
@@ -3851,6 +4153,7 @@ class _WordEditorSection extends StatelessWidget {
                                 max: 1.0,
                                 divisions: 8,
                                 onChanged: canAdjustOpacity
+                                    && !solutionControlsLocked
                                     ? drawingController.setOpacity
                                     : null,
                               ),
@@ -3882,7 +4185,8 @@ class _WordEditorSection extends StatelessWidget {
                                 min: 0.006,
                                 max: 0.08,
                                 divisions: 18,
-                                onChanged: isLocked || !canAdjustSize
+                                onChanged: solutionControlsLocked ||
+                                        !canAdjustSize
                                     ? null
                                     : drawingController.setBrushWidth,
                               ),
@@ -3899,7 +4203,7 @@ class _WordEditorSection extends StatelessWidget {
           const SizedBox(height: 12),
           TextField(
             controller: solutionController,
-            enabled: !isLocked,
+            enabled: !solutionControlsLocked,
             textCapitalization: TextCapitalization.characters,
             textInputAction: TextInputAction.next,
             autocorrect: false,
@@ -3941,7 +4245,7 @@ class _WordEditorSection extends StatelessWidget {
                   .toList(growable: false),
               selected: <int>{controller.fontWeightValue},
               showSelectedIcon: false,
-              onSelectionChanged: isLocked
+              onSelectionChanged: solutionControlsLocked
                   ? null
                   : (selection) =>
                       controller.updateAllFontWeightValue(selection.first),
@@ -4006,19 +4310,12 @@ class _WordEditorSection extends StatelessWidget {
               promptTextListenable,
             ]),
             builder: (context, _) {
-              final hasLetters = hasLettersListenable.value;
-              final canGeneratePuzzleNow = !isLocked &&
-                  solutionTextListenable.value.trim().length >= 2 &&
-                  promptTextListenable.value.trim().isNotEmpty &&
-                  hasLetters;
               final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
 
               return SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: isGeneratingPuzzle || !canGeneratePuzzleNow
-                      ? null
-                      : onGeneratePuzzle,
+                  onPressed: onGeneratePuzzle,
                   icon: Icon(
                     hasPuzzlePreview
                         ? Icons.refresh_rounded
@@ -4539,6 +4836,58 @@ class _LockedNotice extends StatelessWidget {
   }
 }
 
+class _SolutionPuzzleLinkNotice extends StatelessWidget {
+  final ColorScheme colorScheme;
+  final VoidCallback onUnlock;
+
+  const _SolutionPuzzleLinkNotice({
+    required this.colorScheme,
+    required this.onUnlock,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: colorScheme.primary.withValues(alpha: 0.28),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Row(
+          children: <Widget>[
+            Icon(
+              Icons.link_rounded,
+              color: colorScheme.onPrimaryContainer,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Solution is locked to the current puzzle. Edit the solution to clear the puzzle and generate a new one.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onPrimaryContainer,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.tonal(
+              onPressed: onUnlock,
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+              ),
+              child: const Text('Edit Solution'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SectionCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -4742,6 +5091,7 @@ class _CompactActionButton extends StatelessWidget {
   final String label;
   final bool enabled;
   final VoidCallback onPressed;
+  final String? disabledMessage;
   final double dimension;
 
   const _CompactActionButton({
@@ -4749,11 +5099,23 @@ class _CompactActionButton extends StatelessWidget {
     required this.label,
     required this.enabled,
     required this.onPressed,
+    this.disabledMessage,
     this.dimension = 48,
   });
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final backgroundColor = colorScheme.secondaryContainer.withValues(
+      alpha: enabled ? 1 : 0.45,
+    );
+    final foregroundColor = enabled
+        ? colorScheme.onSecondaryContainer
+        : colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
+    final borderColor = enabled
+        ? colorScheme.outlineVariant.withValues(alpha: 0.7)
+        : colorScheme.outlineVariant.withValues(alpha: 0.36);
+
     return Tooltip(
       message: label,
       child: Semantics(
@@ -4762,15 +5124,27 @@ class _CompactActionButton extends StatelessWidget {
         child: SizedBox(
           width: dimension,
           height: dimension,
-          child: FilledButton.tonal(
-            onPressed: enabled ? onPressed : null,
-            style: FilledButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.padded,
-              minimumSize: Size.square(dimension),
-              padding: EdgeInsets.zero,
+          child: Material(
+            color: backgroundColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: borderColor),
             ),
-            child: Icon(icon, size: 20),
+            child: InkWell(
+              onTap: enabled
+                  ? onPressed
+                  : disabledMessage == null
+                      ? null
+                      : () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(disabledMessage!)),
+                          );
+                        },
+              borderRadius: BorderRadius.circular(14),
+              child: Center(
+                child: Icon(icon, size: 20, color: foregroundColor),
+              ),
+            ),
           ),
         ),
       ),

@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -29,6 +28,7 @@ import 'controller/settings_controller.dart';
 import 'controller/audio_controller.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:operation_hermes/data/category.dart';
+import 'package:operation_hermes/ui/app_scaffold_messenger.dart';
 
 
 @pragma('vm:entry-point')
@@ -228,6 +228,7 @@ class MyApp extends StatelessWidget {
             return MaterialApp(
                 title: 'Subliminal Words',
                 debugShowCheckedModeBanner: false,
+                scaffoldMessengerKey: rootScaffoldMessengerKey,
                 theme: ThemeData(
                     scaffoldBackgroundColor: Colors.white,
                     useMaterial3: true,
