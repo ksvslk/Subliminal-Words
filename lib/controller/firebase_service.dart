@@ -51,6 +51,19 @@ class _SanitizedUserUpload {
   }
 }
 
+class PendingPuzzleGenerationException implements Exception {
+  final String jobId;
+  final String message;
+
+  const PendingPuzzleGenerationException({
+    required this.jobId,
+    required this.message,
+  });
+
+  @override
+  String toString() => message;
+}
+
 class FirebaseService {
   static final _log = Logger('FirebaseService');
   static const String _runpodProxyBaseUrl =
@@ -1108,6 +1121,8 @@ class FirebaseService {
     String solutionMimeType = 'image/png',
     required String prompt,
     required double difficulty,
+    String? existingJobId,
+    void Function(String jobId)? onJobStarted,
     void Function(String status)? onStatusChanged,
   }) async {
     await assertUserCanCreateLevels();
@@ -1130,55 +1145,79 @@ class FirebaseService {
       },
     };
 
-    const maxWarmupRetries = 6;
-    const maxTotalWait = Duration(seconds: 240);
+    const maxWarmupRetries = 12;
+    const maxTotalWait = Duration(minutes: 8);
     const warmupTimeoutMessage =
-        'Puzzle generation is taking longer than usual. Please try again in a moment.';
+        'Puzzle generation is still preparing. You can leave this screen and come back to your draft.';
     final totalWait = Stopwatch()..start();
-    onStatusChanged?.call('Preparing puzzle...');
+    var activeJobId = existingJobId?.trim();
+    var warmupRetryCount = 0;
+    onStatusChanged?.call(
+      activeJobId == null || activeJobId.isEmpty
+          ? 'Preparing puzzle...'
+          : 'Resuming saved puzzle...',
+    );
 
-    for (var generationAttempt = 0;
-        generationAttempt <= maxWarmupRetries;
-        generationAttempt += 1) {
+    while (warmupRetryCount <= maxWarmupRetries) {
       if (totalWait.elapsed >= maxTotalWait) {
+        if (activeJobId != null && activeJobId.isNotEmpty) {
+          throw PendingPuzzleGenerationException(
+            jobId: activeJobId,
+            message: warmupTimeoutMessage,
+          );
+        }
         throw StateError(warmupTimeoutMessage);
       }
 
-      if (generationAttempt > 0) {
-        onStatusChanged?.call('Still preparing puzzle...');
-      }
+      if (activeJobId == null || activeJobId.isEmpty) {
+        if (warmupRetryCount > 0) {
+          onStatusChanged?.call('Still preparing puzzle...');
+        }
 
-      final startData = await _startRunpodGeneration(
-        requestBody: requestBody,
-        onStatusChanged: onStatusChanged,
-      );
-      final jobId = startData['jobId'] as String? ?? '';
-      if (jobId.isEmpty) {
-        throw StateError('The generation job did not start correctly.');
+        final startData = await _startRunpodGeneration(
+          requestBody: requestBody,
+          onStatusChanged: onStatusChanged,
+        );
+        activeJobId = (startData['jobId'] as String? ?? '').trim();
+        if (activeJobId.isEmpty) {
+          throw StateError('The generation job did not start correctly.');
+        }
+        onJobStarted?.call(activeJobId);
       }
 
       var transientFailures = 0;
+      var shouldRestartJob = false;
       for (var attempt = 0; attempt < 120; attempt += 1) {
         if (totalWait.elapsed >= maxTotalWait) {
-          throw StateError(warmupTimeoutMessage);
+          throw PendingPuzzleGenerationException(
+            jobId: activeJobId!,
+            message: warmupTimeoutMessage,
+          );
         }
 
         await Future<void>.delayed(
-          Duration(seconds: attempt == 0 ? 5 : 3),
+          Duration(
+            seconds: switch (attempt) {
+              < 2 => 5,
+              < 12 => 6,
+              < 36 => 8,
+              _ => 10,
+            },
+          ),
         );
 
         Map<String, dynamic> statusData;
         try {
           statusData = await _postRunpodProxy(
             '/api/generate-status',
-            <String, dynamic>{'jobId': jobId},
+            <String, dynamic>{'jobId': activeJobId},
           );
           transientFailures = 0;
         } catch (error, stackTrace) {
-          if (_isTransientGenerationError(error) && transientFailures < 12) {
+          if (_isTransientGenerationError(error) && transientFailures < 40) {
             transientFailures += 1;
             _log.warning(
-              'Transient RunPod status polling error for job $jobId '
+              'Transient RunPod status polling error for job $activeJobId '
               '(attempt ${attempt + 1}, transient retry $transientFailures).',
               error,
               stackTrace,
@@ -1194,7 +1233,7 @@ class FirebaseService {
           _friendlyGenerationStatus(
             status,
             retryable: statusData['retryable'] == true,
-            generationAttempt: generationAttempt,
+            generationAttempt: warmupRetryCount,
             elapsed: totalWait.elapsed,
           ),
         );
@@ -1209,17 +1248,29 @@ class FirebaseService {
 
         if (status == 'FAILED' || status == 'CANCELLED') {
           final details = (statusData['errorMessage'] as String? ?? '').trim();
-          final retryable = statusData['retryable'] == true ||
-              _isRetryableTerminalGenerationStatus(status, details);
+          final retryable = _shouldRetryTerminalGenerationStatus(
+            status: status,
+            details: details,
+            elapsed: totalWait.elapsed,
+            generationAttempt: warmupRetryCount,
+            proxyMarkedRetryable: statusData['retryable'] == true,
+          );
 
-          if (retryable && generationAttempt < maxWarmupRetries) {
+          if (retryable && warmupRetryCount < maxWarmupRetries) {
+            warmupRetryCount += 1;
             final retryAfterMs =
-                (statusData['retryAfterMs'] as num?)?.round() ?? 5000;
+                (statusData['retryAfterMs'] as num?)?.round() ??
+                    (warmupRetryCount < 3 ? 5000 : 9000);
             if (totalWait.elapsed + Duration(milliseconds: retryAfterMs) >=
                 maxTotalWait) {
-              throw StateError(warmupTimeoutMessage);
+              throw PendingPuzzleGenerationException(
+                jobId: activeJobId!,
+                message: warmupTimeoutMessage,
+              );
             }
             onStatusChanged?.call('Still preparing puzzle...');
+            activeJobId = null;
+            shouldRestartJob = true;
             await Future<void>.delayed(Duration(milliseconds: retryAfterMs));
             break;
           }
@@ -1229,6 +1280,13 @@ class FirebaseService {
           }
           throw StateError('Puzzle generation failed.');
         }
+      }
+
+      if (!shouldRestartJob) {
+        throw PendingPuzzleGenerationException(
+          jobId: activeJobId!,
+          message: warmupTimeoutMessage,
+        );
       }
     }
 
@@ -1244,7 +1302,7 @@ class FirebaseService {
     Object? lastError;
     StackTrace? lastStackTrace;
 
-    for (var attempt = 0; attempt < 5; attempt += 1) {
+    for (var attempt = 0; attempt < 8; attempt += 1) {
       try {
         if (attempt > 0) {
           onStatusChanged?.call('Still preparing puzzle...');
@@ -1257,7 +1315,7 @@ class FirebaseService {
       } catch (error, stackTrace) {
         lastError = error;
         lastStackTrace = stackTrace;
-        if (!_isTransientGenerationError(error) || attempt == 4) {
+        if (!_isTransientGenerationError(error) || attempt == 7) {
           rethrow;
         }
 
@@ -1267,7 +1325,9 @@ class FirebaseService {
           stackTrace,
         );
         onStatusChanged?.call('Preparing puzzle...');
-        await Future<void>.delayed(Duration(seconds: 2 + attempt * 2));
+        await Future<void>.delayed(
+          Duration(seconds: attempt < 2 ? 3 : 5 + attempt),
+        );
       }
     }
 
@@ -1334,6 +1394,33 @@ class FirebaseService {
         message.contains('loading model') ||
         message.contains('loading') ||
         message.contains('boot');
+  }
+
+  bool _shouldRetryTerminalGenerationStatus({
+    required String status,
+    required String details,
+    required Duration elapsed,
+    required int generationAttempt,
+    required bool proxyMarkedRetryable,
+  }) {
+    if (proxyMarkedRetryable ||
+        _isRetryableTerminalGenerationStatus(status, details)) {
+      return true;
+    }
+
+    // Treat early terminal states as warm-up noise unless they persist.
+    if (elapsed < const Duration(minutes: 2, seconds: 30)) {
+      return true;
+    }
+
+    if (details.trim().isEmpty && generationAttempt < 4) {
+      return true;
+    }
+
+    final message = details.toLowerCase();
+    return message.contains('unknown') ||
+        message.contains('not ready') ||
+        message.contains('not available');
   }
 
   String _friendlyGenerationStatus(

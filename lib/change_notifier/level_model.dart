@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:in_app_review/in_app_review.dart';
@@ -507,7 +509,9 @@ class LevelModel with ChangeNotifier {
 
   Future<void> setupFCMListeners() async {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission();
+    if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) {
+      await messaging.requestPermission();
+    }
 
     final currentToken = await messaging.getToken();
     if (currentToken != null && currentToken.isNotEmpty) {

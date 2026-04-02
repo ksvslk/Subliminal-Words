@@ -20,6 +20,7 @@ import 'package:operation_hermes/ui/app_scaffold_messenger.dart';
 import 'package:operation_hermes/ui/shimmer_placeholder.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum _StagePreviewMode {
   solution,
@@ -97,10 +98,13 @@ class CreateLevelScreen extends StatefulWidget {
   State<CreateLevelScreen> createState() => _CreateLevelScreenState();
 }
 
-class _CreateLevelScreenState extends State<CreateLevelScreen> {
+class _CreateLevelScreenState extends State<CreateLevelScreen>
+    with WidgetsBindingObserver {
   static const Color _generationExportBackground = Colors.white;
   static const int _minSolutionLength = 2;
   static const int _maxSolutionLength = 16;
+  static const String _pendingPuzzleGenerationPrefsKey =
+      'pending_user_level_generation_v1';
 
   late final TextEditingController _creatorNameController;
   late final TextEditingController _answerController;
@@ -183,10 +187,27 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
               ? _faceSketchImageBytes != null
               : _drawingController.hasCommittedStrokes;
   bool get _canAccessPuzzleStep => _isLocked || _isSolutionStepComplete;
+  bool get _isPuzzleGenerationSafeToLeave =>
+      _isGeneratingPuzzle && _puzzleGenerationStatus != 'Saving draft...';
+  String get _visiblePuzzleGenerationStatus =>
+      _isGeneratingPuzzle ? _puzzleGenerationStatus : '';
+
+  String? get _puzzleGenerationLeaveHint {
+    if (!_isGeneratingPuzzle) {
+      return null;
+    }
+
+    if (_isPuzzleGenerationSafeToLeave) {
+      return 'Safe to leave now. We will keep this puzzle with your draft.';
+    }
+
+    return 'Keep this screen open for a moment while we save your draft first.';
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final initialLevel = widget.initialLevel;
     final initialEditorData =
         initialLevel?.editorData ?? const <String, dynamic>{};
@@ -277,10 +298,14 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         _loadExistingWordLetters();
       });
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_resumePendingPuzzleGenerationIfNeeded());
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _faceSketchDebounceTimer?.cancel();
     _creatorNameController.dispose();
     _answerController.dispose();
@@ -305,6 +330,13 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     _wordDrawingController.dispose();
     _wordOverlayController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_resumePendingPuzzleGenerationIfNeeded());
+    }
   }
 
   Color _canvasBackgroundColor(ThemeData theme) {
@@ -733,6 +765,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         _faceSourceImageSize = sourceSize;
         _faceSketchImageBytes = sketchBytes;
         _faceSourceTransform = clampedTransform;
+        if (!_isGeneratingPuzzle && _hasStoredPuzzleImage) {
+          _puzzleGenerationStatus = '';
+        }
       });
     } catch (_) {
       // If older drafts are missing the original face source, the editor can
@@ -741,11 +776,13 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       if (mounted) {
         setState(() => _isLoadingFaceEditorData = false);
       }
+      unawaited(_resumePendingPuzzleGenerationIfNeeded());
     }
   }
 
   void _invalidatePuzzlePreview({bool returnToSolutionStep = true}) {
     _puzzleInputRevision += 1;
+    unawaited(_clearPendingPuzzleGeneration(onlyForLevelId: _currentLevelId));
 
     if (_generatedPuzzleImageBytes == null && !_hasStoredPuzzleImage) {
       return;
@@ -765,6 +802,150 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         _puzzleGenerationStatus = '';
       }
     });
+  }
+
+  Future<Map<String, dynamic>?> _readPendingPuzzleGeneration() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rawValue = prefs.getString(_pendingPuzzleGenerationPrefsKey);
+    if (rawValue == null || rawValue.trim().isEmpty) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(rawValue);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {
+      await prefs.remove(_pendingPuzzleGenerationPrefsKey);
+    }
+    return null;
+  }
+
+  Future<void> _persistPendingPuzzleGeneration({
+    required String levelId,
+    String? jobId,
+  }) async {
+    final normalizedLevelId = levelId.trim();
+    if (normalizedLevelId.isEmpty) {
+      return;
+    }
+
+    final existing = await _readPendingPuzzleGeneration();
+    final payload = existing != null &&
+            '${existing['levelId'] ?? ''}'.trim() == normalizedLevelId
+        ? Map<String, dynamic>.from(existing)
+        : <String, dynamic>{};
+    payload['levelId'] = normalizedLevelId;
+    payload['editorMode'] = _editorMode;
+    payload['savedAt'] = DateTime.now().millisecondsSinceEpoch;
+    if (jobId != null && jobId.trim().isNotEmpty) {
+      payload['jobId'] = jobId.trim();
+      payload['jobStartedAt'] = DateTime.now().millisecondsSinceEpoch;
+    } else {
+      payload.remove('jobId');
+      payload.remove('jobStartedAt');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _pendingPuzzleGenerationPrefsKey,
+      jsonEncode(payload),
+    );
+  }
+
+  Future<void> _clearPendingPuzzleGeneration({String? onlyForLevelId}) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (onlyForLevelId == null || onlyForLevelId.trim().isEmpty) {
+      await prefs.remove(_pendingPuzzleGenerationPrefsKey);
+      return;
+    }
+
+    final pending = await _readPendingPuzzleGeneration();
+    if (pending == null) {
+      return;
+    }
+
+    if ('${pending['levelId'] ?? ''}'.trim() == onlyForLevelId.trim()) {
+      await prefs.remove(_pendingPuzzleGenerationPrefsKey);
+    }
+  }
+
+  Future<void> _resumePendingPuzzleGenerationIfNeeded() async {
+    if (!mounted ||
+        _isLocked ||
+        _isGeneratingPuzzle ||
+        _isSaving ||
+        _currentLevelId == null ||
+        _isLoadingWordEditorData ||
+        _isLoadingFaceEditorData ||
+        _isProcessingFaceSourceImage ||
+        _isGeneratingFaceSketch) {
+      return;
+    }
+
+    final pending = await _readPendingPuzzleGeneration();
+    if (!mounted || pending == null) {
+      return;
+    }
+
+    final pendingLevelId = '${pending['levelId'] ?? ''}'.trim();
+    if (pendingLevelId.isEmpty || pendingLevelId != _currentLevelId) {
+      return;
+    }
+
+    if (_hasPuzzleImageForReview) {
+      await _clearPendingPuzzleGeneration(onlyForLevelId: pendingLevelId);
+      if (mounted) {
+        setState(() {
+          _isGeneratingPuzzle = false;
+          _puzzleGenerationStatus = '';
+        });
+      }
+      return;
+    }
+
+    final pendingJobId = '${pending['jobId'] ?? ''}'.trim();
+
+    unawaited(
+      _generatePuzzle(
+        skipExistingPuzzleConfirmation: true,
+        triggeredFromPendingResume: true,
+        resumeJobId: pendingJobId.isEmpty ? null : pendingJobId,
+      ),
+    );
+  }
+
+  Future<bool> _confirmRegeneratePuzzle() async {
+    if (!_hasPuzzleImageForReview || _hasPuzzleInvalidatedByEdit || !mounted) {
+      return true;
+    }
+
+    final shouldRegenerate = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Generate a new puzzle?'),
+            content: const Text(
+              'This will replace the current puzzle. Your current work will be saved first so you can keep going safely.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Regenerate'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    return shouldRegenerate;
   }
 
   Future<void> _confirmUnlockSolutionEditing() async {
@@ -805,12 +986,31 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       return true;
     }
 
+    if (!_isPuzzleGenerationSafeToLeave) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Just a moment'),
+          content: const Text(
+            'We are still saving this draft before puzzle generation can continue safely. Please keep this screen open for a moment.',
+          ),
+          actions: <Widget>[
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return false;
+    }
+
     final shouldLeave = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Leave puzzle generation?'),
             content: const Text(
-              'Puzzle generation is still running. Leaving now will stop waiting here, and you may need to generate again later.',
+              'Puzzle generation is still running, but it is now safe to leave. We will keep it with this draft and resume it when you come back.',
             ),
             actions: <Widget>[
               TextButton(
@@ -867,6 +1067,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       if (mounted) {
         setState(() => _isLoadingWordEditorData = false);
       }
+      unawaited(_resumePendingPuzzleGenerationIfNeeded());
     }
   }
 
@@ -938,7 +1139,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     }
   }
 
-  Future<void> _generatePuzzle() async {
+  Future<void> _generatePuzzle({
+    bool skipExistingPuzzleConfirmation = false,
+    bool triggeredFromPendingResume = false,
+    String? resumeJobId,
+  }) async {
     if (_isLocked) {
       _showSnack('Submitted levels are locked and can no longer be edited.');
       return;
@@ -962,7 +1167,29 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       return;
     }
 
+    if (!skipExistingPuzzleConfirmation && !await _confirmRegeneratePuzzle()) {
+      return;
+    }
+
     final prompt = _generationPromptController.text.trim();
+    final normalizedResumeJobId = resumeJobId?.trim();
+
+    if ((normalizedResumeJobId == null || normalizedResumeJobId.isEmpty) &&
+        _currentLevelId != null &&
+        !_hasPuzzleImageForReview) {
+      final pending = await _readPendingPuzzleGeneration();
+      final pendingLevelId = '${pending?['levelId'] ?? ''}'.trim();
+      final pendingJobId = '${pending?['jobId'] ?? ''}'.trim();
+      if (pendingLevelId == _currentLevelId && pendingJobId.isNotEmpty) {
+        resumeJobId = pendingJobId;
+      }
+    } else {
+      resumeJobId = normalizedResumeJobId;
+    }
+
+    if (!mounted) {
+      return;
+    }
 
     for (final value in <String>[prompt]) {
       if (ContentFilter.containsBlockedTerm(value)) {
@@ -974,21 +1201,59 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     FocusScope.of(context).unfocus();
     final firebaseService = context.read<FirebaseService>();
     final generationToken = ++_activeGenerationToken;
-    final generationRevision = _puzzleInputRevision;
 
     setState(() {
       _isGeneratingPuzzle = true;
-      _puzzleGenerationStatus = 'Preparing solution image...';
+      _puzzleGenerationStatus = 'Saving draft...';
       _stagePreviewMode = _StagePreviewMode.puzzle;
     });
 
+    var startedRunpodGeneration = false;
+    var puzzleGenerated = false;
+    String? pendingLevelId;
     try {
+      late final String levelId;
+      if (resumeJobId == null || resumeJobId.isEmpty) {
+        levelId = await _persistCurrentLevel(
+          firebaseService: firebaseService,
+          includeFaceSolutionAsset: false,
+        );
+        if (!mounted) {
+          return;
+        }
+        await _persistPendingPuzzleGeneration(levelId: levelId);
+      } else {
+        levelId = _currentLevelId ?? '';
+        if (levelId.isEmpty) {
+          throw StateError('Could not resume puzzle generation for this draft.');
+        }
+        await _persistPendingPuzzleGeneration(
+          levelId: levelId,
+          jobId: resumeJobId,
+        );
+      }
+      pendingLevelId = levelId;
+      if (!mounted) {
+        return;
+      }
+
+      final generationRevision = _puzzleInputRevision;
+      if (triggeredFromPendingResume && mounted) {
+        setState(() => _puzzleGenerationStatus = 'Resuming saved puzzle...');
+      } else if (resumeJobId != null && resumeJobId.isNotEmpty && mounted) {
+        setState(() => _puzzleGenerationStatus = 'Checking saved puzzle...');
+      } else if (mounted) {
+        setState(() => _puzzleGenerationStatus = 'Preparing solution image...');
+      }
+      startedRunpodGeneration = true;
       final sourceImageBytes = await _buildPuzzleGenerationSourceImage();
       final puzzleBytes = await _runPuzzleGenerationWithAdaptiveCompression(
         firebaseService: firebaseService,
         generationToken: generationToken,
         sourceImageBytes: sourceImageBytes,
         prompt: prompt,
+        pendingLevelId: levelId,
+        existingJobId: resumeJobId,
       );
 
       if (!mounted) {
@@ -996,6 +1261,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       }
 
       if (generationRevision != _puzzleInputRevision) {
+        await _clearPendingPuzzleGeneration(onlyForLevelId: levelId);
         setState(() {
           _generatedPuzzleImageBytes = null;
           _hasPuzzleInvalidatedByEdit = true;
@@ -1012,9 +1278,38 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         _stagePreviewMode = _StagePreviewMode.puzzle;
         _puzzleGenerationStatus = 'Puzzle ready';
       });
+      puzzleGenerated = true;
+
+      if (mounted) {
+        setState(() => _puzzleGenerationStatus = 'Saving puzzle...');
+      }
+      final savedLevelId = await _persistCurrentLevel(
+        firebaseService: firebaseService,
+        includeFaceSolutionAsset: false,
+        puzzleImageBytesOverride: puzzleBytes,
+      );
+      await _clearPendingPuzzleGeneration(onlyForLevelId: savedLevelId);
+      if (mounted) {
+        setState(() => _puzzleGenerationStatus = 'Puzzle ready');
+      }
     } catch (error) {
       if (!mounted) {
         return;
+      }
+      if (error is PendingPuzzleGenerationException) {
+        setState(() {
+          _stagePreviewMode = _StagePreviewMode.puzzle;
+          _puzzleGenerationStatus = 'Still preparing puzzle...';
+        });
+        _showSnack(
+          'Puzzle generation is still running. You can leave this screen and come back to your draft.',
+        );
+        return;
+      }
+      if (!puzzleGenerated) {
+        await _clearPendingPuzzleGeneration(
+          onlyForLevelId: pendingLevelId ?? _currentLevelId,
+        );
       }
       setState(() {
         _stagePreviewMode = _StagePreviewMode.puzzle;
@@ -1022,7 +1317,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       });
       _showFriendlyError(
         error,
-        context: _CreatorErrorContext.puzzleGeneration,
+        context: puzzleGenerated
+            ? _CreatorErrorContext.draftSave
+            : startedRunpodGeneration
+            ? _CreatorErrorContext.puzzleGeneration
+            : _CreatorErrorContext.draftSave,
       );
     } finally {
       if (mounted && generationToken == _activeGenerationToken) {
@@ -1059,14 +1358,19 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     required int generationToken,
     required Uint8List sourceImageBytes,
     required String prompt,
+    required String pendingLevelId,
+    String? existingJobId,
   }) async {
     const targets = <int>[kGenerationPayloadTargetBytes, 38 * 1024, 28 * 1024];
     Object? lastError;
+    var activeJobId = existingJobId?.trim();
 
     for (var i = 0; i < targets.length; i += 1) {
       if (mounted && generationToken == _activeGenerationToken) {
         setState(() {
-          _puzzleGenerationStatus = i == 0
+          _puzzleGenerationStatus = activeJobId?.isNotEmpty == true
+              ? 'Checking saved puzzle...'
+              : i == 0
               ? 'Preparing puzzle...'
               : 'Preparing a lighter image...';
         });
@@ -1089,6 +1393,16 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           solutionMimeType: 'image/webp',
           prompt: prompt,
           difficulty: _generationDifficulty,
+          existingJobId: activeJobId,
+          onJobStarted: (jobId) {
+            activeJobId = jobId;
+            unawaited(
+              _persistPendingPuzzleGeneration(
+                levelId: pendingLevelId,
+                jobId: jobId,
+              ),
+            );
+          },
           onStatusChanged: (status) {
             if (!mounted || generationToken != _activeGenerationToken) {
               return;
@@ -1098,10 +1412,15 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         );
       } catch (error) {
         lastError = error;
+        if (error is PendingPuzzleGenerationException) {
+          rethrow;
+        }
         if (!_shouldRetryPuzzleGenerationWithSmallerImage(error) ||
             i == targets.length - 1) {
           rethrow;
         }
+        activeJobId = null;
+        await _persistPendingPuzzleGeneration(levelId: pendingLevelId);
       }
     }
 
@@ -1253,6 +1572,97 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     return null;
   }
 
+  Future<String> _persistCurrentLevel({
+    required FirebaseService firebaseService,
+    required bool includeFaceSolutionAsset,
+    Uint8List? puzzleImageBytesOverride,
+  }) async {
+    late final String levelId;
+    final puzzleImageBytes = puzzleImageBytesOverride ?? _generatedPuzzleImageBytes;
+    final allowReuseExistingPuzzle =
+        puzzleImageBytes == null && !_hasPuzzleInvalidatedByEdit;
+
+    if (_editorMode == UserLevelEditorMode.highlight) {
+      final editorData = <String, dynamic>{
+        'wordLetters': _wordOverlayController.letters
+            .map((letter) => letter.toJson())
+            .toList(),
+        'wordDrawing': _wordDrawingController.toEditorData(),
+        'generationPrompt': _generationPromptController.text.trim(),
+        'generationDifficulty': _generationDifficulty,
+      };
+
+      levelId = await firebaseService.saveWordLevel(
+        levelId: _currentLevelId,
+        creatorName: _creatorNameController.text,
+        answer: _answerController.text,
+        factText: '',
+        contentCategory: _contentCategory,
+        solutionSvg: generateWordOverlaySvg(_wordOverlayController.letters),
+        puzzleImageBytes: puzzleImageBytes,
+        allowReuseExistingPuzzle: allowReuseExistingPuzzle,
+        editorData: editorData,
+      );
+    } else if (_editorMode == UserLevelEditorMode.photoSketch) {
+      final clampedTransform = _sanitizedFaceTransform(_faceSourceTransform);
+      final editorData = <String, dynamic>{
+        'faceSketchSettings': _faceSketchSettings.toJson(),
+        'faceSourceTransform': clampedTransform.toJson(),
+        'generationPrompt': _generationPromptController.text.trim(),
+        'generationDifficulty': _generationDifficulty,
+      };
+      final solutionImageBytes = includeFaceSolutionAsset
+          ? await compressFaceSketchWebp(
+              await generateFaceSketchPng(
+                sourceBytes: _faceSourceImageBytes!,
+                settings: _faceSketchSettings,
+                transform: clampedTransform,
+              ),
+            )
+          : null;
+
+      levelId = await firebaseService.savePhotoSketchLevel(
+        levelId: _currentLevelId,
+        creatorName: _creatorNameController.text,
+        answer: _answerController.text,
+        factText: _factController.text,
+        contentCategory: _contentCategory,
+        sourceImageBytes: _faceSourceImageBytes!,
+        solutionImageBytes: solutionImageBytes,
+        puzzleImageBytes: puzzleImageBytes,
+        allowReuseExistingPuzzle: allowReuseExistingPuzzle,
+        persistSolutionAsset: includeFaceSolutionAsset,
+        editorData: editorData,
+      );
+    } else {
+      final pngBytes = await exportDrawingAsPng(
+        strokes: _drawingController.strokes,
+        backgroundColor: _generationExportBackground,
+      );
+      final editorData = _drawingController.toEditorData()
+        ..['generationPrompt'] = _generationPromptController.text.trim()
+        ..['generationDifficulty'] = _generationDifficulty;
+
+      levelId = await firebaseService.saveDrawObjectLevel(
+        levelId: _currentLevelId,
+        creatorName: _creatorNameController.text,
+        answer: _answerController.text,
+        factText: _factController.text,
+        contentCategory: _contentCategory,
+        solutionPngBytes: pngBytes,
+        puzzleImageBytes: puzzleImageBytes,
+        allowReuseExistingPuzzle: allowReuseExistingPuzzle,
+        editorData: editorData,
+      );
+    }
+
+    if (mounted && _currentLevelId != levelId) {
+      setState(() => _currentLevelId = levelId);
+    }
+
+    return levelId;
+  }
+
   Future<void> _save({required bool submitAfterSave}) async {
     if (_isLocked) {
       _showSnack('Submitted levels are locked and can no longer be edited.');
@@ -1283,83 +1693,14 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     final firebaseService = context.read<FirebaseService>();
 
     try {
-      late final String levelId;
-      if (_editorMode == UserLevelEditorMode.highlight) {
-        final editorData = <String, dynamic>{
-          'wordLetters': _wordOverlayController.letters
-              .map((letter) => letter.toJson())
-              .toList(),
-          'wordDrawing': _wordDrawingController.toEditorData(),
-          'generationPrompt': _generationPromptController.text.trim(),
-          'generationDifficulty': _generationDifficulty,
-        };
-
-        levelId = await firebaseService.saveWordLevel(
-          levelId: _currentLevelId,
-          creatorName: _creatorNameController.text,
-          answer: _answerController.text,
-          factText: '',
-          contentCategory: _contentCategory,
-          solutionSvg: generateWordOverlaySvg(_wordOverlayController.letters),
-          puzzleImageBytes: _generatedPuzzleImageBytes,
-          allowReuseExistingPuzzle: !_hasPuzzleInvalidatedByEdit,
-          editorData: editorData,
-        );
-      } else if (_editorMode == UserLevelEditorMode.photoSketch) {
-        final clampedTransform = _sanitizedFaceTransform(_faceSourceTransform);
-        final editorData = <String, dynamic>{
-          'faceSketchSettings': _faceSketchSettings.toJson(),
-          'faceSourceTransform': clampedTransform.toJson(),
-          'generationPrompt': _generationPromptController.text.trim(),
-          'generationDifficulty': _generationDifficulty,
-        };
-        final solutionImageBytes = submitAfterSave
-            ? await compressFaceSketchWebp(
-                await generateFaceSketchPng(
-                  sourceBytes: _faceSourceImageBytes!,
-                  settings: _faceSketchSettings,
-                  transform: clampedTransform,
-                ),
-              )
-            : null;
-
-        levelId = await firebaseService.savePhotoSketchLevel(
-          levelId: _currentLevelId,
-          creatorName: _creatorNameController.text,
-          answer: _answerController.text,
-          factText: _factController.text,
-          contentCategory: _contentCategory,
-          sourceImageBytes: _faceSourceImageBytes!,
-          solutionImageBytes: submitAfterSave ? solutionImageBytes : null,
-          puzzleImageBytes: _generatedPuzzleImageBytes,
-          allowReuseExistingPuzzle: !_hasPuzzleInvalidatedByEdit,
-          persistSolutionAsset: submitAfterSave,
-          editorData: editorData,
-        );
-      } else {
-        final pngBytes = await exportDrawingAsPng(
-          strokes: _drawingController.strokes,
-          backgroundColor: _generationExportBackground,
-        );
-        final editorData = _drawingController.toEditorData()
-          ..['generationPrompt'] = _generationPromptController.text.trim()
-          ..['generationDifficulty'] = _generationDifficulty;
-
-        levelId = await firebaseService.saveDrawObjectLevel(
-          levelId: _currentLevelId,
-          creatorName: _creatorNameController.text,
-          answer: _answerController.text,
-          factText: _factController.text,
-          contentCategory: _contentCategory,
-          solutionPngBytes: pngBytes,
-          puzzleImageBytes: _generatedPuzzleImageBytes,
-          allowReuseExistingPuzzle: !_hasPuzzleInvalidatedByEdit,
-          editorData: editorData,
-        );
-      }
+      final levelId = await _persistCurrentLevel(
+        firebaseService: firebaseService,
+        includeFaceSolutionAsset: submitAfterSave,
+      );
 
       if (submitAfterSave) {
         await firebaseService.submitUserLevelForReview(levelId);
+        await _clearPendingPuzzleGeneration(onlyForLevelId: levelId);
       }
 
       if (!mounted) {
@@ -1370,8 +1711,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         Navigator.of(context).pop(true);
         return;
       }
-
-      setState(() => _currentLevelId = levelId);
       _showSnack('Draft saved.');
     } catch (error) {
       _showFriendlyError(
@@ -1681,9 +2020,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                                       children: <Widget>[
                                         SizedBox.square(
                                           dimension: 16,
-                                          child:
-                                              CircularProgressIndicator.adaptive(
-                                            strokeWidth: 2,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.4,
+                                            backgroundColor: colorScheme
+                                                .onPrimary
+                                                .withValues(alpha: 0.22),
                                             valueColor:
                                                 AlwaysStoppedAnimation<Color>(
                                               colorScheme.onPrimary,
@@ -1757,7 +2098,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                               _existingPuzzlePreviewUrlFuture,
                           hasStoredPuzzleImage: _hasStoredPuzzleImage,
                           isGeneratingPuzzle: _isGeneratingPuzzle,
-                          puzzleGenerationStatus: _puzzleGenerationStatus,
+                          puzzleGenerationStatus: _visiblePuzzleGenerationStatus,
+                          puzzleGenerationLeaveHint:
+                              _puzzleGenerationLeaveHint,
                           generationDifficulty: _generationDifficulty,
                           onStageInteractionChanged:
                               _handleStageInteractionChanged,
@@ -1800,7 +2143,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                                   _existingPuzzlePreviewUrlFuture,
                               hasStoredPuzzleImage: _hasStoredPuzzleImage,
                               isGeneratingPuzzle: _isGeneratingPuzzle,
-                              puzzleGenerationStatus: _puzzleGenerationStatus,
+                              puzzleGenerationStatus:
+                                  _visiblePuzzleGenerationStatus,
+                              puzzleGenerationLeaveHint:
+                                  _puzzleGenerationLeaveHint,
                               generationDifficulty: _generationDifficulty,
                               settings: _faceSketchSettings,
                               onPickImage: _pickFaceSourceImage,
@@ -1850,7 +2196,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                                   _existingPuzzlePreviewUrlFuture,
                               hasStoredPuzzleImage: _hasStoredPuzzleImage,
                               isGeneratingPuzzle: _isGeneratingPuzzle,
-                              puzzleGenerationStatus: _puzzleGenerationStatus,
+                              puzzleGenerationStatus:
+                                  _visiblePuzzleGenerationStatus,
+                              puzzleGenerationLeaveHint:
+                                  _puzzleGenerationLeaveHint,
                               generationDifficulty: _generationDifficulty,
                               normalizePoint: _normalizePoint,
                               onStageInteractionChanged:
@@ -1907,6 +2256,7 @@ class _FaceEditorSection extends StatelessWidget {
   final bool hasStoredPuzzleImage;
   final bool isGeneratingPuzzle;
   final String puzzleGenerationStatus;
+  final String? puzzleGenerationLeaveHint;
   final double generationDifficulty;
   final FaceSketchSettings settings;
   final VoidCallback onPickImage;
@@ -1952,6 +2302,7 @@ class _FaceEditorSection extends StatelessWidget {
     required this.hasStoredPuzzleImage,
     required this.isGeneratingPuzzle,
     required this.puzzleGenerationStatus,
+    required this.puzzleGenerationLeaveHint,
     required this.generationDifficulty,
     required this.settings,
     required this.onPickImage,
@@ -2367,6 +2718,16 @@ class _FaceEditorSection extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
+            if (puzzleGenerationLeaveHint != null) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                puzzleGenerationLeaveHint!,
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 12),
           _ContentCategorySelector(
@@ -2431,6 +2792,7 @@ class _CanvasEditorSection extends StatelessWidget {
   final bool hasStoredPuzzleImage;
   final bool isGeneratingPuzzle;
   final String puzzleGenerationStatus;
+  final String? puzzleGenerationLeaveHint;
   final double generationDifficulty;
   final Offset Function(Offset localPosition, Size size) normalizePoint;
   final ValueChanged<bool> onStageInteractionChanged;
@@ -2460,6 +2822,7 @@ class _CanvasEditorSection extends StatelessWidget {
     required this.hasStoredPuzzleImage,
     required this.isGeneratingPuzzle,
     required this.puzzleGenerationStatus,
+    required this.puzzleGenerationLeaveHint,
     required this.generationDifficulty,
     required this.normalizePoint,
     required this.onStageInteractionChanged,
@@ -2818,6 +3181,16 @@ class _CanvasEditorSection extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
+            if (puzzleGenerationLeaveHint != null) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                puzzleGenerationLeaveHint!,
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 12),
           TextField(
@@ -4128,6 +4501,7 @@ class _WordEditorSection extends StatelessWidget {
   final bool hasStoredPuzzleImage;
   final bool isGeneratingPuzzle;
   final String puzzleGenerationStatus;
+  final String? puzzleGenerationLeaveHint;
   final double generationDifficulty;
   final Offset Function(Offset localPosition, Size size) normalizePoint;
   final ValueChanged<bool> onStageInteractionChanged;
@@ -4159,6 +4533,7 @@ class _WordEditorSection extends StatelessWidget {
     required this.hasStoredPuzzleImage,
     required this.isGeneratingPuzzle,
     required this.puzzleGenerationStatus,
+    required this.puzzleGenerationLeaveHint,
     required this.generationDifficulty,
     required this.normalizePoint,
     required this.onStageInteractionChanged,
@@ -4568,6 +4943,16 @@ class _WordEditorSection extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
+            if (puzzleGenerationLeaveHint != null) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                puzzleGenerationLeaveHint!,
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 12),
           TextField(
