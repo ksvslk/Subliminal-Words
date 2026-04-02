@@ -11,6 +11,7 @@ import 'package:logging/logging.dart';
 import 'package:operation_hermes/config/C.dart';
 import 'package:operation_hermes/controller/ads_controller.dart';
 import 'package:operation_hermes/controller/money_controller.dart';
+import 'package:operation_hermes/controller/local_notification_service.dart';
 import 'package:operation_hermes/ui/screen/game_field_screen.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
 import 'package:operation_hermes/controller/games_services.dart';
@@ -116,7 +117,9 @@ Future<void> main() async {
   }
 
   FirebaseService firebaseService = FirebaseService();
+  final localNotificationService = LocalNotificationService();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  await localNotificationService.initialize();
 
   runApp(
     MyApp(
@@ -126,7 +129,8 @@ Future<void> main() async {
         adsController: adsController,
         inAppPurchaseController: inAppPurchaseController,
         gamesServicesController: gamesServicesController,
-        firebaseService: firebaseService),
+        firebaseService: firebaseService,
+        localNotificationService: localNotificationService),
   );
 }
 
@@ -141,6 +145,7 @@ class MyApp extends StatelessWidget {
   final MoneyController? inAppPurchaseController;
   final GamesServicesController? gamesServicesController;
   final FirebaseService firebaseService;
+  final LocalNotificationService localNotificationService;
 
   const MyApp(
       {super.key,
@@ -150,7 +155,8 @@ class MyApp extends StatelessWidget {
       required this.adsController,
       required this.inAppPurchaseController,
       required this.gamesServicesController,
-      required this.firebaseService});
+      required this.firebaseService,
+      required this.localNotificationService});
 
   @override
   Widget build(BuildContext context) {
@@ -203,6 +209,7 @@ class MyApp extends StatelessWidget {
               settingsPersistence:
                   context.read<SettingsController>().persistence,
               firebaseService: firebaseService,
+              localNotificationService: localNotificationService,
               // *** FIX: Read the AudioController from the context ***
               audioController: context.read<AudioController>()),
           update: (BuildContext context,

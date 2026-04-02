@@ -1,8 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:operation_hermes/controller/firebase_service.dart';
 import 'package:operation_hermes/data/user_level_metadata.dart';
+import 'package:operation_hermes/ui/app_scaffold_messenger.dart';
 import 'package:operation_hermes/ui/screen/create_level_screen.dart';
+import 'package:provider/provider.dart';
 
 Future<void> openCreateLevelFlow(BuildContext context) async {
+  final firebaseService = context.read<FirebaseService>();
+  try {
+    await firebaseService.assertUserCanCreateLevels();
+  } catch (_) {
+    showAppSnackBar('Level creation is unavailable for this account right now.');
+    return;
+  }
+
+  if (!context.mounted) {
+    return;
+  }
+
   final selectedMode = await showDialog<String>(
     context: context,
     builder: (_) => const _CreateLevelTypeDialog(),

@@ -9,8 +9,56 @@ import 'package:operation_hermes/ui/create_level_flow.dart';
 import 'package:operation_hermes/ui/screen/create_level_screen.dart';
 import 'package:provider/provider.dart';
 
-class MyLevelsScreen extends StatelessWidget {
+enum _LevelCardAction {
+  play,
+  edit,
+  submit,
+  delete,
+}
+
+class MyLevelsScreen extends StatefulWidget {
   const MyLevelsScreen({super.key});
+
+  @override
+  State<MyLevelsScreen> createState() => _MyLevelsScreenState();
+}
+
+class _MyLevelsScreenState extends State<MyLevelsScreen> {
+  String? _activeLevelActionId;
+  _LevelCardAction? _activeLevelAction;
+
+  bool _isLevelBusy(String levelId) => _activeLevelActionId == levelId;
+
+  bool _isActionBusy(String levelId, _LevelCardAction action) =>
+      _activeLevelActionId == levelId && _activeLevelAction == action;
+
+  Future<void> _runLevelAction(
+    String levelId,
+    _LevelCardAction action,
+    Future<void> Function() run,
+  ) async {
+    if (_isLevelBusy(levelId)) {
+      return;
+    }
+
+    setState(() {
+      _activeLevelActionId = levelId;
+      _activeLevelAction = action;
+    });
+
+    try {
+      await run();
+    } finally {
+      if (mounted &&
+          _activeLevelActionId == levelId &&
+          _activeLevelAction == action) {
+        setState(() {
+          _activeLevelActionId = null;
+          _activeLevelAction = null;
+        });
+      }
+    }
+  }
 
   void _showActionBlocked(BuildContext context, String message) {
     showAppSnackBar(message);
@@ -18,7 +66,38 @@ class MyLevelsScreen extends StatelessWidget {
 
   String _friendlySubmitError(Object error) {
     final message =
-        error.toString().replaceFirst('Exception: ', '').toLowerCase();
+        error
+            .toString()
+            .replaceFirst('Exception: ', '')
+            .replaceFirst('Bad state: ', '')
+            .trim()
+            .toLowerCase();
+    if (message.contains('safety-checked before review')) {
+      return 'Open this face level and save it again before submitting for review.';
+    }
+    if (message.contains('level creation is unavailable')) {
+      return 'Level creation is unavailable for this account right now.';
+    }
+    if (message.contains('missing a creator name or answer')) {
+      return 'Add the creator name and solution before submitting for review.';
+    }
+    if (message.contains('missing a fact hint')) {
+      return 'Add a fact hint before submitting for review.';
+    }
+    if (message.contains('actual puzzle image') ||
+        message.contains('generate the puzzle')) {
+      return 'Generate the puzzle before submitting for review.';
+    }
+    if (message.contains('already been submitted') ||
+        message.contains('now locked')) {
+      return 'This level has already been submitted and is now locked.';
+    }
+    if (message.contains('remove profanity')) {
+      return 'Please remove profanity before submitting for review.';
+    }
+    if (message.contains('could not be found')) {
+      return 'Could not find this draft anymore. Please reopen My Levels and try again.';
+    }
     if (message.contains('signed in') ||
         message.contains('permission') ||
         message.contains('unauth') ||
@@ -81,7 +160,7 @@ class MyLevelsScreen extends StatelessWidget {
   Future<void> _playLevel(BuildContext context, SWLevel level) async {
     await context.read<LevelModel>().loadLevelFromSelection(level);
     if (context.mounted) {
-      Navigator.of(context).pop();
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
@@ -267,9 +346,25 @@ class MyLevelsScreen extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final level = levels[index];
+              final isLevelBusy = _isLevelBusy(level.documentId);
               final statusLabel =
                   UserLevelSubmissionStatus.labelFor(level.submissionStatus);
               final hasPuzzleImage = level.hasReviewReadyPuzzleImage;
+              final faceSourceSafetyStatus = (level.editorData[
+                          'sourceImageSafetyStatus'] ??
+                      level.editorData['sourceSafetyStatus'] ??
+                      '')
+                  .toString()
+                  .trim()
+                  .toLowerCase();
+              final needsFaceSafetyResave =
+                  level.editorMode == UserLevelEditorMode.photoSketch &&
+                      faceSourceSafetyStatus != 'clean';
+              final canSubmitForReview = hasPuzzleImage &&
+                  !level.isLocked &&
+                  !needsFaceSafetyResave &&
+                  level.submissionStatus !=
+                      UserLevelSubmissionStatus.pendingReview;
 
               return Card(
                 elevation: 0,
@@ -343,44 +438,117 @@ class MyLevelsScreen extends StatelessWidget {
                           ),
                         ),
                       ],
+                      if (needsFaceSafetyResave) ...<Widget>[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Open this face level and save it again before submitting it for review.',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      if (level.submissionStatus ==
+                              UserLevelSubmissionStatus.rejected &&
+                          level.submissionFeedback.trim().isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: colorScheme.errorContainer,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: colorScheme.error.withValues(alpha: 0.18),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                'Review Feedback',
+                                style: textTheme.labelLarge?.copyWith(
+                                  color: colorScheme.onErrorContainer,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                level.submissionFeedback,
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: colorScheme.onErrorContainer,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 14),
                       Row(
                         children: <Widget>[
                           _LevelActionIconButton(
                             tooltip: 'Play',
                             icon: Icons.play_arrow_outlined,
-                            enabled: hasPuzzleImage,
-                            onPressed: () => _playLevel(context, level),
+                            enabled: hasPuzzleImage && !isLevelBusy,
+                            isLoading: _isActionBusy(
+                              level.documentId,
+                              _LevelCardAction.play,
+                            ),
+                            onPressed: () => _runLevelAction(
+                              level.documentId,
+                              _LevelCardAction.play,
+                              () => _playLevel(context, level),
+                            ),
                             onUnavailable: () => _showActionBlocked(
                               context,
-                              'Generate a puzzle first before playing this level.',
+                              hasPuzzleImage
+                                  ? 'Please wait for the current action to finish.'
+                                  : 'Generate a puzzle first before playing this level.',
                             ),
                           ),
                           const SizedBox(width: 8),
                           _LevelActionIconButton(
                             tooltip: 'Edit',
                             icon: Icons.edit_outlined,
-                            enabled: !level.isLocked,
-                            onPressed: () => _openEditor(context, level: level),
+                            enabled: !level.isLocked && !isLevelBusy,
+                            isLoading: _isActionBusy(
+                              level.documentId,
+                              _LevelCardAction.edit,
+                            ),
+                            onPressed: () => _runLevelAction(
+                              level.documentId,
+                              _LevelCardAction.edit,
+                              () => _openEditor(context, level: level),
+                            ),
                             onUnavailable: () => _showActionBlocked(
                               context,
-                              'Submitted levels are locked and can no longer be edited.',
+                              !level.isLocked
+                                  ? 'Please wait for the current action to finish.'
+                                  : 'Submitted levels are locked and can no longer be edited.',
                             ),
                           ),
                           const SizedBox(width: 8),
                           _LevelActionIconButton(
                             tooltip: 'Submit for Review',
                             icon: Icons.publish_outlined,
-                            enabled: hasPuzzleImage &&
-                                !level.isLocked &&
-                                level.submissionStatus !=
-                                    UserLevelSubmissionStatus.pendingReview,
-                            onPressed: () => _submitLevel(context, level),
+                            enabled: canSubmitForReview && !isLevelBusy,
+                            isLoading: _isActionBusy(
+                              level.documentId,
+                              _LevelCardAction.submit,
+                            ),
+                            onPressed: () => _runLevelAction(
+                              level.documentId,
+                              _LevelCardAction.submit,
+                              () => _submitLevel(context, level),
+                            ),
                             onUnavailable: () => _showActionBlocked(
                               context,
-                              !hasPuzzleImage
-                                  ? 'Generate a puzzle first before submitting for review.'
-                                  : 'This level is already submitted and waiting for review.',
+                              isLevelBusy
+                                  ? 'Please wait for the current action to finish.'
+                                  : !hasPuzzleImage
+                                      ? 'Generate a puzzle first before submitting for review.'
+                                      : needsFaceSafetyResave
+                                          ? 'Open this face level and save it again before submitting for review.'
+                                          : 'This level is already submitted and waiting for review.',
                             ),
                             isPrimary: true,
                           ),
@@ -388,11 +556,21 @@ class MyLevelsScreen extends StatelessWidget {
                           _LevelActionIconButton(
                             tooltip: 'Delete Draft',
                             icon: Icons.delete_outline_rounded,
-                            enabled: !level.isLocked,
-                            onPressed: () => _deleteLevel(context, level),
+                            enabled: !level.isLocked && !isLevelBusy,
+                            isLoading: _isActionBusy(
+                              level.documentId,
+                              _LevelCardAction.delete,
+                            ),
+                            onPressed: () => _runLevelAction(
+                              level.documentId,
+                              _LevelCardAction.delete,
+                              () => _deleteLevel(context, level),
+                            ),
                             onUnavailable: () => _showActionBlocked(
                               context,
-                              'Submitted levels cannot be deleted.',
+                              !level.isLocked
+                                  ? 'Please wait for the current action to finish.'
+                                  : 'Submitted levels cannot be deleted.',
                             ),
                             isDestructive: true,
                           ),
@@ -414,6 +592,7 @@ class _LevelActionIconButton extends StatelessWidget {
   final String tooltip;
   final IconData icon;
   final bool enabled;
+  final bool isLoading;
   final VoidCallback onPressed;
   final VoidCallback? onUnavailable;
   final bool isPrimary;
@@ -423,6 +602,7 @@ class _LevelActionIconButton extends StatelessWidget {
     required this.tooltip,
     required this.icon,
     required this.enabled,
+    this.isLoading = false,
     required this.onPressed,
     this.onUnavailable,
     this.isPrimary = false,
@@ -469,7 +649,20 @@ class _LevelActionIconButton extends StatelessWidget {
             child: SizedBox(
               width: 42,
               height: 42,
-              child: Icon(icon, size: 20, color: foregroundColor),
+              child: Center(
+                child: isLoading
+                    ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            foregroundColor,
+                          ),
+                        ),
+                      )
+                    : Icon(icon, size: 20, color: foregroundColor),
+              ),
             ),
           ),
         ),

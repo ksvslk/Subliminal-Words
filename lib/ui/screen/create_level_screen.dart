@@ -121,6 +121,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   late final ImagePicker _imagePicker;
 
   bool _isSaving = false;
+  bool _isSubmittingForReview = false;
   bool _isGeneratingPuzzle = false;
   bool _isStageInteracting = false;
   bool _isLoadingWordEditorData = false;
@@ -142,9 +143,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   int _lastSeenWordContentVersion = 0;
   int _puzzleInputRevision = 0;
   int _activeGenerationToken = 0;
-  int _faceSketchRequestId = 0;
+  int _faceSketchGenerationRevision = 0;
+  bool _isFaceSketchGenerationInFlight = false;
   String? _currentLevelId;
   late String _editorMode;
+  late String _contentCategory;
   late FaceSketchSettings _faceSketchSettings;
   late FaceSourceTransform _faceSourceTransform;
   Timer? _faceSketchDebounceTimer;
@@ -205,6 +208,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                 UserLevelEditorMode.supported.contains(initialEditorMode)
             ? initialEditorMode
             : UserLevelEditorMode.drawObject);
+    _contentCategory = UserLevelContentCategory.normalize(
+      initialLevel?.contentCategory,
+      editorMode: _editorMode,
+    );
     _currentLevelId = initialLevel?.documentId;
     _generationPromptController = TextEditingController(
       text: initialEditorData['generationPrompt'] as String? ??
@@ -412,6 +419,18 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     _invalidatePuzzlePreview(returnToSolutionStep: false);
   }
 
+  void _updateContentCategory(String value) {
+    final normalized = UserLevelContentCategory.normalize(
+      value,
+      editorMode: _editorMode,
+    );
+    if (_contentCategory == normalized) {
+      return;
+    }
+
+    setState(() => _contentCategory = normalized);
+  }
+
   Future<void> _pickFaceSourceImage() async {
     if (_isLocked || _isGeneratingFaceSketch) {
       return;
@@ -480,7 +499,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       return;
     }
 
-    _faceSketchDebounceTimer?.cancel();
+    _cancelPendingFaceSketchGeneration();
     _handleStageInteractionChanged(false);
     setState(() {
       _faceSourceImageBytes = null;
@@ -560,6 +579,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   void _scheduleFaceSketchGeneration({bool immediate = false}) {
+    _faceSketchGenerationRevision += 1;
     _faceSketchDebounceTimer?.cancel();
     if (_faceSourceImageBytes == null) {
       return;
@@ -576,13 +596,26 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     );
   }
 
+  void _cancelPendingFaceSketchGeneration() {
+    _faceSketchDebounceTimer?.cancel();
+    _faceSketchGenerationRevision += 1;
+  }
+
   Future<void> _generateFaceSketchPreview() async {
+    if (_isFaceSketchGenerationInFlight) {
+      return;
+    }
+
     final sourceBytes = _faceSourceImageBytes;
     if (sourceBytes == null) {
       return;
     }
 
-    final requestId = ++_faceSketchRequestId;
+    final requestedRevision = _faceSketchGenerationRevision;
+    final settings = _faceSketchSettings;
+    final transform = _sanitizedFaceTransform(_faceSourceTransform);
+    _isFaceSketchGenerationInFlight = true;
+    var shouldGenerateLatest = false;
     if (mounted) {
       setState(() => _isGeneratingFaceSketch = true);
     }
@@ -590,28 +623,40 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     try {
       final sketchPngBytes = await generateFaceSketchPng(
         sourceBytes: sourceBytes,
-        settings: _faceSketchSettings,
-        transform: _sanitizedFaceTransform(_faceSourceTransform),
+        settings: settings,
+        transform: transform,
       );
       final sketchBytes = await compressFaceSketchWebp(sketchPngBytes);
-      if (!mounted || requestId != _faceSketchRequestId) {
-        return;
+      final hasNewerRequest =
+          requestedRevision != _faceSketchGenerationRevision ||
+          _faceSourceImageBytes == null;
+      if (mounted && !hasNewerRequest) {
+        setState(() {
+          _faceSketchImageBytes = sketchBytes;
+          _isGeneratingFaceSketch = false;
+          _isGeneratingAfterManipulate = false;
+        });
       }
-
-      setState(() {
-        _faceSketchImageBytes = sketchBytes;
-        _isGeneratingFaceSketch = false;
-        _isGeneratingAfterManipulate = false;
-      });
     } catch (error) {
-      if (!mounted || requestId != _faceSketchRequestId) {
-        return;
+      final hasNewerRequest =
+          requestedRevision != _faceSketchGenerationRevision ||
+          _faceSourceImageBytes == null;
+      if (mounted && !hasNewerRequest) {
+        setState(() {
+          _isGeneratingFaceSketch = false;
+          _isGeneratingAfterManipulate = false;
+        });
+        _showFriendlyError(error, context: _CreatorErrorContext.faceSketch);
       }
-      setState(() {
-        _isGeneratingFaceSketch = false;
-        _isGeneratingAfterManipulate = false;
-      });
-      _showFriendlyError(error, context: _CreatorErrorContext.faceSketch);
+    } finally {
+      _isFaceSketchGenerationInFlight = false;
+      shouldGenerateLatest = mounted &&
+          _faceSourceImageBytes != null &&
+          requestedRevision != _faceSketchGenerationRevision;
+    }
+
+    if (shouldGenerateLatest) {
+      unawaited(_generateFaceSketchPreview());
     }
   }
 
@@ -972,7 +1017,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         return;
       }
       setState(() {
-        _stagePreviewMode = _StagePreviewMode.solution;
+        _stagePreviewMode = _StagePreviewMode.puzzle;
         _puzzleGenerationStatus = '';
       });
       _showFriendlyError(
@@ -1231,7 +1276,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     }
 
     FocusScope.of(context).unfocus();
-    setState(() => _isSaving = true);
+    setState(() {
+      _isSaving = true;
+      _isSubmittingForReview = submitAfterSave;
+    });
     final firebaseService = context.read<FirebaseService>();
 
     try {
@@ -1251,6 +1299,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           creatorName: _creatorNameController.text,
           answer: _answerController.text,
           factText: '',
+          contentCategory: _contentCategory,
           solutionSvg: generateWordOverlaySvg(_wordOverlayController.letters),
           puzzleImageBytes: _generatedPuzzleImageBytes,
           allowReuseExistingPuzzle: !_hasPuzzleInvalidatedByEdit,
@@ -1279,6 +1328,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           creatorName: _creatorNameController.text,
           answer: _answerController.text,
           factText: _factController.text,
+          contentCategory: _contentCategory,
           sourceImageBytes: _faceSourceImageBytes!,
           solutionImageBytes: submitAfterSave ? solutionImageBytes : null,
           puzzleImageBytes: _generatedPuzzleImageBytes,
@@ -1300,6 +1350,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           creatorName: _creatorNameController.text,
           answer: _answerController.text,
           factText: _factController.text,
+          contentCategory: _contentCategory,
           solutionPngBytes: pngBytes,
           puzzleImageBytes: _generatedPuzzleImageBytes,
           allowReuseExistingPuzzle: !_hasPuzzleInvalidatedByEdit,
@@ -1331,7 +1382,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       );
     } finally {
       if (mounted) {
-        setState(() => _isSaving = false);
+        setState(() {
+          _isSaving = false;
+          _isSubmittingForReview = false;
+        });
       }
     }
   }
@@ -1380,6 +1434,16 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         message.contains('forbidden');
     final isTooLarge = message.contains('too large') ||
         message.contains('(413)');
+    final isUnsupportedUpload = message.contains('only jpg, png, or webp') ||
+        message.contains('unsupported upload kind') ||
+        message.contains('unsupported image');
+    final isUnsafeImage = message.contains('too explicit') ||
+        message.contains('adult') ||
+        message.contains('racy') ||
+        message.contains('violence');
+    final isUnreadableImage = message.contains('could not read that face photo') ||
+        message.contains('invalid source image') ||
+        message.contains('valid solution image');
 
     switch (context) {
       case _CreatorErrorContext.facePhotoPick:
@@ -1392,12 +1456,18 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         return 'Could not open that face photo. Please try a different image.';
 
       case _CreatorErrorContext.faceSketch:
+        if (message.contains('level creation is unavailable')) {
+          return 'Level creation is unavailable for this account right now.';
+        }
         if (isTooLarge) {
           return 'That face photo is too detailed right now. Try a smaller or simpler image.';
         }
         return 'Could not update the face sketch right now. Please try again.';
 
       case _CreatorErrorContext.puzzleGeneration:
+        if (message.contains('level creation is unavailable')) {
+          return 'Level creation is unavailable for this account right now.';
+        }
         if (isWarmupDelay) {
           return 'Puzzle generation is taking a bit longer than usual. Please try again in a moment.';
         }
@@ -1413,6 +1483,18 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         return 'Could not generate the puzzle right now. Please try again.';
 
       case _CreatorErrorContext.draftSave:
+        if (message.contains('level creation is unavailable')) {
+          return 'Level creation is unavailable for this account right now.';
+        }
+        if (isUnsupportedUpload) {
+          return 'Only JPG, PNG, or WebP face photos are allowed.';
+        }
+        if (isUnsafeImage) {
+          return 'That face photo looks too explicit for Subliminal Words. Please choose a different image.';
+        }
+        if (isUnreadableImage) {
+          return 'Could not read that face photo. Please choose a different image.';
+        }
         if (isAuthIssue) {
           return 'Could not save this level right now. Please reopen Subliminal Words and try again.';
         }
@@ -1422,6 +1504,41 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         return 'Could not save this level right now. Please try again.';
 
       case _CreatorErrorContext.reviewSubmit:
+        if (message.contains('level creation is unavailable')) {
+          return 'Level creation is unavailable for this account right now.';
+        }
+        if (message.contains('safety-checked before review')) {
+          return 'Save this face level again before submitting it for review.';
+        }
+        if (message.contains('missing a creator name or answer')) {
+          return 'Add the creator name and solution before submitting for review.';
+        }
+        if (message.contains('missing a fact hint')) {
+          return 'Add a fact hint before submitting for review.';
+        }
+        if (message.contains('actual puzzle image') ||
+            message.contains('generate the puzzle')) {
+          return 'Generate the puzzle before submitting for review.';
+        }
+        if (message.contains('already been submitted') ||
+            message.contains('now locked')) {
+          return 'This level has already been submitted and is now locked.';
+        }
+        if (message.contains('remove profanity')) {
+          return 'Please remove profanity before submitting for review.';
+        }
+        if (message.contains('could not be found')) {
+          return 'Could not find this draft anymore. Please reopen My Levels and try again.';
+        }
+        if (isUnsupportedUpload) {
+          return 'Only JPG, PNG, or WebP face photos are allowed.';
+        }
+        if (isUnsafeImage) {
+          return 'That face photo looks too explicit for Subliminal Words. Please choose a different image.';
+        }
+        if (isUnreadableImage) {
+          return 'Could not read that face photo. Please choose a different image.';
+        }
         if (isAuthIssue) {
           return 'Could not submit this level right now. Please reopen Subliminal Words and try again.';
         }
@@ -1455,6 +1572,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
+    final isLevelMutationLocked = _isSaving;
     final canvasBackgroundColor = _canvasBackgroundColor(theme);
     final editorTheme = theme.copyWith(
       scaffoldBackgroundColor: colorScheme.surface,
@@ -1468,9 +1586,14 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     return Theme(
       data: editorTheme,
       child: PopScope(
-        canPop: !_isGeneratingPuzzle,
+        canPop: !_isGeneratingPuzzle && !isLevelMutationLocked,
         onPopInvokedWithResult: (didPop, result) async {
           if (didPop) {
+            return;
+          }
+
+          if (isLevelMutationLocked) {
+            _showSnack('Please wait for this level to finish saving.');
             return;
           }
 
@@ -1491,75 +1614,105 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                 : 'Create ${UserLevelEditorMode.labelFor(_editorMode)} Level',
           ),
         ),
-        bottomNavigationBar: SafeArea(
-          top: false,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: colorScheme.surface,
-              border: Border(
-                top: BorderSide(color: colorScheme.outlineVariant),
+        bottomNavigationBar: IgnorePointer(
+          ignoring: isLevelMutationLocked,
+          child: SafeArea(
+            top: false,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                border: Border(
+                  top: BorderSide(color: colorScheme.outlineVariant),
+                ),
               ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: AnimatedBuilder(
-                animation: Listenable.merge(<Listenable>[
-                  _creatorNameTextNotifier,
-                  _answerTextNotifier,
-                  _factTextNotifier,
-                  _generationPromptTextNotifier,
-                  _drawingHasContentNotifier,
-                  _wordDrawingHasContentNotifier,
-                  _wordOverlayHasContentNotifier,
-                ]),
-                builder: (context, _) => Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    _EditorStepProgress(
-                      textTheme: textTheme,
-                      colorScheme: colorScheme,
-                      activeStep: _stagePreviewMode,
-                      solutionProgress: _solutionStepProgress,
-                      puzzleProgress: _puzzleStepProgress,
-                      canAccessPuzzleStep: _canAccessPuzzleStep,
-                      onStepSelected: _selectStagePreview,
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _isSaving
-                                ? null
-                                : () => _save(submitAfterSave: false),
-                            child: AutoSizeText(
-                              _isSaving ? 'Saving...' : 'Save Draft',
-                              maxLines: 1,
-                              minFontSize: 10,
-                              textAlign: TextAlign.center,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: AnimatedBuilder(
+                  animation: Listenable.merge(<Listenable>[
+                    _creatorNameTextNotifier,
+                    _answerTextNotifier,
+                    _factTextNotifier,
+                    _generationPromptTextNotifier,
+                    _drawingHasContentNotifier,
+                    _wordDrawingHasContentNotifier,
+                    _wordOverlayHasContentNotifier,
+                  ]),
+                  builder: (context, _) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      _EditorStepProgress(
+                        textTheme: textTheme,
+                        colorScheme: colorScheme,
+                        activeStep: _stagePreviewMode,
+                        solutionProgress: _solutionStepProgress,
+                        puzzleProgress: _puzzleStepProgress,
+                        canAccessPuzzleStep: _canAccessPuzzleStep,
+                        onStepSelected: _selectStagePreview,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _isSaving
+                                  ? null
+                                  : () => _save(submitAfterSave: false),
+                              child: AutoSizeText(
+                                _isSaving && !_isSubmittingForReview
+                                    ? 'Saving...'
+                                    : 'Save Draft',
+                                maxLines: 1,
+                                minFontSize: 10,
+                                textAlign: TextAlign.center,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: _isSaving
-                                ? null
-                                : () => _save(submitAfterSave: true),
-                            child: AutoSizeText(
-                              _isSaving
-                                  ? 'Submitting...'
-                                  : 'Submit for Review',
-                              maxLines: 1,
-                              minFontSize: 10,
-                              textAlign: TextAlign.center,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: _isSaving
+                                  ? null
+                                  : () => _save(submitAfterSave: true),
+                              child: _isSubmittingForReview
+                                  ? Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: <Widget>[
+                                        SizedBox.square(
+                                          dimension: 16,
+                                          child:
+                                              CircularProgressIndicator.adaptive(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                              colorScheme.onPrimary,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Flexible(
+                                          child: AutoSizeText(
+                                            'Submitting...',
+                                            maxLines: 1,
+                                            minFontSize: 10,
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : const AutoSizeText(
+                                      'Submit for Review',
+                                      maxLines: 1,
+                                      minFontSize: 10,
+                                      textAlign: TextAlign.center,
+                                    ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1573,12 +1726,14 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                 : const ClampingScrollPhysics(),
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                _SectionCard(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
-                  child: _editorMode == UserLevelEditorMode.highlight
+            child: IgnorePointer(
+              ignoring: isLevelMutationLocked,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  _SectionCard(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+                    child: _editorMode == UserLevelEditorMode.highlight
                       ? _WordEditorSection(
                           controller: _wordOverlayController,
                           drawingController: _wordDrawingController,
@@ -1630,6 +1785,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                                   _generationPromptTextNotifier,
                               generationPromptFocusNode:
                                   _generationPromptFocusNode,
+                              contentCategory: _contentCategory,
                               textTheme: textTheme,
                               colorScheme: colorScheme,
                               canvasBackgroundColor: canvasBackgroundColor,
@@ -1666,6 +1822,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                               onGeneratePuzzle: _generatePuzzle,
                               onGenerationDifficultyChanged:
                                   _updateGenerationDifficulty,
+                              onContentCategoryChanged: _updateContentCategory,
                               onSettingsChanged: _updateFaceSketchSettings,
                               onLiveSettingsChanged: null,
                               onUnlockSolutionEditing:
@@ -1707,12 +1864,13 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                               onUnlockSolutionEditing:
                                   _confirmUnlockSolutionEditing,
                             ),
-                ),
-                if (_isLocked) ...<Widget>[
-                  const SizedBox(height: 16),
-                  _LockedNotice(colorScheme: colorScheme),
+                  ),
+                  if (_isLocked) ...<Widget>[
+                    const SizedBox(height: 16),
+                    _LockedNotice(colorScheme: colorScheme),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -1734,6 +1892,7 @@ class _FaceEditorSection extends StatelessWidget {
   final TextEditingController promptController;
   final FocusNode generationPromptFocusNode;
   final ValueNotifier<String> promptTextListenable;
+  final String contentCategory;
   final TextTheme textTheme;
   final ColorScheme colorScheme;
   final Color canvasBackgroundColor;
@@ -1761,6 +1920,7 @@ class _FaceEditorSection extends StatelessWidget {
   final ValueChanged<_StagePreviewMode> onSelectStagePreview;
   final VoidCallback onGeneratePuzzle;
   final ValueChanged<double> onGenerationDifficultyChanged;
+  final ValueChanged<String> onContentCategoryChanged;
   final ValueChanged<FaceSketchSettings> onSettingsChanged;
   final ValueChanged<FaceSketchSettings>? onLiveSettingsChanged;
   final VoidCallback onUnlockSolutionEditing;
@@ -1777,6 +1937,7 @@ class _FaceEditorSection extends StatelessWidget {
     required this.promptController,
     required this.generationPromptFocusNode,
     required this.promptTextListenable,
+    required this.contentCategory,
     required this.textTheme,
     required this.colorScheme,
     required this.canvasBackgroundColor,
@@ -1804,6 +1965,7 @@ class _FaceEditorSection extends StatelessWidget {
     required this.onSelectStagePreview,
     required this.onGeneratePuzzle,
     required this.onGenerationDifficultyChanged,
+    required this.onContentCategoryChanged,
     required this.onSettingsChanged,
     this.onLiveSettingsChanged,
     required this.onUnlockSolutionEditing,
@@ -2206,6 +2368,19 @@ class _FaceEditorSection extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 12),
+          _ContentCategorySelector(
+            label: 'Category',
+            value: contentCategory,
+            enabled: !isLocked,
+            textTheme: textTheme,
+            colorScheme: colorScheme,
+            options: const <String>[
+              UserLevelContentCategory.faces,
+              UserLevelContentCategory.characters,
+            ],
+            onChanged: onContentCategoryChanged,
+          ),
           const SizedBox(height: 12),
           TextField(
             controller: factController,
@@ -3623,6 +3798,58 @@ InputDecoration _solutionFieldDecoration(
       borderSide: BorderSide(color: colorScheme.primary, width: 2),
     ),
   );
+}
+
+class _ContentCategorySelector extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool enabled;
+  final TextTheme textTheme;
+  final ColorScheme colorScheme;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+
+  const _ContentCategorySelector({
+    required this.label,
+    required this.value,
+    required this.enabled,
+    required this.textTheme,
+    required this.colorScheme,
+    required this.options,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          label,
+          style: textTheme.labelMedium?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          segments: options
+              .map(
+                (option) => ButtonSegment<String>(
+                  value: option,
+                  label: Text(UserLevelContentCategory.labelFor(option)),
+                ),
+              )
+              .toList(growable: false),
+          selected: <String>{value},
+          showSelectedIcon: false,
+          onSelectionChanged: enabled
+              ? (selection) => onChanged(selection.first)
+              : null,
+        ),
+      ],
+    );
+  }
 }
 
 class _StageStepToggle extends StatelessWidget {

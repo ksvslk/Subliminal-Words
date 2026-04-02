@@ -53,6 +53,7 @@ dependencies:
   cloud_functions: ^6.0.2
   firebase_messaging: ^16.0.2
   firebase_storage: ^13.0.2
+  flutter_local_notifications: ^17.2.4
   http: ^1.5.0
   path_provider: ^2.1.5
   cached_network_image: ^3.4.1

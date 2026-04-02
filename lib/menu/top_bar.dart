@@ -229,12 +229,19 @@ class _TopBarState extends State<TopBar> {
           );
         }),
         Consumer<LevelModel>(builder: (context, levelModel, _) {
+          final packName =
+              levelModel.currentLevel?.packNameSanitized ?? 'Current Level';
+          final creatorName =
+              (levelModel.currentLevel?.creatorName ?? '').trim();
+          final tooltipMessage = creatorName.isEmpty
+              ? packName
+              : '$packName\nCreated by $creatorName';
+
           return Flexible(
             flex: 1,
             child: Center(
               child: Tooltip(
-                message: levelModel.currentLevel?.packNameSanitized ??
-                    'Current Level',
+                message: tooltipMessage,
                 child: CircleAvatar(
                   backgroundColor:
                       Theme.of(context).colorScheme.surfaceContainer,

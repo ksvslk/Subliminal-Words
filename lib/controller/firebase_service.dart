@@ -6,6 +6,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
@@ -17,10 +19,43 @@ import 'package:operation_hermes/data/category.dart';
 import 'package:operation_hermes/data/user_level_metadata.dart';
 import 'package:operation_hermes/editor/generation_image_budget.dart';
 
+class _SanitizedUserUpload {
+  final String storagePath;
+  final String contentType;
+  final int width;
+  final int height;
+  final int sizeBytes;
+  final String safetyStatus;
+  final String nsfwCheckStatus;
+
+  const _SanitizedUserUpload({
+    required this.storagePath,
+    required this.contentType,
+    required this.width,
+    required this.height,
+    required this.sizeBytes,
+    required this.safetyStatus,
+    required this.nsfwCheckStatus,
+  });
+
+  factory _SanitizedUserUpload.fromMap(Map<String, dynamic> data) {
+    return _SanitizedUserUpload(
+      storagePath: (data['storagePath'] as String? ?? '').trim(),
+      contentType: (data['contentType'] as String? ?? '').trim(),
+      width: (data['width'] as num?)?.round() ?? 0,
+      height: (data['height'] as num?)?.round() ?? 0,
+      sizeBytes: (data['sizeBytes'] as num?)?.round() ?? 0,
+      safetyStatus: (data['safetyStatus'] as String? ?? '').trim(),
+      nsfwCheckStatus: (data['nsfwCheckStatus'] as String? ?? '').trim(),
+    );
+  }
+}
+
 class FirebaseService {
   static final _log = Logger('FirebaseService');
   static const String _runpodProxyBaseUrl =
       'https://runpod-proxy-549374376791.us-central1.run.app';
+  static const String _creatorModerationCollection = 'creatorModeration';
 
   static const Map<String, String> bundledPackAssets = {
     // words category
@@ -49,8 +84,74 @@ class FirebaseService {
 
   String? get currentUserId => FirebaseAuth.instance.currentUser?.uid;
 
+  Future<Map<String, dynamic>> _getCreatorModerationData() async {
+    final uid = currentUserId;
+    if (uid == null || uid.isEmpty) {
+      return const <String, dynamic>{};
+    }
+
+    try {
+      final snapshot =
+          await _db.collection(_creatorModerationCollection).doc(uid).get();
+      if (!snapshot.exists || snapshot.data() == null) {
+        return const <String, dynamic>{};
+      }
+      return Map<String, dynamic>.from(snapshot.data()!);
+    } catch (_) {
+      return const <String, dynamic>{};
+    }
+  }
+
+  String _creatorBlockedMessage(Map<String, dynamic> moderationData) {
+    final reason = '${moderationData['reason'] ?? ''}'.trim();
+    if (reason.isNotEmpty) {
+      return 'Level creation is unavailable for this account right now. $reason';
+    }
+    return 'Level creation is unavailable for this account right now.';
+  }
+
+  Future<void> assertUserCanCreateLevels() async {
+    final moderationData = await _getCreatorModerationData();
+    if (moderationData['userLevelCreationBlocked'] == true) {
+      throw StateError(_creatorBlockedMessage(moderationData));
+    }
+  }
+
   CollectionReference<Map<String, dynamic>> _userLevelsCollection(String uid) {
     return _db.collection('userLevels').doc(uid).collection('levels');
+  }
+
+  Future<void> savePushToken(String token) async {
+    final uid = currentUserId;
+    final normalizedToken = token.trim();
+    if (uid == null || uid.isEmpty || normalizedToken.isEmpty) {
+      return;
+    }
+
+    String? collectionName;
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+        collectionName = 'fcmTokensIos';
+        break;
+      case TargetPlatform.android:
+        collectionName = 'fcmTokensAndroid';
+        break;
+      default:
+        collectionName = null;
+    }
+
+    if (collectionName == null) {
+      return;
+    }
+
+    await _db.collection(collectionName).doc(uid).set(
+      <String, dynamic>{
+        'token': normalizedToken,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'platform': defaultTargetPlatform.name,
+      },
+      SetOptions(merge: true),
+    );
   }
 
   Future<void> _deleteStoragePathIfExists(String storagePath) async {
@@ -78,6 +179,40 @@ class FirebaseService {
       return await _storage.ref(storagePath).getData(maxSizeBytes);
     } catch (_) {
       return null;
+    }
+  }
+
+  Future<_SanitizedUserUpload> _sanitizeAndStoreUserUpload({
+    required String levelId,
+    required String uploadKind,
+    required Uint8List imageBytes,
+  }) async {
+    await assertUserCanCreateLevels();
+    try {
+      final callable = _functions.httpsCallable('sanitizeUserLevelUpload');
+      final response = await callable.call<Map<String, dynamic>>(
+        <String, dynamic>{
+          'levelId': levelId,
+          'uploadKind': uploadKind,
+          'imageBase64': base64Encode(imageBytes),
+        },
+      );
+      return _SanitizedUserUpload.fromMap(Map<String, dynamic>.from(
+        response.data,
+      ));
+    } on FirebaseFunctionsException catch (error) {
+      final parts = <String>[
+        error.code.trim(),
+        (error.message ?? '').trim(),
+        if (error.details != null)
+          error.details is String
+              ? (error.details as String).trim()
+              : jsonEncode(error.details),
+      ].where((part) => part.isNotEmpty).toList();
+
+      throw StateError(
+        parts.isEmpty ? error.toString() : parts.join(' | '),
+      );
     }
   }
 
@@ -444,11 +579,13 @@ class FirebaseService {
     required String creatorName,
     required String answer,
     required String factText,
+    required String contentCategory,
     required Uint8List solutionPngBytes,
     Uint8List? puzzleImageBytes,
     bool allowReuseExistingPuzzle = true,
     required Map<String, dynamic> editorData,
   }) async {
+    await assertUserCanCreateLevels();
     final uid = currentUserId;
     if (uid == null || uid.isEmpty) {
       throw StateError('You need to be signed in before saving a level.');
@@ -545,7 +682,12 @@ class FirebaseService {
       hasPuzzleImage = puzzlePath.isNotEmpty;
     }
 
+    final normalizedContentCategory = UserLevelContentCategory.normalize(
+      contentCategory,
+      editorMode: UserLevelEditorMode.drawObject,
+    );
     final normalizedEditorData = Map<String, dynamic>.from(editorData)
+      ..['contentCategory'] = normalizedContentCategory
       ..['hasPuzzleImage'] = hasPuzzleImage;
 
     await docRef.set(<String, dynamic>{
@@ -553,6 +695,7 @@ class FirebaseService {
       'name': answer.trim(),
       'hintType': 'fact',
       'editorMode': UserLevelEditorMode.drawObject,
+      'contentCategory': normalizedContentCategory,
       'creatorUid': uid,
       'creatorName': creatorName.trim(),
       'hints': <String, dynamic>{'fact': factText.trim()},
@@ -580,6 +723,7 @@ class FirebaseService {
     required String creatorName,
     required String answer,
     required String factText,
+    required String contentCategory,
     required Uint8List sourceImageBytes,
     Uint8List? solutionImageBytes,
     Uint8List? puzzleImageBytes,
@@ -587,6 +731,7 @@ class FirebaseService {
     bool persistSolutionAsset = false,
     required Map<String, dynamic> editorData,
   }) async {
+    await assertUserCanCreateLevels();
     final uid = currentUserId;
     if (uid == null || uid.isEmpty) {
       throw StateError('You need to be signed in before saving a level.');
@@ -598,6 +743,7 @@ class FirebaseService {
     int levelNr = 1;
     DateTime? existingCreatedAt;
     String existingSolutionPath = '';
+    String existingSourcePath = '';
     String existingPuzzlePath = '';
     String existingPuzzleThumbnailPath = '';
     bool canReuseExistingPuzzle = false;
@@ -613,6 +759,11 @@ class FirebaseService {
         levelNr = existingData['nr'] ?? 1;
         existingCreatedAt = (existingData['createdAt'] as Timestamp?)?.toDate();
         existingSolutionPath = existingData['solutionPath'] as String? ?? '';
+        existingSourcePath = (Map<String, dynamic>.from(
+                  existingData['editorData'] ?? const <String, dynamic>{},
+                )['sourceImagePath'] as String? ??
+                '')
+            .trim();
         canReuseExistingPuzzle = allowReuseExistingPuzzle &&
             _hasStoredReviewReadyPuzzleImage(existingData);
         existingPuzzlePath = existingData['puzzlePath'] as String? ?? '';
@@ -629,17 +780,10 @@ class FirebaseService {
     }
 
     final storageBase = 'user-levels/$uid/${docRef.id}';
-    final sourceRef = _storage.ref('$storageBase/source.jpg');
-    await sourceRef.putData(
-      sourceImageBytes,
-      SettableMetadata(
-        contentType: 'image/jpeg',
-        customMetadata: <String, String>{
-          'ownerUid': uid,
-          'editorMode': UserLevelEditorMode.photoSketch,
-          'assetRole': 'source',
-        },
-      ),
+    final sanitizedSource = await _sanitizeAndStoreUserUpload(
+      levelId: docRef.id,
+      uploadKind: 'face_source',
+      imageBytes: sourceImageBytes,
     );
 
     String solutionPath = '';
@@ -698,21 +842,35 @@ class FirebaseService {
       hasPuzzleImage = puzzlePath.isNotEmpty;
     }
 
+    final normalizedContentCategory = UserLevelContentCategory.normalize(
+      contentCategory,
+      editorMode: UserLevelEditorMode.photoSketch,
+    );
     final normalizedEditorData = Map<String, dynamic>.from(editorData)
+      ..['contentCategory'] = normalizedContentCategory
       ..['hasPuzzleImage'] = hasPuzzleImage
-      ..['sourceImagePath'] = sourceRef.fullPath;
+      ..['sourceImagePath'] = sanitizedSource.storagePath
+      ..['sourceImageContentType'] = sanitizedSource.contentType
+      ..['sourceImageWidth'] = sanitizedSource.width
+      ..['sourceImageHeight'] = sanitizedSource.height
+      ..['sourceImageSizeBytes'] = sanitizedSource.sizeBytes
+      ..['sourceImageSafetyStatus'] = sanitizedSource.safetyStatus
+      ..['sourceImageNsfwCheckStatus'] = sanitizedSource.nsfwCheckStatus;
 
     await docRef.set(<String, dynamic>{
       'nr': levelNr,
       'name': answer.trim(),
       'hintType': 'fact',
       'editorMode': UserLevelEditorMode.photoSketch,
+      'contentCategory': normalizedContentCategory,
       'creatorUid': uid,
       'creatorName': creatorName.trim(),
       'hints': <String, dynamic>{'fact': factText.trim()},
       'puzzlePath': puzzlePath,
       'puzzleThumbnailPath': puzzleThumbnailPath,
       'solutionPath': solutionPath,
+      'sourceImageSafetyStatus': sanitizedSource.safetyStatus,
+      'sourceImageNsfwCheckStatus': sanitizedSource.nsfwCheckStatus,
       'tooltipStart': '',
       'tooltipEnd': '',
       'isEnabled': true,
@@ -728,6 +886,10 @@ class FirebaseService {
 
     if (!persistSolutionAsset && existingSolutionPath.isNotEmpty) {
       await _deleteStoragePathIfExists(existingSolutionPath);
+    }
+    if (existingSourcePath.isNotEmpty &&
+        existingSourcePath != sanitizedSource.storagePath) {
+      await _deleteStoragePathIfExists(existingSourcePath);
     }
 
     return docRef.id;
@@ -758,6 +920,7 @@ class FirebaseService {
       levelData['puzzleThumbnailPath'] as String? ?? '',
       editorData['sourceImagePath'] as String? ?? '',
       'user-levels/$uid/$levelId/source.jpg',
+      'user-levels/$uid/$levelId/source.webp',
       'user-levels/$uid/$levelId/solution.webp',
       'user-levels/$uid/$levelId/solution.svg',
       'user-levels/$uid/$levelId/puzzle.webp',
@@ -776,11 +939,13 @@ class FirebaseService {
     required String creatorName,
     required String answer,
     required String factText,
+    required String contentCategory,
     required String solutionSvg,
     Uint8List? puzzleImageBytes,
     bool allowReuseExistingPuzzle = true,
     required Map<String, dynamic> editorData,
   }) async {
+    await assertUserCanCreateLevels();
     final uid = currentUserId;
     if (uid == null || uid.isEmpty) {
       throw StateError('You need to be signed in before saving a level.');
@@ -874,7 +1039,12 @@ class FirebaseService {
       hasPuzzleImage = puzzlePath.isNotEmpty;
     }
 
+    final normalizedContentCategory = UserLevelContentCategory.normalize(
+      contentCategory,
+      editorMode: UserLevelEditorMode.highlight,
+    );
     final normalizedEditorData = Map<String, dynamic>.from(editorData)
+      ..['contentCategory'] = normalizedContentCategory
       ..['hasPuzzleImage'] = hasPuzzleImage;
 
     await docRef.set(<String, dynamic>{
@@ -882,6 +1052,7 @@ class FirebaseService {
       'name': answer.trim(),
       'hintType': 'highlight',
       'editorMode': UserLevelEditorMode.highlight,
+      'contentCategory': normalizedContentCategory,
       'creatorUid': uid,
       'creatorName': creatorName.trim(),
       'hints': factText.trim().isEmpty
@@ -907,12 +1078,28 @@ class FirebaseService {
   }
 
   Future<String> submitUserLevelForReview(String levelId) async {
-    final callable = _functions.httpsCallable('submitUserLevelSubmission');
-    final response = await callable.call<Map<String, dynamic>>(
-      <String, dynamic>{'levelId': levelId},
-    );
-    final responseData = Map<String, dynamic>.from(response.data);
-    return responseData['submissionId'] as String? ?? '';
+    await assertUserCanCreateLevels();
+    try {
+      final callable = _functions.httpsCallable('submitUserLevelSubmission');
+      final response = await callable.call<Map<String, dynamic>>(
+        <String, dynamic>{'levelId': levelId},
+      );
+      final responseData = Map<String, dynamic>.from(response.data);
+      return responseData['submissionId'] as String? ?? '';
+    } on FirebaseFunctionsException catch (error) {
+      final parts = <String>[
+        error.code.trim(),
+        (error.message ?? '').trim(),
+        if (error.details != null)
+          error.details is String
+              ? (error.details as String).trim()
+              : jsonEncode(error.details),
+      ].where((part) => part.isNotEmpty).toList();
+
+      throw StateError(
+        parts.isEmpty ? error.toString() : parts.join(' | '),
+      );
+    }
   }
 
   Future<Uint8List> generateDrawObjectPuzzle({
@@ -923,6 +1110,7 @@ class FirebaseService {
     required double difficulty,
     void Function(String status)? onStatusChanged,
   }) async {
+    await assertUserCanCreateLevels();
     final requestBody = <String, dynamic>{
       'payload': <String, dynamic>{
         'input': <String, dynamic>{
@@ -942,8 +1130,8 @@ class FirebaseService {
       },
     };
 
-    const maxWarmupRetries = 4;
-    const maxTotalWait = Duration(seconds: 150);
+    const maxWarmupRetries = 6;
+    const maxTotalWait = Duration(seconds: 240);
     const warmupTimeoutMessage =
         'Puzzle generation is taking longer than usual. Please try again in a moment.';
     final totalWait = Stopwatch()..start();
@@ -970,7 +1158,7 @@ class FirebaseService {
       }
 
       var transientFailures = 0;
-      for (var attempt = 0; attempt < 80; attempt += 1) {
+      for (var attempt = 0; attempt < 120; attempt += 1) {
         if (totalWait.elapsed >= maxTotalWait) {
           throw StateError(warmupTimeoutMessage);
         }
@@ -987,7 +1175,7 @@ class FirebaseService {
           );
           transientFailures = 0;
         } catch (error, stackTrace) {
-          if (_isTransientGenerationError(error) && transientFailures < 6) {
+          if (_isTransientGenerationError(error) && transientFailures < 12) {
             transientFailures += 1;
             _log.warning(
               'Transient RunPod status polling error for job $jobId '
@@ -1056,7 +1244,7 @@ class FirebaseService {
     Object? lastError;
     StackTrace? lastStackTrace;
 
-    for (var attempt = 0; attempt < 3; attempt += 1) {
+    for (var attempt = 0; attempt < 5; attempt += 1) {
       try {
         if (attempt > 0) {
           onStatusChanged?.call('Still preparing puzzle...');
@@ -1069,7 +1257,7 @@ class FirebaseService {
       } catch (error, stackTrace) {
         lastError = error;
         lastStackTrace = stackTrace;
-        if (!_isTransientGenerationError(error) || attempt == 2) {
+        if (!_isTransientGenerationError(error) || attempt == 4) {
           rethrow;
         }
 
@@ -1098,10 +1286,17 @@ class FirebaseService {
 
     return message.contains('invalid response') ||
         message.contains('internal server error') ||
+        message.contains('bad gateway') ||
+        message.contains('gateway') ||
         message.contains('timed out') ||
         message.contains('timeout') ||
+        message.contains('connection reset') ||
+        message.contains('socket') ||
+        message.contains('unexpected end') ||
+        message.contains('job did not start correctly') ||
         message.contains('rate limit') ||
         message.contains('too many requests') ||
+        message.contains('(404)') ||
         message.contains('(408)') ||
         message.contains('(409)') ||
         message.contains('(429)') ||
@@ -1119,6 +1314,11 @@ class FirebaseService {
 
     final message = details.toLowerCase();
     return message.contains('failed to connect to server') ||
+        message.contains('job did not start correctly') ||
+        message.contains('bad gateway') ||
+        message.contains('gateway') ||
+        message.contains('no healthy upstream') ||
+        message.contains('resource not ready') ||
         message.contains('temporarily unavailable') ||
         message.contains('service unavailable') ||
         message.contains('internal server error') ||
@@ -1127,9 +1327,12 @@ class FirebaseService {
         message.contains('startup') ||
         message.contains('starting server') ||
         message.contains('starting handler') ||
+        message.contains('starting worker') ||
+        message.contains('handler') ||
         message.contains('warming') ||
         message.contains('initializing') ||
         message.contains('loading model') ||
+        message.contains('loading') ||
         message.contains('boot');
   }
 
@@ -1180,6 +1383,7 @@ class FirebaseService {
     Map<String, dynamic> body, {
     bool forceRefresh = false,
   }) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
     final appCheckToken =
         await FirebaseAppCheck.instance.getToken(forceRefresh);
     if (appCheckToken == null || appCheckToken.isEmpty) {
@@ -1187,12 +1391,20 @@ class FirebaseService {
           'Could not get an App Check token for puzzle generation.');
     }
 
+    final idToken = currentUser == null
+        ? null
+        : await currentUser.getIdToken(forceRefresh);
+
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'X-Firebase-AppCheck': appCheckToken,
+      if (idToken != null && idToken.trim().isNotEmpty)
+        'Authorization': 'Bearer ${idToken.trim()}',
+    };
+
     final response = await http.post(
       Uri.parse('$_runpodProxyBaseUrl$path'),
-      headers: <String, String>{
-        'Content-Type': 'application/json',
-        'X-Firebase-AppCheck': appCheckToken,
-      },
+      headers: headers,
       body: jsonEncode(body),
     );
 

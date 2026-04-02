@@ -1,9 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:in_app_review/in_app_review.dart';
@@ -15,6 +15,7 @@ import 'package:operation_hermes/controller/audio_controller.dart'
     show AudioController;
 import 'package:operation_hermes/change_notifier/field_model.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
+import 'package:operation_hermes/controller/local_notification_service.dart';
 import 'package:operation_hermes/change_notifier/picture_model.dart';
 import 'package:operation_hermes/controller/games_services.dart';
 import 'package:operation_hermes/controller/money_controller.dart';
@@ -34,6 +35,7 @@ class LevelModel with ChangeNotifier {
   final ProgressPersistence progressPersistence;
   final AudioController? audioController;
   final SettingsPersistence settingsPersistence;
+  final LocalNotificationService localNotificationService;
 
   ValueNotifier<AppLifecycleState>? _lifecycleNotifier;
 
@@ -65,6 +67,9 @@ class LevelModel with ChangeNotifier {
 
   String? _pendingPackId;
   int? _pendingLevelNumber;
+  String? _cachedFcmToken;
+  StreamSubscription<User?>? _authStateSubscription;
+  StreamSubscription<String>? _tokenRefreshSubscription;
 
   DateTime? _levelStartTime;
 
@@ -76,7 +81,8 @@ class LevelModel with ChangeNotifier {
       required this.progressPersistence,
       required this.audioController,
       required this.settingsPersistence,
-      required this.firebaseService});
+      required this.firebaseService,
+      required this.localNotificationService});
 
   Future<void> initialize() async {
     await _createModels(null);
@@ -503,12 +509,44 @@ class LevelModel with ChangeNotifier {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
     await messaging.requestPermission();
 
+    final currentToken = await messaging.getToken();
+    if (currentToken != null && currentToken.isNotEmpty) {
+      _cachedFcmToken = currentToken.trim();
+      await _syncPushTokenToSignedInUser(currentToken);
+    }
+
+    await _authStateSubscription?.cancel();
+    _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen((
+      user,
+    ) {
+      if (user != null) {
+        unawaited(_syncPushTokenToSignedInUser());
+      }
+    });
+
+    await _tokenRefreshSubscription?.cancel();
+    _tokenRefreshSubscription = FirebaseMessaging.instance.onTokenRefresh.listen(
+      (token) {
+        _cachedFcmToken = token.trim();
+        unawaited(_syncPushTokenToSignedInUser(token));
+      },
+    );
+
     RemoteMessage? initialMessage = await messaging.getInitialMessage();
     if (initialMessage != null) {
       _handleNotificationTap(initialMessage);
     }
     FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.data['notificationType'] == 'user_submission_rejected') {
+        final levelName = (message.data['levelName']?.toString() ?? '').trim();
+        final body = levelName.isEmpty
+            ? 'Your level needs changes. Open My Levels to see feedback.'
+            : '"$levelName" needs changes. Open My Levels to see feedback.';
+        unawaited(_showForegroundRejectedSubmissionNotification(body));
+        return;
+      }
+
       try {
         final packName = message.data['packId']
             .toString()
@@ -524,7 +562,46 @@ class LevelModel with ChangeNotifier {
     await messaging.subscribeToTopic('sw_plus_levels');
   }
 
+  Future<void> _syncPushTokenToSignedInUser([String? token]) async {
+    final normalizedToken = (token ?? _cachedFcmToken ?? '').trim();
+    if (normalizedToken.isEmpty) {
+      return;
+    }
+    if (FirebaseAuth.instance.currentUser == null) {
+      return;
+    }
+
+    try {
+      await firebaseService.savePushToken(normalizedToken);
+    } catch (error, stackTrace) {
+      _log.warning('Could not save push token for the signed-in user.', error, stackTrace);
+    }
+  }
+
+  Future<void> _showForegroundRejectedSubmissionNotification(
+    String body,
+  ) async {
+    try {
+      await localNotificationService.showRejectedSubmissionNotification(
+        title: 'Your level needs changes',
+        body: body,
+      );
+    } catch (_) {
+      showMessageFromMascot(body);
+    }
+  }
+
   void _handleNotificationTap(RemoteMessage message) {
+    if (message.data['notificationType'] == 'user_submission_rejected') {
+      final levelName = (message.data['levelName']?.toString() ?? '').trim();
+      showMessageFromMascot(
+        levelName.isEmpty
+            ? 'Your level needs changes. Open My Levels to see feedback.'
+            : '"$levelName" needs changes. Open My Levels to see feedback.',
+      );
+      return;
+    }
+
     final packId = message.data['packId'];
     final levelNumberString = message.data['levelNumber'];
 
@@ -593,6 +670,8 @@ class LevelModel with ChangeNotifier {
 
   @override
   void dispose() {
+    _authStateSubscription?.cancel();
+    _tokenRefreshSubscription?.cancel();
     super.dispose();
     _lifecycleNotifier?.removeListener(_handleAppLifecycle);
   }

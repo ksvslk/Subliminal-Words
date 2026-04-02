@@ -21,7 +21,9 @@ class SWLevel {
   final String creatorUid;
   final String creatorName;
   final String editorMode;
+  final String contentCategory;
   final String submissionStatus;
+  final String submissionFeedback;
   final bool isLocked;
   final String? submissionId;
   final Map<String, dynamic> editorData;
@@ -62,11 +64,16 @@ class SWLevel {
     this.creatorUid = '',
     this.creatorName = '',
     this.editorMode = UserLevelEditorMode.drawObject,
+    String? contentCategory,
     this.submissionStatus = UserLevelSubmissionStatus.draft,
+    this.submissionFeedback = '',
     this.isLocked = false,
     this.submissionId,
     this.editorData = const <String, dynamic>{},
-  });
+  }) : contentCategory = UserLevelContentCategory.normalize(
+          contentCategory,
+          editorMode: editorMode,
+        );
 
   factory SWLevel.fromFirestore(
       String id, String packId, Map<String, dynamic> data) {
@@ -95,8 +102,10 @@ class SWLevel {
         editorMode: data['editorMode'] as String?,
         hintType: hintType,
       ),
+      contentCategory: data['contentCategory'] as String?,
       submissionStatus:
           data['submissionStatus'] ?? UserLevelSubmissionStatus.draft,
+      submissionFeedback: data['submissionFeedback'] ?? '',
       isLocked: data['isLocked'] ?? false,
       submissionId: data['submissionId'],
       editorData: Map<String, dynamic>.from(data['editorData'] ?? const {}),
@@ -128,8 +137,10 @@ class SWLevel {
         editorMode: json['editorMode'] as String?,
         hintType: hintType,
       ),
+      contentCategory: json['contentCategory'] as String?,
       submissionStatus:
           json['submissionStatus'] ?? UserLevelSubmissionStatus.approved,
+      submissionFeedback: json['submissionFeedback'] ?? '',
       isLocked: json['isLocked'] ?? false,
       submissionId: json['submissionId'],
       editorData: Map<String, dynamic>.from(json['editorData'] ?? const {}),
@@ -157,7 +168,9 @@ class SWLevel {
       'creatorUid': creatorUid,
       'creatorName': creatorName,
       'editorMode': editorMode,
+      'contentCategory': contentCategory,
       'submissionStatus': submissionStatus,
+      'submissionFeedback': submissionFeedback,
       'isLocked': isLocked,
       'submissionId': submissionId,
       'editorData': editorData,
