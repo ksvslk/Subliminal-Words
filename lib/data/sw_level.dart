@@ -187,6 +187,14 @@ class SWLevel {
   bool get hasEndTooltip => tooltipEnd.isNotEmpty;
   bool get isCreatorOwned => creatorUid.isNotEmpty;
   bool get usesDrawObjectEditor => editorMode == UserLevelEditorMode.drawObject;
+  Map<String, dynamic>? get pendingPuzzleGeneration {
+    final rawPending = editorData['pendingPuzzleGeneration'];
+    if (rawPending is Map) {
+      return Map<String, dynamic>.from(rawPending);
+    }
+    return null;
+  }
+
   bool get hasReviewReadyPuzzleImage {
     final storedFlag = editorData['hasPuzzleImage'];
     if (storedFlag is bool) {
@@ -203,6 +211,24 @@ class SWLevel {
 
     return true;
   }
+
+  bool get hasPendingPuzzleGeneration {
+    if (hasReviewReadyPuzzleImage) {
+      return false;
+    }
+
+    final pending = pendingPuzzleGeneration;
+    if (pending == null) {
+      return false;
+    }
+
+    final status = '${pending['status'] ?? ''}'.trim().toLowerCase();
+    final jobId = '${pending['jobId'] ?? ''}'.trim();
+    return status == 'running' || jobId.isNotEmpty;
+  }
+
+  String get pendingPuzzleGenerationJobId =>
+      '${pendingPuzzleGeneration?['jobId'] ?? ''}'.trim();
 
   String get packNameSanitized => packId
       .split('-')

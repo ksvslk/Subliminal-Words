@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -7,7 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
+    show TargetPlatform, debugPrint, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
@@ -66,9 +67,38 @@ class PendingPuzzleGenerationException implements Exception {
 
 class FirebaseService {
   static final _log = Logger('FirebaseService');
+  static const String _creatorModerationCollection = 'creatorModeration';
   static const String _runpodProxyBaseUrl =
       'https://runpod-proxy-549374376791.us-central1.run.app';
-  static const String _creatorModerationCollection = 'creatorModeration';
+  static const bool _preferDirectRunpodProxyForPuzzleGeneration = true;
+
+  void _tracePuzzleGeneration(
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    final line = '[PuzzleGen] $message';
+    if (error != null) {
+      _log.warning(line, error, stackTrace);
+    } else {
+      _log.info(line);
+    }
+    debugPrint(line);
+    if (error != null) {
+      debugPrint('[PuzzleGen][error] $error');
+    }
+    if (stackTrace != null) {
+      final stackPreview = stackTrace
+          .toString()
+          .split('\n')
+          .take(4)
+          .join('\n')
+          .trim();
+      if (stackPreview.isNotEmpty) {
+        debugPrint('[PuzzleGen][stack] $stackPreview');
+      }
+    }
+  }
 
   static const Map<String, String> bundledPackAssets = {
     // words category
@@ -534,6 +564,56 @@ class FirebaseService {
     return SWLevel.fromFirestore(doc.id, 'my-levels', doc.data()!);
   }
 
+  Future<void> persistPendingPuzzleGeneration({
+    required String levelId,
+    String? jobId,
+  }) async {
+    final uid = currentUserId;
+    if (uid == null || uid.isEmpty || levelId.trim().isEmpty) {
+      return;
+    }
+
+    final normalizedJobId = jobId?.trim();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final data = <String, dynamic>{
+      'editorData.pendingPuzzleGeneration.status': 'running',
+      'editorData.pendingPuzzleGeneration.updatedAt': now,
+      'modifiedAt': FieldValue.serverTimestamp(),
+    };
+
+    if (normalizedJobId != null && normalizedJobId.isNotEmpty) {
+      data['editorData.pendingPuzzleGeneration.jobId'] = normalizedJobId;
+      data['editorData.pendingPuzzleGeneration.jobStartedAt'] = now;
+    } else {
+      data['editorData.pendingPuzzleGeneration.jobId'] = FieldValue.delete();
+      data['editorData.pendingPuzzleGeneration.jobStartedAt'] =
+          FieldValue.delete();
+    }
+
+    try {
+      await _userLevelsCollection(uid).doc(levelId).update(data);
+    } catch (_) {
+      // Pending generation metadata is durability help, not a reason to fail
+      // the main generation flow.
+    }
+  }
+
+  Future<void> clearPendingPuzzleGeneration(String levelId) async {
+    final uid = currentUserId;
+    if (uid == null || uid.isEmpty || levelId.trim().isEmpty) {
+      return;
+    }
+
+    try {
+      await _userLevelsCollection(uid).doc(levelId).update(<String, dynamic>{
+        'editorData.pendingPuzzleGeneration': FieldValue.delete(),
+        'modifiedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      // Missing or already-cleared draft state should not block the flow.
+    }
+  }
+
   bool _hasStoredReviewReadyPuzzleImage(Map<String, dynamic> levelData) {
     final editorData =
         Map<String, dynamic>.from(levelData['editorData'] ?? const {});
@@ -752,6 +832,10 @@ class FirebaseService {
 
     final levelsRef = _userLevelsCollection(uid);
     final docRef = levelId == null ? levelsRef.doc() : levelsRef.doc(levelId);
+    final normalizedContentCategory = UserLevelContentCategory.normalize(
+      contentCategory,
+      editorMode: UserLevelEditorMode.photoSketch,
+    );
 
     int levelNr = 1;
     DateTime? existingCreatedAt;
@@ -760,10 +844,12 @@ class FirebaseService {
     String existingPuzzlePath = '';
     String existingPuzzleThumbnailPath = '';
     bool canReuseExistingPuzzle = false;
+    bool draftDocExists = false;
 
     if (levelId != null) {
       final existingDoc = await docRef.get();
       if (existingDoc.exists && existingDoc.data() != null) {
+        draftDocExists = true;
         final existingData = existingDoc.data()!;
         if (existingData['isLocked'] == true) {
           throw StateError(
@@ -793,119 +879,178 @@ class FirebaseService {
     }
 
     final storageBase = 'user-levels/$uid/${docRef.id}';
-    final sanitizedSource = await _sanitizeAndStoreUserUpload(
-      levelId: docRef.id,
-      uploadKind: 'face_source',
-      imageBytes: sourceImageBytes,
-    );
-
-    String solutionPath = '';
-    if (persistSolutionAsset && solutionImageBytes != null) {
-      final solutionRef = _storage.ref('$storageBase/solution.webp');
-      await solutionRef.putData(
-        solutionImageBytes,
-        SettableMetadata(
-          contentType: 'image/webp',
-          customMetadata: <String, String>{
-            'ownerUid': uid,
-            'editorMode': UserLevelEditorMode.photoSketch,
-            'assetRole': 'solution',
-          },
-        ),
-      );
-      solutionPath = solutionRef.fullPath;
-    }
-
-    String puzzlePath = '';
-    String puzzleThumbnailPath = '';
-    bool hasPuzzleImage = false;
-
-    if (puzzleImageBytes != null) {
-      final puzzleAssets = await _buildPuzzleStorageAssets(puzzleImageBytes);
-      final puzzleRef = _storage.ref('$storageBase/puzzle.webp');
-      final puzzleThumbRef = _storage.ref('$storageBase/puzzle_thumb.webp');
-      await puzzleRef.putData(
-        puzzleAssets.imageBytes,
-        SettableMetadata(
-          contentType: 'image/webp',
-          customMetadata: <String, String>{
-            'ownerUid': uid,
-            'editorMode': UserLevelEditorMode.photoSketch,
-            'assetRole': 'puzzle',
-          },
-        ),
-      );
-      await puzzleThumbRef.putData(
-        puzzleAssets.thumbnailBytes,
-        SettableMetadata(
-          contentType: 'image/webp',
-          customMetadata: <String, String>{
-            'ownerUid': uid,
-            'editorMode': UserLevelEditorMode.photoSketch,
-            'assetRole': 'puzzleThumbnail',
-          },
-        ),
-      );
-      puzzlePath = puzzleRef.fullPath;
-      puzzleThumbnailPath = puzzleThumbRef.fullPath;
-      hasPuzzleImage = true;
-    } else if (canReuseExistingPuzzle) {
-      puzzlePath = existingPuzzlePath;
-      puzzleThumbnailPath = existingPuzzleThumbnailPath;
-      hasPuzzleImage = puzzlePath.isNotEmpty;
-    }
-
-    final normalizedContentCategory = UserLevelContentCategory.normalize(
-      contentCategory,
-      editorMode: UserLevelEditorMode.photoSketch,
-    );
-    final normalizedEditorData = Map<String, dynamic>.from(editorData)
+    final baseEditorData = Map<String, dynamic>.from(editorData)
       ..['contentCategory'] = normalizedContentCategory
-      ..['hasPuzzleImage'] = hasPuzzleImage
-      ..['sourceImagePath'] = sanitizedSource.storagePath
-      ..['sourceImageContentType'] = sanitizedSource.contentType
-      ..['sourceImageWidth'] = sanitizedSource.width
-      ..['sourceImageHeight'] = sanitizedSource.height
-      ..['sourceImageSizeBytes'] = sanitizedSource.sizeBytes
-      ..['sourceImageSafetyStatus'] = sanitizedSource.safetyStatus
-      ..['sourceImageNsfwCheckStatus'] = sanitizedSource.nsfwCheckStatus;
+      ..['hasPuzzleImage'] = false;
 
-    await docRef.set(<String, dynamic>{
-      'nr': levelNr,
-      'name': answer.trim(),
-      'hintType': 'fact',
-      'editorMode': UserLevelEditorMode.photoSketch,
-      'contentCategory': normalizedContentCategory,
-      'creatorUid': uid,
-      'creatorName': creatorName.trim(),
-      'hints': <String, dynamic>{'fact': factText.trim()},
-      'puzzlePath': puzzlePath,
-      'puzzleThumbnailPath': puzzleThumbnailPath,
-      'solutionPath': solutionPath,
-      'sourceImageSafetyStatus': sanitizedSource.safetyStatus,
-      'sourceImageNsfwCheckStatus': sanitizedSource.nsfwCheckStatus,
-      'tooltipStart': '',
-      'tooltipEnd': '',
-      'isEnabled': true,
-      'isLocked': false,
-      'submissionStatus': UserLevelSubmissionStatus.draft,
-      'submissionId': null,
-      'editorData': normalizedEditorData,
-      'createdAt': existingCreatedAt == null
-          ? FieldValue.serverTimestamp()
-          : Timestamp.fromDate(existingCreatedAt),
-      'modifiedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    if (!persistSolutionAsset && existingSolutionPath.isNotEmpty) {
-      await _deleteStoragePathIfExists(existingSolutionPath);
-    }
-    if (existingSourcePath.isNotEmpty &&
-        existingSourcePath != sanitizedSource.storagePath) {
-      await _deleteStoragePathIfExists(existingSourcePath);
+    var createdPlaceholderDraft = false;
+    if (!draftDocExists) {
+      await docRef.set(<String, dynamic>{
+        'nr': levelNr,
+        'name': answer.trim(),
+        'hintType': 'fact',
+        'editorMode': UserLevelEditorMode.photoSketch,
+        'contentCategory': normalizedContentCategory,
+        'creatorUid': uid,
+        'creatorName': creatorName.trim(),
+        'hints': <String, dynamic>{'fact': factText.trim()},
+        'puzzlePath': '',
+        'puzzleThumbnailPath': '',
+        'solutionPath': '',
+        'tooltipStart': '',
+        'tooltipEnd': '',
+        'isEnabled': true,
+        'isLocked': false,
+        'submissionStatus': UserLevelSubmissionStatus.draft,
+        'submissionId': null,
+        'editorData': baseEditorData,
+        'createdAt': FieldValue.serverTimestamp(),
+        'modifiedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      createdPlaceholderDraft = true;
     }
 
-    return docRef.id;
+    _SanitizedUserUpload? sanitizedSource;
+    String uploadedSolutionPath = '';
+    String uploadedPuzzlePath = '';
+    String uploadedPuzzleThumbnailPath = '';
+    try {
+      sanitizedSource = await _sanitizeAndStoreUserUpload(
+        levelId: docRef.id,
+        uploadKind: 'face_source',
+        imageBytes: sourceImageBytes,
+      );
+
+      String solutionPath = '';
+      if (persistSolutionAsset && solutionImageBytes != null) {
+        final solutionRef = _storage.ref('$storageBase/solution.webp');
+        await solutionRef.putData(
+          solutionImageBytes,
+          SettableMetadata(
+            contentType: 'image/webp',
+            customMetadata: <String, String>{
+              'ownerUid': uid,
+              'editorMode': UserLevelEditorMode.photoSketch,
+              'assetRole': 'solution',
+            },
+          ),
+        );
+        solutionPath = solutionRef.fullPath;
+        uploadedSolutionPath = solutionPath;
+      }
+
+      String puzzlePath = '';
+      String puzzleThumbnailPath = '';
+      bool hasPuzzleImage = false;
+
+      if (puzzleImageBytes != null) {
+        final puzzleAssets = await _buildPuzzleStorageAssets(puzzleImageBytes);
+        final puzzleRef = _storage.ref('$storageBase/puzzle.webp');
+        final puzzleThumbRef = _storage.ref('$storageBase/puzzle_thumb.webp');
+        await puzzleRef.putData(
+          puzzleAssets.imageBytes,
+          SettableMetadata(
+            contentType: 'image/webp',
+            customMetadata: <String, String>{
+              'ownerUid': uid,
+              'editorMode': UserLevelEditorMode.photoSketch,
+              'assetRole': 'puzzle',
+            },
+          ),
+        );
+        await puzzleThumbRef.putData(
+          puzzleAssets.thumbnailBytes,
+          SettableMetadata(
+            contentType: 'image/webp',
+            customMetadata: <String, String>{
+              'ownerUid': uid,
+              'editorMode': UserLevelEditorMode.photoSketch,
+              'assetRole': 'puzzleThumbnail',
+            },
+          ),
+        );
+        puzzlePath = puzzleRef.fullPath;
+        puzzleThumbnailPath = puzzleThumbRef.fullPath;
+        uploadedPuzzlePath = puzzlePath;
+        uploadedPuzzleThumbnailPath = puzzleThumbnailPath;
+        hasPuzzleImage = true;
+      } else if (canReuseExistingPuzzle) {
+        puzzlePath = existingPuzzlePath;
+        puzzleThumbnailPath = existingPuzzleThumbnailPath;
+        hasPuzzleImage = puzzlePath.isNotEmpty;
+      }
+
+      final normalizedEditorData = Map<String, dynamic>.from(editorData)
+        ..['contentCategory'] = normalizedContentCategory
+        ..['hasPuzzleImage'] = hasPuzzleImage
+        ..['sourceImagePath'] = sanitizedSource.storagePath
+        ..['sourceImageContentType'] = sanitizedSource.contentType
+        ..['sourceImageWidth'] = sanitizedSource.width
+        ..['sourceImageHeight'] = sanitizedSource.height
+        ..['sourceImageSizeBytes'] = sanitizedSource.sizeBytes
+        ..['sourceImageSafetyStatus'] = sanitizedSource.safetyStatus
+        ..['sourceImageNsfwCheckStatus'] = sanitizedSource.nsfwCheckStatus;
+
+      await docRef.set(<String, dynamic>{
+        'nr': levelNr,
+        'name': answer.trim(),
+        'hintType': 'fact',
+        'editorMode': UserLevelEditorMode.photoSketch,
+        'contentCategory': normalizedContentCategory,
+        'creatorUid': uid,
+        'creatorName': creatorName.trim(),
+        'hints': <String, dynamic>{'fact': factText.trim()},
+        'puzzlePath': puzzlePath,
+        'puzzleThumbnailPath': puzzleThumbnailPath,
+        'solutionPath': solutionPath,
+        'sourceImageSafetyStatus': sanitizedSource.safetyStatus,
+        'sourceImageNsfwCheckStatus': sanitizedSource.nsfwCheckStatus,
+        'tooltipStart': '',
+        'tooltipEnd': '',
+        'isEnabled': true,
+        'isLocked': false,
+        'submissionStatus': UserLevelSubmissionStatus.draft,
+        'submissionId': null,
+        'editorData': normalizedEditorData,
+        'createdAt': existingCreatedAt == null
+            ? FieldValue.serverTimestamp()
+            : Timestamp.fromDate(existingCreatedAt),
+        'modifiedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (!persistSolutionAsset && existingSolutionPath.isNotEmpty) {
+        await _deleteStoragePathIfExists(existingSolutionPath);
+      }
+      if (existingSourcePath.isNotEmpty &&
+          existingSourcePath != sanitizedSource.storagePath) {
+        await _deleteStoragePathIfExists(existingSourcePath);
+      }
+
+      return docRef.id;
+    } catch (error) {
+      if (uploadedSolutionPath.isNotEmpty) {
+        await _deleteStoragePathIfExists(uploadedSolutionPath);
+      }
+      if (uploadedPuzzlePath.isNotEmpty) {
+        await _deleteStoragePathIfExists(uploadedPuzzlePath);
+      }
+      if (uploadedPuzzleThumbnailPath.isNotEmpty) {
+        await _deleteStoragePathIfExists(uploadedPuzzleThumbnailPath);
+      }
+      final uploadedSourcePath = sanitizedSource?.storagePath ?? '';
+      if (uploadedSourcePath.isNotEmpty &&
+          uploadedSourcePath != existingSourcePath) {
+        await _deleteStoragePathIfExists(uploadedSourcePath);
+      }
+      if (createdPlaceholderDraft) {
+        try {
+          await docRef.delete();
+        } catch (_) {
+          // If cleanup fails, the next save can still repair the draft.
+        }
+      }
+      rethrow;
+    }
   }
 
   Future<void> deleteMyLevel(String levelId) async {
@@ -1121,37 +1266,35 @@ class FirebaseService {
     String solutionMimeType = 'image/png',
     required String prompt,
     required double difficulty,
+    required String levelId,
     String? existingJobId,
-    void Function(String jobId)? onJobStarted,
+    Future<void> Function(String jobId)? onJobStarted,
+    Future<void> Function(String jobId)? onPendingJobInvalidated,
     void Function(String status)? onStatusChanged,
   }) async {
     await assertUserCanCreateLevels();
-    final requestBody = <String, dynamic>{
-      'payload': <String, dynamic>{
-        'input': <String, dynamic>{
-          'workflow': _buildRunpodWorkflow(
-            prompt: prompt,
-            difficulty: difficulty,
-            solutionFileName: solutionFileName,
-          ),
-          'images': <Map<String, String>>[
-            <String, String>{
-              'name': solutionFileName,
-              'image':
-                  'data:$solutionMimeType;base64,${base64Encode(solutionImageBytes)}',
-            },
-          ],
-        },
-      },
-    };
+    _tracePuzzleGeneration(
+      'start level=$levelId '
+      'existingJobId=${existingJobId?.trim().isNotEmpty == true ? existingJobId!.trim() : '-'} '
+      'mime=$solutionMimeType file=$solutionFileName '
+      'bytes=${solutionImageBytes.length} difficulty=${difficulty.toStringAsFixed(2)}',
+    );
+    final solutionImageBase64 =
+        'data:$solutionMimeType;base64,${base64Encode(solutionImageBytes)}';
 
-    const maxWarmupRetries = 12;
-    const maxTotalWait = Duration(minutes: 8);
+    const maxWarmupRetries = 16;
+    const maxTotalWait = Duration(minutes: 10);
     const warmupTimeoutMessage =
         'Puzzle generation is still preparing. You can leave this screen and come back to your draft.';
     final totalWait = Stopwatch()..start();
+    final normalizedLevelId = levelId.trim();
+    if (normalizedLevelId.isEmpty) {
+      throw StateError('A draft id is required before generating a puzzle.');
+    }
     var activeJobId = existingJobId?.trim();
+    var activeJobWasReused = activeJobId != null && activeJobId.isNotEmpty;
     var warmupRetryCount = 0;
+    var didClearStalePendingJob = false;
     onStatusChanged?.call(
       activeJobId == null || activeJobId.isEmpty
           ? 'Preparing puzzle...'
@@ -1175,14 +1318,25 @@ class FirebaseService {
         }
 
         final startData = await _startRunpodGeneration(
-          requestBody: requestBody,
+          prompt: prompt,
+          difficulty: difficulty,
+          solutionImageBase64: solutionImageBase64,
+          solutionFileName: solutionFileName,
+          levelId: levelId,
           onStatusChanged: onStatusChanged,
         );
         activeJobId = (startData['jobId'] as String? ?? '').trim();
+        activeJobWasReused = startData['reusedExisting'] == true;
         if (activeJobId.isEmpty) {
           throw StateError('The generation job did not start correctly.');
         }
-        onJobStarted?.call(activeJobId);
+        if (onJobStarted != null) {
+          await onJobStarted(activeJobId);
+        }
+        _tracePuzzleGeneration(
+          'job-ready level=$levelId jobId=$activeJobId '
+          'reused=${activeJobWasReused ? 'yes' : 'no'}',
+        );
       }
 
       var transientFailures = 0;
@@ -1198,37 +1352,54 @@ class FirebaseService {
         await Future<void>.delayed(
           Duration(
             seconds: switch (attempt) {
-              < 2 => 5,
-              < 12 => 6,
-              < 36 => 8,
-              _ => 10,
+              < 2 => 6,
+              < 10 => 8,
+              < 30 => 10,
+              _ => 12,
             },
           ),
         );
 
         Map<String, dynamic> statusData;
         try {
-          statusData = await _postRunpodProxy(
-            '/api/generate-status',
-            <String, dynamic>{'jobId': activeJobId},
+          statusData = await _getPuzzleGenerationStatusViaCallable(
+            activeJobId!,
+            normalizedLevelId,
           );
           transientFailures = 0;
         } catch (error, stackTrace) {
           if (_isTransientGenerationError(error) && transientFailures < 40) {
             transientFailures += 1;
-            _log.warning(
-              'Transient RunPod status polling error for job $activeJobId '
-              '(attempt ${attempt + 1}, transient retry $transientFailures).',
-              error,
-              stackTrace,
+            _tracePuzzleGeneration(
+              'transient-status-error level=$levelId jobId=$activeJobId '
+              'attempt=${attempt + 1} transientRetry=$transientFailures',
+              error: error,
+              stackTrace: stackTrace,
             );
             onStatusChanged?.call('Still preparing puzzle...');
             continue;
+          }
+          if (_shouldTreatGenerationErrorAsPending(error)) {
+            _tracePuzzleGeneration(
+              'keeping-pending-after-status-error '
+              'level=$levelId jobId=$activeJobId',
+              error: error,
+              stackTrace: stackTrace,
+            );
+            throw PendingPuzzleGenerationException(
+              jobId: activeJobId!,
+              message: warmupTimeoutMessage,
+            );
           }
           rethrow;
         }
 
         final status = (statusData['status'] as String? ?? 'UNKNOWN').trim();
+        _tracePuzzleGeneration(
+          'status level=$levelId jobId=$activeJobId '
+          'status=$status retryable=${statusData['retryable'] == true} '
+          'error="${(statusData['errorMessage'] as String? ?? '').trim()}"',
+        );
         onStatusChanged?.call(
           _friendlyGenerationStatus(
             status,
@@ -1241,13 +1412,22 @@ class FirebaseService {
         if (status == 'COMPLETED') {
           final imageBase64 = statusData['imageBase64'] as String? ?? '';
           if (imageBase64.isEmpty) {
+            _tracePuzzleGeneration(
+              'completed-without-image level=$levelId jobId=$activeJobId',
+            );
             throw StateError('Generation completed without an image.');
           }
+          _tracePuzzleGeneration(
+            'completed level=$levelId jobId=$activeJobId '
+            'imageChars=${imageBase64.length}',
+          );
           return _decodeGeneratedImage(imageBase64);
         }
 
         if (status == 'FAILED' || status == 'CANCELLED') {
           final details = (statusData['errorMessage'] as String? ?? '').trim();
+          final permanentFailure =
+              _isClearlyPermanentGenerationFailureDetails(details);
           final retryable = _shouldRetryTerminalGenerationStatus(
             status: status,
             details: details,
@@ -1264,7 +1444,7 @@ class FirebaseService {
             if (totalWait.elapsed + Duration(milliseconds: retryAfterMs) >=
                 maxTotalWait) {
               throw PendingPuzzleGenerationException(
-                jobId: activeJobId!,
+                jobId: activeJobId,
                 message: warmupTimeoutMessage,
               );
             }
@@ -1275,8 +1455,40 @@ class FirebaseService {
             break;
           }
 
+          if (activeJobWasReused && !didClearStalePendingJob) {
+            didClearStalePendingJob = true;
+            if (onPendingJobInvalidated != null) {
+              await onPendingJobInvalidated(activeJobId);
+            }
+            onStatusChanged?.call('Restarting puzzle...');
+            activeJobId = null;
+            activeJobWasReused = false;
+            shouldRestartJob = true;
+            break;
+          }
+
           if (details.isNotEmpty) {
+            _tracePuzzleGeneration(
+              'terminal-failure level=$levelId jobId=$activeJobId '
+              'status=$status permanent=$permanentFailure details="$details"',
+            );
+            if (!permanentFailure && activeJobId.isNotEmpty) {
+              throw PendingPuzzleGenerationException(
+                jobId: activeJobId,
+                message: warmupTimeoutMessage,
+              );
+            }
             throw StateError('Puzzle generation failed: $details');
+          }
+          _tracePuzzleGeneration(
+            'terminal-failure level=$levelId jobId=$activeJobId '
+            'status=$status permanent=$permanentFailure without-details',
+          );
+          if (!permanentFailure && activeJobId.isNotEmpty) {
+            throw PendingPuzzleGenerationException(
+              jobId: activeJobId,
+              message: warmupTimeoutMessage,
+            );
           }
           throw StateError('Puzzle generation failed.');
         }
@@ -1296,7 +1508,11 @@ class FirebaseService {
   }
 
   Future<Map<String, dynamic>> _startRunpodGeneration({
-    required Map<String, dynamic> requestBody,
+    required String prompt,
+    required double difficulty,
+    required String solutionImageBase64,
+    required String solutionFileName,
+    required String levelId,
     void Function(String status)? onStatusChanged,
   }) async {
     Object? lastError;
@@ -1307,10 +1523,12 @@ class FirebaseService {
         if (attempt > 0) {
           onStatusChanged?.call('Still preparing puzzle...');
         }
-        return await _postRunpodProxy(
-          '/api/generate-run',
-          requestBody,
-          forceRefresh: attempt > 0,
+        return await _startPuzzleGenerationViaCallable(
+          prompt: prompt,
+          difficulty: difficulty,
+          solutionImageBase64: solutionImageBase64,
+          solutionFileName: solutionFileName,
+          levelId: levelId,
         );
       } catch (error, stackTrace) {
         lastError = error;
@@ -1319,10 +1537,10 @@ class FirebaseService {
           rethrow;
         }
 
-        _log.warning(
-          'Transient RunPod start error on attempt ${attempt + 1}.',
-          error,
-          stackTrace,
+        _tracePuzzleGeneration(
+          'transient-start-error attempt=${attempt + 1}',
+          error: error,
+          stackTrace: stackTrace,
         );
         onStatusChanged?.call('Preparing puzzle...');
         await Future<void>.delayed(
@@ -1335,6 +1553,484 @@ class FirebaseService {
       lastError ?? StateError('The generation job did not start correctly.'),
       lastStackTrace ?? StackTrace.current,
     );
+  }
+
+  Future<Map<String, dynamic>> _startPuzzleGenerationViaCallable({
+    required String prompt,
+    required double difficulty,
+    required String solutionImageBase64,
+    required String solutionFileName,
+    required String levelId,
+  }) async {
+    if (_preferDirectRunpodProxyForPuzzleGeneration) {
+      return _startPuzzleGenerationViaProxy(
+        prompt: prompt,
+        difficulty: difficulty,
+        solutionImageBase64: solutionImageBase64,
+        solutionFileName: solutionFileName,
+      );
+    }
+
+    try {
+      final callable = _functions.httpsCallable('startUserLevelPuzzleGeneration');
+      final response = await callable.call<Map<String, dynamic>>(<String, dynamic>{
+        'prompt': prompt,
+        'difficulty': difficulty,
+        'solutionImageBase64': solutionImageBase64,
+        'solutionFileName': solutionFileName,
+        'levelId': levelId.trim(),
+      });
+      final data = Map<String, dynamic>.from(response.data);
+      return <String, dynamic>{
+        'jobId': (data['jobId'] as String? ?? '').trim(),
+        'reusedExisting': data['reusedExisting'] == true,
+      };
+    } on FirebaseFunctionsException catch (error) {
+      if (_shouldFallbackToDirectRunpodProxy(error)) {
+        _log.warning(
+          'Falling back to direct RunPod proxy start because the generation '
+          'callable is unavailable.',
+          error,
+        );
+        return _startPuzzleGenerationViaProxy(
+          prompt: prompt,
+          difficulty: difficulty,
+          solutionImageBase64: solutionImageBase64,
+          solutionFileName: solutionFileName,
+        );
+      }
+      final parts = <String>[
+        error.code.trim(),
+        (error.message ?? '').trim(),
+        if (error.details != null)
+          error.details is String
+              ? (error.details as String).trim()
+              : jsonEncode(error.details),
+      ].where((part) => part.isNotEmpty).toList();
+      throw StateError(
+        parts.isEmpty ? error.toString() : parts.join(' | '),
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> _getPuzzleGenerationStatusViaCallable(
+    String jobId,
+    String levelId,
+  ) async {
+    if (_preferDirectRunpodProxyForPuzzleGeneration) {
+      return _getPuzzleGenerationStatusViaProxy(jobId);
+    }
+
+    try {
+      final callable =
+          _functions.httpsCallable('getUserLevelPuzzleGenerationStatus');
+      final response = await callable.call<Map<String, dynamic>>(
+        <String, dynamic>{
+          'jobId': jobId,
+          'levelId': levelId.trim(),
+        },
+      );
+      final data = Map<String, dynamic>.from(response.data);
+      return <String, dynamic>{
+        'status': (data['status'] as String? ?? 'UNKNOWN').trim().toUpperCase(),
+        'imageBase64': (data['imageBase64'] as String? ?? '').trim(),
+        'errorMessage': (data['errorMessage'] as String? ?? '').trim(),
+        'retryable': data['retryable'] == true,
+        'retryAfterMs': (data['retryAfterMs'] as num?)?.round() ?? 0,
+      };
+    } on FirebaseFunctionsException catch (error) {
+      if (_shouldFallbackToDirectRunpodProxy(error)) {
+        _log.warning(
+          'Falling back to direct RunPod proxy status polling because the '
+          'generation callable is unavailable.',
+          error,
+        );
+        return _getPuzzleGenerationStatusViaProxy(jobId);
+      }
+      final parts = <String>[
+        error.code.trim(),
+        (error.message ?? '').trim(),
+        if (error.details != null)
+          error.details is String
+              ? (error.details as String).trim()
+              : jsonEncode(error.details),
+      ].where((part) => part.isNotEmpty).toList();
+      throw StateError(
+        parts.isEmpty ? error.toString() : parts.join(' | '),
+      );
+    }
+  }
+
+  bool _shouldFallbackToDirectRunpodProxy(FirebaseFunctionsException error) {
+    final code = error.code.trim().toLowerCase();
+    final message = [
+      error.message ?? '',
+      if (error.details != null)
+        error.details is String ? error.details as String : jsonEncode(error.details),
+    ].join(' ').toLowerCase();
+
+    return code == 'not-found' ||
+        code == 'unimplemented' ||
+        message.contains('startuserlevelpuzzlegeneration') ||
+        message.contains('getuserlevelpuzzlegenerationstatus') ||
+        message.contains('not found') ||
+        message.contains('unimplemented');
+  }
+
+  Future<Map<String, dynamic>> _startPuzzleGenerationViaProxy({
+    required String prompt,
+    required double difficulty,
+    required String solutionImageBase64,
+    required String solutionFileName,
+  }) async {
+    _tracePuzzleGeneration(
+      'proxy-start file=$solutionFileName '
+      'difficulty=${difficulty.toStringAsFixed(2)} payloadChars=${solutionImageBase64.length}',
+    );
+    final response = await _postRunpodProxy(
+      '/api/generate-run',
+      <String, dynamic>{
+        'payload': <String, dynamic>{
+          'input': <String, dynamic>{
+            'workflow': _buildRunpodWorkflow(
+              prompt,
+              difficulty,
+              solutionFileName,
+            ),
+            'images': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'name': solutionFileName,
+                'image': solutionImageBase64,
+              },
+            ],
+          },
+        },
+      },
+    );
+
+    _tracePuzzleGeneration(
+      'proxy-start-returned id=${'${response['id'] ?? ''}'.trim()}',
+    );
+    return <String, dynamic>{
+      'jobId': '${response['id'] ?? ''}'.trim(),
+      'reusedExisting': false,
+    };
+  }
+
+  Future<Map<String, dynamic>> _getPuzzleGenerationStatusViaProxy(
+    String jobId,
+  ) async {
+    _tracePuzzleGeneration('proxy-status jobId=$jobId');
+    final response = await _postRunpodProxy(
+      '/api/generate-status',
+      <String, dynamic>{'jobId': jobId},
+    );
+    return <String, dynamic>{
+      'status': '${response['status'] ?? 'UNKNOWN'}'.trim().toUpperCase(),
+      'imageBase64': _extractGeneratedImage(response),
+      'errorMessage': _extractGenerationError(response),
+      'retryable': response['retryable'] == true,
+      'retryAfterMs': (response['retryAfterMs'] as num?)?.round() ?? 0,
+    };
+  }
+
+  Future<Map<String, dynamic>> _postRunpodProxy(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    Object? lastError;
+    StackTrace? lastStackTrace;
+
+    for (var attempt = 0; attempt < 7; attempt += 1) {
+      try {
+        final authToken = await _getReliableFirebaseAuthToken(
+          forceRefresh: attempt > 0,
+        );
+        final appCheckToken = await _getReliableAppCheckToken(
+          forceRefresh: attempt > 0,
+        );
+
+        final response = await http.post(
+          Uri.parse('$_runpodProxyBaseUrl$path'),
+          headers: <String, String>{
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $authToken',
+            'X-Firebase-AppCheck': appCheckToken,
+          },
+          body: jsonEncode(body),
+        );
+
+        final decoded = jsonDecode(response.body);
+        if (decoded is! Map) {
+          throw StateError('The generation service returned an invalid response.');
+        }
+        final data = Map<String, dynamic>.from(decoded);
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          final message =
+              '${data['error'] ?? 'Generation request failed.'}'.trim();
+          final fullMessage = '${response.statusCode}: $message';
+          _tracePuzzleGeneration('proxy-http-failure path=$path message=$fullMessage');
+          if (_shouldRetryRunpodProxyResponse(
+                statusCode: response.statusCode,
+                message: fullMessage,
+              ) &&
+              attempt < 6) {
+            await Future<void>.delayed(
+              Duration(milliseconds: attempt < 2 ? 800 : 1600 + attempt * 600),
+            );
+            continue;
+          }
+          throw StateError(fullMessage);
+        }
+        if ('${data['error'] ?? ''}'.trim().isNotEmpty) {
+          final message = '${data['error']}'.trim();
+          _tracePuzzleGeneration('proxy-error path=$path message="$message"');
+          if (_shouldRetryRunpodProxyResponse(
+                statusCode: response.statusCode,
+                message: message,
+              ) &&
+              attempt < 6) {
+            await Future<void>.delayed(
+              Duration(milliseconds: attempt < 2 ? 800 : 1600 + attempt * 600),
+            );
+            continue;
+          }
+          throw StateError(message);
+        }
+        _tracePuzzleGeneration(
+          'proxy-success path=$path keys=${data.keys.join(',')}',
+        );
+        return data;
+      } catch (error, stackTrace) {
+        lastError = error;
+        lastStackTrace = stackTrace;
+        _tracePuzzleGeneration(
+          'proxy-attempt-failed path=$path attempt=${attempt + 1}',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        if (!_isTransientGenerationError(error) || attempt == 6) {
+          rethrow;
+        }
+        await Future<void>.delayed(
+          Duration(milliseconds: attempt < 2 ? 800 : 1600 + attempt * 600),
+        );
+      }
+    }
+
+    Error.throwWithStackTrace(
+      lastError ?? StateError('Could not contact the generation service.'),
+      lastStackTrace ?? StackTrace.current,
+    );
+  }
+
+  Future<String> _getReliableFirebaseAuthToken({
+    required bool forceRefresh,
+  }) async {
+    for (var attempt = 0; attempt < 6; attempt += 1) {
+      var currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        currentUser = await FirebaseAuth.instance
+            .authStateChanges()
+            .firstWhere((user) => user != null)
+            .timeout(
+              const Duration(seconds: 2),
+              onTimeout: () => null,
+            );
+      }
+
+      if (currentUser != null) {
+        final token = await currentUser.getIdToken(forceRefresh || attempt > 0);
+        if (token != null && token.trim().isNotEmpty) {
+          return token.trim();
+        }
+      }
+
+      await Future<void>.delayed(
+        Duration(milliseconds: attempt < 2 ? 500 : 1000 + attempt * 500),
+      );
+    }
+
+    throw StateError('Sign-in is still restoring. Please wait a moment.');
+  }
+
+  Future<String> _getReliableAppCheckToken({
+    required bool forceRefresh,
+  }) async {
+    for (var attempt = 0; attempt < 6; attempt += 1) {
+      final token = await FirebaseAppCheck.instance.getToken(
+        forceRefresh || attempt > 0,
+      );
+      if (token != null && token.trim().isNotEmpty) {
+        return token.trim();
+      }
+
+      await Future<void>.delayed(
+        Duration(milliseconds: attempt < 2 ? 500 : 1000 + attempt * 500),
+      );
+    }
+
+    throw StateError(
+      'App security verification is still preparing. Please wait a moment.',
+    );
+  }
+
+  bool _shouldRetryRunpodProxyResponse({
+    required int statusCode,
+    required String message,
+  }) {
+    final normalized = message.toLowerCase();
+    if (statusCode == 401) {
+      return normalized.contains('appcheck') ||
+          normalized.contains('app check') ||
+          normalized.contains('firebase auth token') ||
+          normalized.contains('signed in') ||
+          normalized.contains('unauthorized');
+    }
+
+    return statusCode == 408 ||
+        statusCode == 409 ||
+        statusCode == 425 ||
+        statusCode == 429 ||
+        statusCode == 500 ||
+        statusCode == 502 ||
+        statusCode == 503 ||
+        statusCode == 504 ||
+        normalized.contains('comfyui server') ||
+        normalized.contains('not reachable after multiple retries') ||
+        normalized.contains('127.0.0.1:8188');
+  }
+
+  Map<String, dynamic> _buildRunpodWorkflow(
+    String prompt,
+    double difficulty,
+    String solutionFileName,
+  ) {
+    final seed =
+        DateTime.now().microsecondsSinceEpoch.remainder(1000000000000);
+    return <String, dynamic>{
+      '10': <String, dynamic>{
+        'class_type': 'CheckpointLoaderSimple',
+        'inputs': <String, dynamic>{
+          'ckpt_name': 'Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors',
+        },
+      },
+      '11': <String, dynamic>{
+        'class_type': 'CLIPTextEncode',
+        'inputs': <String, dynamic>{'text': prompt, 'clip': ['10', 1]},
+      },
+      '14': <String, dynamic>{
+        'class_type': 'ControlNetLoader',
+        'inputs': <String, dynamic>{
+          'control_net_name': 'diffusion_pytorch_model.safetensors',
+        },
+      },
+      '15': <String, dynamic>{
+        'class_type': 'CLIPTextEncode',
+        'inputs': <String, dynamic>{
+          'text': 'worst quality poor details unrealistic',
+          'clip': ['10', 1],
+        },
+      },
+      '16': <String, dynamic>{
+        'class_type': 'ControlNetApplyAdvanced',
+        'inputs': <String, dynamic>{
+          'strength': math.max(0.1, difficulty / 5),
+          'start_percent': 0.0,
+          'end_percent': 1.0,
+          'positive': ['11', 0],
+          'negative': ['15', 0],
+          'control_net': ['14', 0],
+          'image': ['17', 0],
+        },
+      },
+      '17': <String, dynamic>{
+        'class_type': 'LoadImage',
+        'inputs': <String, dynamic>{
+          'image': solutionFileName,
+          'upload': 'image',
+        },
+      },
+      '18': <String, dynamic>{
+        'class_type': 'KSampler',
+        'inputs': <String, dynamic>{
+          'seed': seed,
+          'steps': 20,
+          'cfg': 8,
+          'sampler_name': 'euler',
+          'scheduler': 'normal',
+          'denoise': 1.0,
+          'model': ['10', 0],
+          'positive': ['16', 0],
+          'negative': ['16', 1],
+          'latent_image': ['19', 0],
+        },
+      },
+      '19': <String, dynamic>{
+        'class_type': 'EmptyLatentImage',
+        'inputs': <String, dynamic>{
+          'width': 1024,
+          'height': 1024,
+          'batch_size': 1,
+        },
+      },
+      '20': <String, dynamic>{
+        'class_type': 'VAEDecode',
+        'inputs': <String, dynamic>{'samples': ['18', 0], 'vae': ['10', 2]},
+      },
+      '21': <String, dynamic>{
+        'class_type': 'SaveImage',
+        'inputs': <String, dynamic>{
+          'filename_prefix': 'ComfyUI',
+          'images': ['20', 0],
+        },
+      },
+    };
+  }
+
+  String _extractGeneratedImage(Map<String, dynamic> statusData) {
+    final output = statusData['output'];
+    if (output is Map) {
+      final images = output['images'];
+      if (images is List && images.isNotEmpty && images.first is Map) {
+        final first = Map<String, dynamic>.from(images.first as Map);
+        return '${first['data'] ?? first['image'] ?? ''}'.trim();
+      }
+      final message = output['message'];
+      if (message is String && message.trim().isNotEmpty) {
+        return message.trim();
+      }
+    }
+
+    if (output is List && output.isNotEmpty) {
+      return '${output.first}'.trim();
+    }
+
+    return '';
+  }
+
+  String _extractGenerationError(Map<String, dynamic> statusData) {
+    final directError = '${statusData['error'] ?? ''}'.trim();
+    if (directError.isNotEmpty) {
+      return directError;
+    }
+
+    final directMessage = '${statusData['errorMessage'] ?? statusData['message'] ?? ''}'.trim();
+    if (directMessage.isNotEmpty) {
+      return directMessage;
+    }
+
+    final output = statusData['output'];
+    if (output is Map) {
+      for (final key in ['error', 'message', 'stderr', 'detail']) {
+        final value = '${output[key] ?? ''}'.trim();
+        if (value.isNotEmpty) {
+          return value;
+        }
+      }
+    }
+
+    return '';
   }
 
   bool _isTransientGenerationError(Object error) {
@@ -1356,6 +2052,14 @@ class FirebaseService {
         message.contains('job did not start correctly') ||
         message.contains('rate limit') ||
         message.contains('too many requests') ||
+        message.contains('sign-in is still restoring') ||
+        message.contains('app security verification is still preparing') ||
+        message.contains('invalid appcheck token') ||
+        message.contains('must provide a valid appcheck token') ||
+        message.contains('invalid firebase auth token') ||
+        message.contains('must provide a firebase auth token') ||
+        message.contains('unauthorized: invalid firebase auth token') ||
+        message.contains('unauthorized: invalid appcheck token') ||
         message.contains('(404)') ||
         message.contains('(408)') ||
         message.contains('(409)') ||
@@ -1364,7 +2068,31 @@ class FirebaseService {
         message.contains('(502)') ||
         message.contains('(503)') ||
         message.contains('(504)') ||
+        message.contains('401: unauthorized') ||
+        message.contains('internal server error polling runpod') ||
+        message.contains('internal server error fetching runpod') ||
+        message.contains('comfyui server') ||
+        message.contains('not reachable after multiple retries') ||
+        message.contains('127.0.0.1:8188') ||
+        message.contains('503:') ||
+        message.contains('504:') ||
         message.contains('temporarily unavailable');
+  }
+
+  bool _shouldTreatGenerationErrorAsPending(Object error) {
+    final message = switch (error) {
+      StateError() => error.message.toString(),
+      _ => error.toString(),
+    }.toLowerCase();
+
+    return _isTransientGenerationError(error) ||
+        message.contains('still preparing') ||
+        message.contains('still starting') ||
+        message.contains('checking saved puzzle') ||
+        message.contains('preparing puzzle') ||
+        message.contains('comfyui server') ||
+        message.contains('not reachable after multiple retries') ||
+        message.contains('127.0.0.1:8188');
   }
 
   bool _isRetryableTerminalGenerationStatus(String status, String details) {
@@ -1393,7 +2121,29 @@ class FirebaseService {
         message.contains('initializing') ||
         message.contains('loading model') ||
         message.contains('loading') ||
+        message.contains('job not found') ||
+        message.contains('not found') ||
+        message.contains('comfyui server') ||
+        message.contains('not reachable after multiple retries') ||
+        message.contains('127.0.0.1:8188') ||
         message.contains('boot');
+  }
+
+  bool _isClearlyPermanentGenerationFailureDetails(String details) {
+    final message = details.trim().toLowerCase();
+    if (message.isEmpty) {
+      return false;
+    }
+
+    return message.contains('too large') ||
+        message.contains('(413)') ||
+        message.contains('payload') ||
+        message.contains('unsupported') ||
+        message.contains('invalid image') ||
+        message.contains('corrupt') ||
+        message.contains('unreadable') ||
+        message.contains('malformed') ||
+        message.contains('bad request');
   }
 
   bool _shouldRetryTerminalGenerationStatus({
@@ -1408,18 +2158,24 @@ class FirebaseService {
       return true;
     }
 
-    // Treat early terminal states as warm-up noise unless they persist.
-    if (elapsed < const Duration(minutes: 2, seconds: 30)) {
+    if (_isClearlyPermanentGenerationFailureDetails(details)) {
+      return false;
+    }
+
+    // Treat early and mid-run terminal states as warm-up noise unless they persist.
+    if (elapsed < const Duration(minutes: 5)) {
       return true;
     }
 
-    if (details.trim().isEmpty && generationAttempt < 4) {
+    if (details.trim().isEmpty && generationAttempt < 8) {
       return true;
     }
 
     final message = details.toLowerCase();
     return message.contains('unknown') ||
         message.contains('not ready') ||
+        message.contains('job not found') ||
+        message.contains('not found') ||
         message.contains('not available');
   }
 
@@ -1463,247 +2219,5 @@ class FirebaseService {
     final normalized =
         imageBase64.contains(',') ? imageBase64.split(',').last : imageBase64;
     return base64Decode(normalized);
-  }
-
-  Future<Map<String, dynamic>> _postRunpodProxy(
-    String path,
-    Map<String, dynamic> body, {
-    bool forceRefresh = false,
-  }) async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final appCheckToken =
-        await FirebaseAppCheck.instance.getToken(forceRefresh);
-    if (appCheckToken == null || appCheckToken.isEmpty) {
-      throw StateError(
-          'Could not get an App Check token for puzzle generation.');
-    }
-
-    final idToken = currentUser == null
-        ? null
-        : await currentUser.getIdToken(forceRefresh);
-
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'X-Firebase-AppCheck': appCheckToken,
-      if (idToken != null && idToken.trim().isNotEmpty)
-        'Authorization': 'Bearer ${idToken.trim()}',
-    };
-
-    final response = await http.post(
-      Uri.parse('$_runpodProxyBaseUrl$path'),
-      headers: headers,
-      body: jsonEncode(body),
-    );
-
-    if (response.statusCode == 401 && !forceRefresh) {
-      return _postRunpodProxy(path, body, forceRefresh: true);
-    }
-
-    dynamic decoded = const <String, dynamic>{};
-    if (response.body.isNotEmpty) {
-      try {
-        decoded = jsonDecode(response.body);
-      } on FormatException {
-        throw StateError(
-          'Generation proxy returned an invalid response (${response.statusCode}).',
-        );
-      }
-    }
-    final json = decoded is Map<String, dynamic>
-        ? decoded
-        : Map<String, dynamic>.from(decoded as Map);
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      if (response.statusCode == 413) {
-        throw StateError(
-          'The solution image is still too large for puzzle generation.',
-        );
-      }
-      final errorMessage = json['error'] as String? ??
-          'Puzzle generation request failed (${response.statusCode}).';
-      throw StateError(errorMessage);
-    }
-
-    if (path == '/api/generate-run') {
-      return <String, dynamic>{
-        'jobId': (json['id'] as String? ?? '').trim(),
-      };
-    }
-
-    return <String, dynamic>{
-      'status': (json['status'] as String? ?? 'UNKNOWN').trim().toUpperCase(),
-      'imageBase64': _extractGeneratedImage(json),
-      'errorMessage': _extractGenerationError(json),
-      'retryable': json['retryable'] == true,
-      'retryAfterMs': (json['retryAfterMs'] as num?)?.round() ?? 0,
-    };
-  }
-
-  Map<String, dynamic> _buildRunpodWorkflow({
-    required String prompt,
-    required double difficulty,
-    required String solutionFileName,
-  }) {
-    return <String, dynamic>{
-      '10': <String, dynamic>{
-        'class_type': 'CheckpointLoaderSimple',
-        'inputs': <String, dynamic>{
-          'ckpt_name': 'Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors',
-        },
-      },
-      '11': <String, dynamic>{
-        'class_type': 'CLIPTextEncode',
-        'inputs': <String, dynamic>{
-          'text': prompt,
-          'clip': <dynamic>['10', 1],
-        },
-      },
-      '14': <String, dynamic>{
-        'class_type': 'ControlNetLoader',
-        'inputs': <String, dynamic>{
-          'control_net_name': 'diffusion_pytorch_model.safetensors',
-        },
-      },
-      '15': <String, dynamic>{
-        'class_type': 'CLIPTextEncode',
-        'inputs': <String, dynamic>{
-          'text': 'worst quality poor details unrealistic',
-          'clip': <dynamic>['10', 1],
-        },
-      },
-      '16': <String, dynamic>{
-        'class_type': 'ControlNetApplyAdvanced',
-        'inputs': <String, dynamic>{
-          // Keep the uploaded drawing meaningfully in control of the result.
-          'strength': difficulty.clamp(0.35, 2.0),
-          'start_percent': 0.0,
-          'end_percent': 1.0,
-          'positive': <dynamic>['11', 0],
-          'negative': <dynamic>['15', 0],
-          'control_net': <dynamic>['14', 0],
-          'image': <dynamic>['17', 0],
-        },
-      },
-      '17': <String, dynamic>{
-        'class_type': 'LoadImage',
-        'inputs': <String, dynamic>{
-          'image': solutionFileName,
-          'upload': 'image',
-        },
-      },
-      '18': <String, dynamic>{
-        'class_type': 'KSampler',
-        'inputs': <String, dynamic>{
-          'seed': DateTime.now().microsecondsSinceEpoch,
-          'steps': 20,
-          'cfg': 8,
-          'sampler_name': 'euler',
-          'scheduler': 'normal',
-          'denoise': 1.0,
-          'model': <dynamic>['10', 0],
-          'positive': <dynamic>['16', 0],
-          'negative': <dynamic>['16', 1],
-          'latent_image': <dynamic>['19', 0],
-        },
-      },
-      '19': <String, dynamic>{
-        'class_type': 'EmptyLatentImage',
-        'inputs': <String, dynamic>{
-          'width': 1024,
-          'height': 1024,
-          'batch_size': 1,
-        },
-      },
-      '20': <String, dynamic>{
-        'class_type': 'VAEDecode',
-        'inputs': <String, dynamic>{
-          'samples': <dynamic>['18', 0],
-          'vae': <dynamic>['10', 2],
-        },
-      },
-      '21': <String, dynamic>{
-        'class_type': 'SaveImage',
-        'inputs': <String, dynamic>{
-          'filename_prefix': 'ComfyUI',
-          'images': <dynamic>['20', 0],
-        },
-      },
-    };
-  }
-
-  String _extractGeneratedImage(Map<String, dynamic> statusData) {
-    final output = statusData['output'];
-    if (output is Map) {
-      final outputMap = Map<String, dynamic>.from(output);
-      final images = outputMap['images'];
-      if (images is List && images.isNotEmpty) {
-        for (final image in images) {
-          if (image is! Map) {
-            continue;
-          }
-          final imageMap = Map<String, dynamic>.from(image);
-          final value = (imageMap['data'] as String? ??
-                  imageMap['image'] as String? ??
-                  imageMap['url'] as String? ??
-                  '')
-              .trim();
-          if (value.isNotEmpty) {
-            return value;
-          }
-        }
-      }
-
-      final message = outputMap['message'];
-      if (message is String) {
-        return message.trim();
-      }
-    }
-
-    if (output is List && output.isNotEmpty) {
-      for (final item in output) {
-        if (item is String && item.trim().isNotEmpty) {
-          return item.trim();
-        }
-        if (item is! Map) {
-          continue;
-        }
-        final itemMap = Map<String, dynamic>.from(item);
-        final value = (itemMap['data'] as String? ??
-                itemMap['image'] as String? ??
-                itemMap['url'] as String? ??
-                '')
-            .trim();
-        if (value.isNotEmpty) {
-          return value;
-        }
-      }
-    }
-
-    return '';
-  }
-
-  String _extractGenerationError(Map<String, dynamic> statusData) {
-    final directError = statusData['error'];
-    if (directError is String && directError.trim().isNotEmpty) {
-      return directError.trim();
-    }
-
-    final directMessage = statusData['message'];
-    if (directMessage is String && directMessage.trim().isNotEmpty) {
-      return directMessage.trim();
-    }
-
-    final output = statusData['output'];
-    if (output is Map) {
-      final outputMap = Map<String, dynamic>.from(output);
-      for (final key in <String>['error', 'message', 'stderr', 'detail']) {
-        final value = outputMap[key];
-        if (value is String && value.trim().isNotEmpty) {
-          return value.trim();
-        }
-      }
-    }
-
-    return '';
   }
 }

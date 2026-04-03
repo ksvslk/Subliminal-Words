@@ -42,6 +42,24 @@ DrawingBrushType _brushFromName(String? name) {
   );
 }
 
+double _effectiveRunpodControlStrength(double difficulty) {
+  return math.max(0.1, difficulty / 5);
+}
+
+double _normalizeStoredGenerationDifficulty(double? rawValue) {
+  if (rawValue == null || !rawValue.isFinite) {
+    return 5.0;
+  }
+
+  final value = rawValue.toDouble();
+  if (value <= 3.0) {
+    final legacyNormalized = ((value - 0.1) / (3.0 - 0.1)).clamp(0.0, 1.0);
+    return 1.0 + legacyNormalized * 9.0;
+  }
+
+  return value.clamp(1.0, 10.0);
+}
+
 DrawingController _buildDrawingControllerFromEditorData(
   Map<dynamic, dynamic>? rawEditorData,
 ) {
@@ -87,6 +105,49 @@ DrawingController _buildDrawingControllerFromEditorData(
   );
 }
 
+Map<String, dynamic>? _extractPendingPuzzleGenerationFromEditorData(
+  Map<dynamic, dynamic>? rawEditorData, {
+  required String? levelId,
+}) {
+  final normalizedLevelId = (levelId ?? '').trim();
+  if (normalizedLevelId.isEmpty || rawEditorData == null) {
+    return null;
+  }
+
+  final editorData = Map<String, dynamic>.from(rawEditorData);
+  final rawPending = editorData['pendingPuzzleGeneration'];
+  if (rawPending is! Map) {
+    return null;
+  }
+
+  final pendingData = Map<String, dynamic>.from(rawPending);
+  final status = '${pendingData['status'] ?? ''}'.trim().toLowerCase();
+  if (status.isNotEmpty && status != 'running') {
+    return null;
+  }
+
+  return <String, dynamic>{
+    'levelId': normalizedLevelId,
+    'jobId': '${pendingData['jobId'] ?? ''}'.trim(),
+    'jobStartedAt': pendingData['jobStartedAt'],
+    'savedAt': pendingData['updatedAt'] ?? pendingData['jobStartedAt'],
+  };
+}
+
+List<WordOverlayLetter> _extractWordLettersFromEditorData(
+  Map<dynamic, dynamic>? rawEditorData,
+) {
+  if (rawEditorData == null) {
+    return const <WordOverlayLetter>[];
+  }
+
+  final editorData = Map<String, dynamic>.from(rawEditorData);
+  final rawLetters = editorData['wordLetters'] as List<dynamic>? ?? const [];
+  return rawLetters.whereType<Map>().map((letterJson) {
+    return WordOverlayLetter.fromJson(Map<String, dynamic>.from(letterJson));
+  }).toList();
+}
+
 class CreateLevelScreen extends StatefulWidget {
   final SWLevel? initialLevel;
   final String? initialEditorMode;
@@ -127,6 +188,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
   bool _isSaving = false;
   bool _isSubmittingForReview = false;
   bool _isGeneratingPuzzle = false;
+  bool _didBackgroundWhilePuzzleGenerating = false;
   bool _isStageInteracting = false;
   bool _isLoadingWordEditorData = false;
   bool _isLoadingFaceEditorData = false;
@@ -134,7 +196,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
   bool _isGeneratingFaceSketch = false;
   bool _isGeneratingAfterManipulate = false;
   bool _isFaceTransformInteractionLocked = false;
-  double _generationDifficulty = 1.5;
+  double _generationDifficulty = 5.0;
   String _puzzleGenerationStatus = '';
   Uint8List? _generatedPuzzleImageBytes;
   Uint8List? _faceSourceImageBytes;
@@ -150,6 +212,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
   int _faceSketchGenerationRevision = 0;
   bool _isFaceSketchGenerationInFlight = false;
   String? _currentLevelId;
+  String? _pendingPuzzleGenerationJobId;
   late String _editorMode;
   late String _contentCategory;
   late FaceSketchSettings _faceSketchSettings;
@@ -161,8 +224,14 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
   bool get _hasStoredPuzzleImage =>
       widget.initialLevel?.hasReviewReadyPuzzleImage == true &&
       !_hasPuzzleInvalidatedByEdit;
+  bool get _hasActivePendingPuzzleGeneration =>
+      _pendingPuzzleGenerationJobId != null &&
+      _pendingPuzzleGenerationJobId!.isNotEmpty;
+  bool get _shouldHideStoredPuzzleWhilePendingGeneration =>
+      _hasActivePendingPuzzleGeneration && _generatedPuzzleImageBytes == null;
   bool get _hasPuzzleImageForReview =>
-      _generatedPuzzleImageBytes != null || _hasStoredPuzzleImage;
+      _generatedPuzzleImageBytes != null ||
+      (_hasStoredPuzzleImage && !_shouldHideStoredPuzzleWhilePendingGeneration);
   bool get _isSolutionEditingLocked =>
       !_isLocked && _hasPuzzleImageForReview;
   bool get _hasDraftStageContent =>
@@ -188,7 +257,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
               : _drawingController.hasCommittedStrokes;
   bool get _canAccessPuzzleStep => _isLocked || _isSolutionStepComplete;
   bool get _isPuzzleGenerationSafeToLeave =>
-      _isGeneratingPuzzle && _puzzleGenerationStatus != 'Saving draft...';
+      _isGeneratingPuzzle &&
+      _hasActivePendingPuzzleGeneration;
   String get _visiblePuzzleGenerationStatus =>
       _isGeneratingPuzzle ? _puzzleGenerationStatus : '';
 
@@ -201,7 +271,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       return 'Safe to leave now. We will keep this puzzle with your draft.';
     }
 
-    return 'Keep this screen open for a moment while we save your draft first.';
+    return 'Keep this screen open until we secure the puzzle generation with your draft.';
   }
 
   @override
@@ -234,6 +304,15 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       editorMode: _editorMode,
     );
     _currentLevelId = initialLevel?.documentId;
+    final initialPendingPuzzleGeneration =
+        _extractPendingPuzzleGenerationFromEditorData(
+      initialEditorData,
+      levelId: _currentLevelId,
+    );
+    final initialPendingJobId =
+        '${initialPendingPuzzleGeneration?['jobId'] ?? ''}'.trim();
+    _pendingPuzzleGenerationJobId =
+        initialPendingJobId.isEmpty ? null : initialPendingJobId;
     _generationPromptController = TextEditingController(
       text: initialEditorData['generationPrompt'] as String? ??
           initialLevel?.name ??
@@ -243,8 +322,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       _generationPromptController.text,
     );
     _generationPromptFocusNode = FocusNode();
-    _generationDifficulty =
-        (initialEditorData['generationDifficulty'] as num?)?.toDouble() ?? 1.5;
+    _generationDifficulty = _normalizeStoredGenerationDifficulty(
+      (initialEditorData['generationDifficulty'] as num?)?.toDouble(),
+    );
     _faceSketchSettings = FaceSketchSettings.fromJson(
       initialEditorData['faceSketchSettings'] as Map<dynamic, dynamic>?,
     );
@@ -258,14 +338,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     _wordDrawingController = _buildDrawingControllerFromEditorData(
       initialEditorData['wordDrawing'] as Map<dynamic, dynamic>?,
     );
-    final initialWordLettersJson =
-        initialEditorData['wordLetters'] as List<dynamic>? ?? const <dynamic>[];
     _wordOverlayController = WordOverlayController(
-      initialLetters: initialWordLettersJson.whereType<Map>().map(
-            (letterJson) => WordOverlayLetter.fromJson(
-              Map<String, dynamic>.from(letterJson),
-            ),
-          ),
+      initialLetters: _extractWordLettersFromEditorData(initialEditorData),
     );
     _drawingHasContentNotifier.value = _drawingController.hasCommittedStrokes;
     _wordDrawingHasContentNotifier.value =
@@ -334,8 +408,29 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      unawaited(_resumePendingPuzzleGenerationIfNeeded());
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (_didBackgroundWhilePuzzleGenerating &&
+            _pendingPuzzleGenerationJobId != null &&
+            _pendingPuzzleGenerationJobId!.isNotEmpty &&
+            !_hasPuzzleImageForReview &&
+            mounted) {
+          setState(() {
+            _isGeneratingPuzzle = false;
+            _puzzleGenerationStatus = 'Checking saved puzzle...';
+          });
+        }
+        _didBackgroundWhilePuzzleGenerating = false;
+        unawaited(_resumePendingPuzzleGenerationIfNeeded());
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        if (_isPuzzleGenerationSafeToLeave) {
+          _didBackgroundWhilePuzzleGenerating = true;
+        }
+        break;
     }
   }
 
@@ -855,22 +950,46 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       _pendingPuzzleGenerationPrefsKey,
       jsonEncode(payload),
     );
+
+    final normalizedJobId = jobId?.trim();
+    _pendingPuzzleGenerationJobId =
+        normalizedJobId == null || normalizedJobId.isEmpty
+            ? null
+            : normalizedJobId;
+    if (mounted) {
+      setState(() {});
+      await context.read<FirebaseService>().persistPendingPuzzleGeneration(
+            levelId: normalizedLevelId,
+            jobId: normalizedJobId,
+          );
+    }
   }
 
   Future<void> _clearPendingPuzzleGeneration({String? onlyForLevelId}) async {
     final prefs = await SharedPreferences.getInstance();
     if (onlyForLevelId == null || onlyForLevelId.trim().isEmpty) {
       await prefs.remove(_pendingPuzzleGenerationPrefsKey);
+      _pendingPuzzleGenerationJobId = null;
+      if (mounted) {
+        setState(() {});
+      }
       return;
     }
 
     final pending = await _readPendingPuzzleGeneration();
-    if (pending == null) {
-      return;
+    if (pending != null &&
+        '${pending['levelId'] ?? ''}'.trim() == onlyForLevelId.trim()) {
+      await prefs.remove(_pendingPuzzleGenerationPrefsKey);
     }
 
-    if ('${pending['levelId'] ?? ''}'.trim() == onlyForLevelId.trim()) {
-      await prefs.remove(_pendingPuzzleGenerationPrefsKey);
+    if (_currentLevelId == onlyForLevelId.trim()) {
+      _pendingPuzzleGenerationJobId = null;
+      if (mounted) {
+        setState(() {});
+        await context
+            .read<FirebaseService>()
+            .clearPendingPuzzleGeneration(onlyForLevelId.trim());
+      }
     }
   }
 
@@ -887,7 +1006,29 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       return;
     }
 
-    final pending = await _readPendingPuzzleGeneration();
+    final firebaseService = context.read<FirebaseService>();
+    var pending = await _readPendingPuzzleGeneration();
+    pending ??= _extractPendingPuzzleGenerationFromEditorData(
+      widget.initialLevel?.editorData,
+      levelId: _currentLevelId,
+    );
+    if (pending == null && _currentLevelId != null) {
+      final latestLevel = await firebaseService.getMyLevel(_currentLevelId!);
+      if (!mounted) {
+        return;
+      }
+      pending = _extractPendingPuzzleGenerationFromEditorData(
+        latestLevel?.editorData,
+        levelId: latestLevel?.documentId ?? _currentLevelId,
+      );
+      if (pending != null) {
+        final latestJobId = '${pending['jobId'] ?? ''}'.trim();
+        await _persistPendingPuzzleGeneration(
+          levelId: '${pending['levelId'] ?? ''}'.trim(),
+          jobId: latestJobId.isEmpty ? null : latestJobId,
+        );
+      }
+    }
     if (!mounted || pending == null) {
       return;
     }
@@ -897,7 +1038,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       return;
     }
 
-    if (_hasPuzzleImageForReview) {
+    if (_generatedPuzzleImageBytes != null ||
+        (_hasStoredPuzzleImage && !_hasActivePendingPuzzleGeneration)) {
       await _clearPendingPuzzleGeneration(onlyForLevelId: pendingLevelId);
       if (mounted) {
         setState(() {
@@ -909,6 +1051,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     }
 
     final pendingJobId = '${pending['jobId'] ?? ''}'.trim();
+    _pendingPuzzleGenerationJobId =
+        pendingJobId.isEmpty ? null : pendingJobId;
 
     unawaited(
       _generatePuzzle(
@@ -1047,6 +1191,14 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     }
 
     try {
+      final editorDataLetters =
+          _extractWordLettersFromEditorData(initialLevel.editorData);
+      if (editorDataLetters.isNotEmpty) {
+        _wordOverlayController.replaceLetters(editorDataLetters);
+        _lastSeenWordContentVersion = _wordOverlayController.contentVersion;
+        return;
+      }
+
       final firebaseService = context.read<FirebaseService>();
       final svgBytes =
           await firebaseService.getStorageBytes(initialLevel.solutionPath);
@@ -1161,16 +1313,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       return;
     }
 
-    final validationMessage = _validateGenerationInputs();
-    if (validationMessage != null) {
-      _showSnack(validationMessage);
-      return;
-    }
-
-    if (!skipExistingPuzzleConfirmation && !await _confirmRegeneratePuzzle()) {
-      return;
-    }
-
     final prompt = _generationPromptController.text.trim();
     final normalizedResumeJobId = resumeJobId?.trim();
 
@@ -1189,6 +1331,20 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
 
     if (!mounted) {
       return;
+    }
+
+    final isResumeFlow = resumeJobId != null && resumeJobId.isNotEmpty;
+    if (!isResumeFlow) {
+      final validationMessage = _validateGenerationInputs();
+      if (validationMessage != null) {
+        _showSnack(validationMessage);
+        return;
+      }
+
+      if (!skipExistingPuzzleConfirmation &&
+          !await _confirmRegeneratePuzzle()) {
+        return;
+      }
     }
 
     for (final value in <String>[prompt]) {
@@ -1306,6 +1462,20 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
         );
         return;
       }
+      if (!puzzleGenerated &&
+          _pendingPuzzleGenerationJobId != null &&
+          _pendingPuzzleGenerationJobId!.isNotEmpty &&
+          (startedRunpodGeneration || resumeJobId?.isNotEmpty == true) &&
+          _shouldKeepPendingPuzzleGenerationAfterError(error)) {
+        setState(() {
+          _stagePreviewMode = _StagePreviewMode.puzzle;
+          _puzzleGenerationStatus = 'Still preparing puzzle...';
+        });
+        _showSnack(
+          'We are still checking your puzzle. You can leave this screen and come back to your draft.',
+        );
+        return;
+      }
       if (!puzzleGenerated) {
         await _clearPendingPuzzleGeneration(
           onlyForLevelId: pendingLevelId ?? _currentLevelId,
@@ -1361,11 +1531,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     required String pendingLevelId,
     String? existingJobId,
   }) async {
-    const targets = <int>[kGenerationPayloadTargetBytes, 38 * 1024, 28 * 1024];
+    const controlDimensions = <int>[1024, 896, 768, 640, 512];
     Object? lastError;
     var activeJobId = existingJobId?.trim();
 
-    for (var i = 0; i < targets.length; i += 1) {
+    for (var i = 0; i < controlDimensions.length; i += 1) {
       if (mounted && generationToken == _activeGenerationToken) {
         setState(() {
           _puzzleGenerationStatus = activeJobId?.isNotEmpty == true
@@ -1376,9 +1546,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
         });
       }
 
-      final solutionBytes = await compressGenerationImageWebp(
+      final solutionBytes = await buildGenerationControlPng(
         sourceImageBytes,
-        targetBytes: targets[i],
+        dimension: controlDimensions[i],
         failureLabel: switch (_editorMode) {
           UserLevelEditorMode.highlight => 'word solution image',
           UserLevelEditorMode.photoSketch => 'face solution projection',
@@ -1389,19 +1559,24 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       try {
         return await firebaseService.generateDrawObjectPuzzle(
           solutionImageBytes: solutionBytes,
-          solutionFileName: '1.webp',
-          solutionMimeType: 'image/webp',
+          solutionFileName: '1.png',
+          solutionMimeType: 'image/png',
           prompt: prompt,
           difficulty: _generationDifficulty,
+          levelId: pendingLevelId,
           existingJobId: activeJobId,
-          onJobStarted: (jobId) {
+          onJobStarted: (jobId) async {
             activeJobId = jobId;
-            unawaited(
-              _persistPendingPuzzleGeneration(
-                levelId: pendingLevelId,
-                jobId: jobId,
-              ),
+            await _persistPendingPuzzleGeneration(
+              levelId: pendingLevelId,
+              jobId: jobId,
             );
+          },
+          onPendingJobInvalidated: (jobId) async {
+            if (activeJobId == jobId) {
+              activeJobId = null;
+            }
+            await _clearPendingPuzzleGeneration(onlyForLevelId: pendingLevelId);
           },
           onStatusChanged: (status) {
             if (!mounted || generationToken != _activeGenerationToken) {
@@ -1416,7 +1591,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
           rethrow;
         }
         if (!_shouldRetryPuzzleGenerationWithSmallerImage(error) ||
-            i == targets.length - 1) {
+            i == controlDimensions.length - 1) {
           rethrow;
         }
         activeJobId = null;
@@ -1434,6 +1609,47 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
         message.contains('payload') ||
         message.contains('too detailed') ||
         message.contains('solution image');
+  }
+
+  bool _shouldKeepPendingPuzzleGenerationAfterError(Object error) {
+    final message = error.toString().toLowerCase();
+    if (_isClearlyPermanentPuzzleGenerationError(error)) {
+      return false;
+    }
+
+    return message.contains('still preparing') ||
+        message.contains('still starting') ||
+        message.contains('saving puzzle') ||
+        message.contains('checking saved puzzle') ||
+        message.contains('puzzle generation failed') ||
+        message.contains('failed') ||
+        message.contains('cancelled') ||
+        message.contains('app check') ||
+        message.contains('security verification') ||
+        message.contains('signed in') ||
+        message.contains('unauthorized') ||
+        message.contains('timeout') ||
+        message.contains('timed out') ||
+        message.contains('temporarily unavailable') ||
+        message.contains('service unavailable') ||
+        message.contains('internal server error') ||
+        message.contains('bad gateway') ||
+        message.contains('gateway');
+  }
+
+  bool _isClearlyPermanentPuzzleGenerationError(Object error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('too large') ||
+        message.contains('(413)') ||
+        message.contains('payload') ||
+        message.contains('unsupported') ||
+        message.contains('invalid image') ||
+        message.contains('corrupt') ||
+        message.contains('unreadable') ||
+        message.contains('malformed') ||
+        message.contains('bad request') ||
+        message.contains('add the solution before generating') ||
+        message.contains('add a puzzle scene before generating');
   }
 
   String? _validateGenerationInputs() {
@@ -1504,6 +1720,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     if (_editorMode == UserLevelEditorMode.photoSketch &&
         _isGeneratingFaceSketch) {
       return 'Wait for the face sketch to finish updating before saving.';
+    }
+
+    if (forSubmission &&
+        _pendingPuzzleGenerationJobId != null &&
+        _pendingPuzzleGenerationJobId!.isNotEmpty) {
+      return 'Wait for puzzle generation to finish before submitting for review.';
     }
 
     if (creatorName.isEmpty) {
@@ -2096,7 +2318,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
                           puzzleBytes: _generatedPuzzleImageBytes,
                           existingPuzzlePreviewUrlFuture:
                               _existingPuzzlePreviewUrlFuture,
-                          hasStoredPuzzleImage: _hasStoredPuzzleImage,
+                          hasStoredPuzzleImage:
+                              _hasStoredPuzzleImage &&
+                              !_shouldHideStoredPuzzleWhilePendingGeneration,
                           isGeneratingPuzzle: _isGeneratingPuzzle,
                           puzzleGenerationStatus: _visiblePuzzleGenerationStatus,
                           puzzleGenerationLeaveHint:
@@ -2141,7 +2365,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
                               puzzleBytes: _generatedPuzzleImageBytes,
                               existingPuzzlePreviewUrlFuture:
                                   _existingPuzzlePreviewUrlFuture,
-                              hasStoredPuzzleImage: _hasStoredPuzzleImage,
+                              hasStoredPuzzleImage:
+                                  _hasStoredPuzzleImage &&
+                                  !_shouldHideStoredPuzzleWhilePendingGeneration,
                               isGeneratingPuzzle: _isGeneratingPuzzle,
                               puzzleGenerationStatus:
                                   _visiblePuzzleGenerationStatus,
@@ -2194,7 +2420,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
                               puzzleBytes: _generatedPuzzleImageBytes,
                               existingPuzzlePreviewUrlFuture:
                                   _existingPuzzlePreviewUrlFuture,
-                              hasStoredPuzzleImage: _hasStoredPuzzleImage,
+                              hasStoredPuzzleImage:
+                                  _hasStoredPuzzleImage &&
+                                  !_shouldHideStoredPuzzleWhilePendingGeneration,
                               isGeneratingPuzzle: _isGeneratingPuzzle,
                               puzzleGenerationStatus:
                                   _visiblePuzzleGenerationStatus,
@@ -2649,9 +2877,9 @@ class _FaceEditorSection extends StatelessWidget {
                   ),
                   child: Slider(
                     value: generationDifficulty,
-                    min: 0.1,
-                    max: 3.0,
-                    divisions: 29,
+                    min: 1.0,
+                    max: 10.0,
+                    divisions: 18,
                     onChanged: isLocked || isGeneratingPuzzle
                         ? null
                         : onGenerationDifficultyChanged,
@@ -2674,7 +2902,7 @@ class _FaceEditorSection extends StatelessWidget {
           Align(
             alignment: Alignment.center,
             child: Text(
-              'Difficulty ${generationDifficulty.toStringAsFixed(1)}',
+              'Difficulty ${generationDifficulty.toStringAsFixed(1)} / 10 -> RunPod ${_effectiveRunpodControlStrength(generationDifficulty).toStringAsFixed(2)}',
               style: textTheme.labelSmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -3111,9 +3339,9 @@ class _CanvasEditorSection extends StatelessWidget {
                   ),
                   child: Slider(
                     value: generationDifficulty,
-                    min: 0.1,
-                    max: 3.0,
-                    divisions: 29,
+                    min: 1.0,
+                    max: 10.0,
+                    divisions: 18,
                     onChanged: isLocked || isGeneratingPuzzle
                         ? null
                         : onGenerationDifficultyChanged,
@@ -3136,7 +3364,7 @@ class _CanvasEditorSection extends StatelessWidget {
           Align(
             alignment: Alignment.center,
             child: Text(
-              'Difficulty ${generationDifficulty.toStringAsFixed(1)}',
+              'Difficulty ${generationDifficulty.toStringAsFixed(1)} / 10 -> RunPod ${_effectiveRunpodControlStrength(generationDifficulty).toStringAsFixed(2)}',
               style: textTheme.labelSmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -4881,9 +5109,9 @@ class _WordEditorSection extends StatelessWidget {
               Expanded(
                 child: _EditorSlider(
                   value: generationDifficulty,
-                  min: 0.35,
-                  max: 2.0,
-                  divisions: 13,
+                  min: 1.0,
+                  max: 10.0,
+                  divisions: 18,
                   onChanged: isLocked || isGeneratingPuzzle
                       ? null
                       : onGenerationDifficultyChanged,
@@ -4894,7 +5122,8 @@ class _WordEditorSection extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    generationDifficulty.toStringAsFixed(2),
+                    'Easy',
+                    textAlign: TextAlign.end,
                     style: textTheme.labelMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w700,
@@ -4903,6 +5132,15 @@ class _WordEditorSection extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          Align(
+            alignment: Alignment.center,
+            child: Text(
+              'Difficulty ${generationDifficulty.toStringAsFixed(1)} / 10 -> RunPod ${_effectiveRunpodControlStrength(generationDifficulty).toStringAsFixed(2)}',
+              style: textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           AnimatedBuilder(

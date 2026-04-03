@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:image/image.dart' as img;
 
 const int kGenerationPayloadTargetBytes = 50 * 1024;
 const int kGenerationPayloadDimension = 1024;
@@ -27,6 +28,25 @@ Future<Uint8List> compressGenerationImageWebp(
     throw StateError('Could not compress the $failureLabel.');
   }
   return candidate;
+}
+
+Future<Uint8List> buildGenerationControlPng(
+  Uint8List sourceBytes, {
+  int dimension = kGenerationPayloadDimension,
+  String failureLabel = 'generation control image',
+}) async {
+  final decoded = img.decodeImage(sourceBytes);
+  if (decoded == null) {
+    throw StateError('Could not decode the $failureLabel.');
+  }
+
+  final resized = img.copyResize(
+    decoded,
+    width: dimension,
+    height: dimension,
+    interpolation: img.Interpolation.average,
+  );
+  return Uint8List.fromList(img.encodePng(resized, level: 6));
 }
 
 Future<Uint8List> compressStoredFactSolutionWebp(

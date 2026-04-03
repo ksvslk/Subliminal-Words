@@ -360,7 +360,10 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
               final needsFaceSafetyResave =
                   level.editorMode == UserLevelEditorMode.photoSketch &&
                       faceSourceSafetyStatus != 'clean';
+              final hasPendingPuzzleGeneration =
+                  level.hasPendingPuzzleGeneration;
               final canSubmitForReview = hasPuzzleImage &&
+                  !hasPendingPuzzleGeneration &&
                   !level.isLocked &&
                   !needsFaceSafetyResave &&
                   level.submissionStatus !=
@@ -432,9 +435,54 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                       if (!hasPuzzleImage) ...<Widget>[
                         const SizedBox(height: 8),
                         Text(
-                          'Add the real puzzle image before playing or submitting.',
+                          hasPendingPuzzleGeneration
+                              ? 'Puzzle generation is still running. Open this draft to resume or check it again.'
+                              : 'Add the real puzzle image before playing or submitting.',
                           style: textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      if (hasPendingPuzzleGeneration) ...<Widget>[
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colorScheme.tertiaryContainer.withValues(
+                              alpha: 0.72,
+                            ),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: colorScheme.tertiary.withValues(alpha: 0.24),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.1,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    colorScheme.onTertiaryContainer,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  'Puzzle generation is still running',
+                                  style: textTheme.labelLarge?.copyWith(
+                                    color: colorScheme.onTertiaryContainer,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -502,7 +550,9 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                               context,
                               hasPuzzleImage
                                   ? 'Please wait for the current action to finish.'
-                                  : 'Generate a puzzle first before playing this level.',
+                                  : hasPendingPuzzleGeneration
+                                      ? 'This puzzle is still generating. Open the draft to resume it.'
+                                      : 'Generate a puzzle first before playing this level.',
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -546,6 +596,8 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                                   ? 'Please wait for the current action to finish.'
                                   : !hasPuzzleImage
                                       ? 'Generate a puzzle first before submitting for review.'
+                                      : hasPendingPuzzleGeneration
+                                          ? 'Wait for puzzle generation to finish before submitting for review.'
                                       : needsFaceSafetyResave
                                           ? 'Open this face level and save it again before submitting for review.'
                                           : 'This level is already submitted and waiting for review.',
@@ -556,7 +608,9 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                           _LevelActionIconButton(
                             tooltip: 'Delete Draft',
                             icon: Icons.delete_outline_rounded,
-                            enabled: !level.isLocked && !isLevelBusy,
+                            enabled: !level.isLocked &&
+                                !hasPendingPuzzleGeneration &&
+                                !isLevelBusy,
                             isLoading: _isActionBusy(
                               level.documentId,
                               _LevelCardAction.delete,
@@ -569,7 +623,9 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                             onUnavailable: () => _showActionBlocked(
                               context,
                               !level.isLocked
-                                  ? 'Please wait for the current action to finish.'
+                                  ? hasPendingPuzzleGeneration
+                                      ? 'Open this draft and let puzzle generation finish before deleting it.'
+                                      : 'Please wait for the current action to finish.'
                                   : 'Submitted levels cannot be deleted.',
                             ),
                             isDestructive: true,

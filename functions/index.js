@@ -4,16 +4,27 @@ const { onCall } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const vision = require('@google-cloud/vision');
 const admin = require('firebase-admin');
-const sharp = require('sharp');
+const {
+    containsBlockedTerm,
+    validateUserLevelSubmission,
+} = require('./src/user_level_submission');
+const {
+    normalizePendingPuzzleGeneration,
+    validatePuzzleGenerationDraftForStart,
+    validatePuzzleGenerationDraftForStatus,
+} = require('./src/puzzle_generation');
+const {
+    extractBase64Payload,
+    detectImageFormat,
+    assertFaceUploadBufferWithinSizeLimit,
+} = require('./src/face_upload_validation');
+const { sanitizeUploadedFaceImage } = require('./src/face_upload_processing');
+const { validateWritableCreatorDraft } = require('./src/creator_draft_access');
 admin.initializeApp();
 
 const runpodProxyBearer = defineSecret('RUNPOD_PROXY_BEARER');
 const RUNPOD_PROXY_BASE_URL = 'https://runpod-proxy-549374376791.us-central1.run.app';
 const safeSearchClient = new vision.ImageAnnotatorClient();
-const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
-const MAX_IMAGE_DIMENSION = 4096;
-const MAX_IMAGE_PIXELS = 20 * 1024 * 1024;
-const SANITIZED_FACE_MAX_DIMENSION = 1400;
 const SAFE_SEARCH_BLOCKED = new Set(['LIKELY', 'VERY_LIKELY']);
 
 async function assertCreatorCanUseUserLevels(db, uid) {
@@ -88,104 +99,6 @@ exports.checkAndAssignPromoCode = onDocumentUpdated('players/{playerId}', async 
     }
 });
 
-const BLOCKED_TERMS = [
-    'fuck',
-    'shit',
-    'bitch',
-    'asshole',
-    'cunt',
-    'nigger',
-    'fag',
-    'porn',
-    'sex',
-];
-
-function containsBlockedTerm(value) {
-    const normalized = String(value || '').trim().toLowerCase();
-    if (!normalized) {
-        return false;
-    }
-
-    return BLOCKED_TERMS.some((term) => normalized.includes(term));
-}
-
-function hasReviewReadyPuzzleImage(levelData) {
-    const editorData = levelData?.editorData || {};
-    if (typeof editorData.hasPuzzleImage === 'boolean') {
-        return editorData.hasPuzzleImage;
-    }
-
-    const puzzlePath = String(levelData?.puzzlePath || '').trim();
-    const solutionPath = String(levelData?.solutionPath || '').trim();
-    const editorMode = String(levelData?.editorMode || 'draw_object').trim();
-
-    if (!puzzlePath) {
-        return false;
-    }
-
-    if (editorMode === 'draw_object') {
-        return !!solutionPath && puzzlePath !== solutionPath;
-    }
-
-    return true;
-}
-
-function normalizeContentCategory(value, editorMode) {
-    const normalized = String(value || '').trim().toLowerCase();
-    if (['words', 'faces', 'characters', 'objects'].includes(normalized)) {
-        return normalized;
-    }
-
-    if (editorMode === 'highlight') {
-        return 'words';
-    }
-
-    if (editorMode === 'photo_sketch' || editorMode === 'photoSketch') {
-        return 'faces';
-    }
-
-    return 'objects';
-}
-
-function extractBase64Payload(value) {
-    const normalized = String(value || '').trim();
-    if (!normalized) {
-        throw new HttpsError('invalid-argument', 'A face photo is required.');
-    }
-
-    const match = normalized.match(/^data:[^;]+;base64,(.+)$/i);
-    return match ? match[1] : normalized;
-}
-
-function detectImageFormat(buffer) {
-    if (buffer.length >= 3 &&
-        buffer[0] === 0xFF &&
-        buffer[1] === 0xD8 &&
-        buffer[2] === 0xFF) {
-        return { contentType: 'image/jpeg', extension: 'jpg' };
-    }
-
-    if (buffer.length >= 8 &&
-        buffer[0] === 0x89 &&
-        buffer[1] === 0x50 &&
-        buffer[2] === 0x4E &&
-        buffer[3] === 0x47 &&
-        buffer[4] === 0x0D &&
-        buffer[5] === 0x0A &&
-        buffer[6] === 0x1A &&
-        buffer[7] === 0x0A) {
-        return { contentType: 'image/png', extension: 'png' };
-    }
-
-    if (buffer.length >= 12 &&
-        buffer.toString('ascii', 0, 4) === 'RIFF' &&
-        buffer.toString('ascii', 8, 12) === 'WEBP') {
-        return { contentType: 'image/webp', extension: 'webp' };
-    }
-
-    return null;
-}
-
 async function runLightSafeSearch(buffer) {
     try {
         const [result] = await safeSearchClient.safeSearchDetection({
@@ -220,58 +133,7 @@ async function runLightSafeSearch(buffer) {
     }
 }
 
-async function sanitizeUploadedFaceImage(buffer) {
-    const metadata = await sharp(buffer, {
-        failOn: 'error',
-        limitInputPixels: MAX_IMAGE_PIXELS,
-    }).metadata();
-
-    const width = Number(metadata.width || 0);
-    const height = Number(metadata.height || 0);
-    if (!width || !height) {
-        throw new HttpsError('invalid-argument', 'Could not read that face photo.');
-    }
-
-    if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
-        throw new HttpsError(
-            'invalid-argument',
-            'That face photo is too large. Please choose a smaller image.',
-        );
-    }
-
-    if ((width * height) > MAX_IMAGE_PIXELS) {
-        throw new HttpsError(
-            'invalid-argument',
-            'That face photo has too many pixels. Please choose a smaller image.',
-        );
-    }
-
-    const resized = await sharp(buffer, {
-        failOn: 'error',
-        limitInputPixels: MAX_IMAGE_PIXELS,
-    })
-        .rotate()
-        .resize({
-            width: SANITIZED_FACE_MAX_DIMENSION,
-            height: SANITIZED_FACE_MAX_DIMENSION,
-            fit: 'inside',
-            withoutEnlargement: true,
-        })
-        .webp({
-            quality: 82,
-            effort: 5,
-        })
-        .toBuffer();
-
-    const sanitizedMetadata = await sharp(resized).metadata();
-    return {
-        bytes: resized,
-        width: Number(sanitizedMetadata.width || 0),
-        height: Number(sanitizedMetadata.height || 0),
-    };
-}
-
-function buildRunpodWorkflow(prompt, difficulty) {
+function buildRunpodWorkflow(prompt, difficulty, solutionFileName = '1.png') {
     return {
         '10': {
             class_type: 'CheckpointLoaderSimple',
@@ -303,7 +165,7 @@ function buildRunpodWorkflow(prompt, difficulty) {
         },
         '17': {
             class_type: 'LoadImage',
-            inputs: { image: '1.png', upload: 'image' },
+            inputs: { image: solutionFileName, upload: 'image' },
         },
         '18': {
             class_type: 'KSampler',
@@ -384,6 +246,9 @@ exports.startUserLevelPuzzleGeneration = onCall({
     const prompt = String(request.data?.prompt || '').trim();
     const solutionImageBase64 = String(request.data?.solutionImageBase64 || '').trim();
     const difficulty = Number(request.data?.difficulty) || 1.0;
+    const levelId = String(request.data?.levelId || '').trim();
+    const solutionFileName =
+        String(request.data?.solutionFileName || '1.png').trim() || '1.png';
 
     if (!prompt) {
         throw new HttpsError('invalid-argument', 'A generation prompt is required.');
@@ -399,6 +264,32 @@ exports.startUserLevelPuzzleGeneration = onCall({
 
     const db = admin.firestore();
     await assertCreatorCanUseUserLevels(db, uid);
+    if (levelId) {
+        const ownerLevelSnapshot = await db
+            .collection('userLevels')
+            .doc(uid)
+            .collection('levels')
+            .doc(levelId)
+            .get();
+        try {
+            validatePuzzleGenerationDraftForStart(ownerLevelSnapshot.data());
+        } catch (error) {
+            throw new HttpsError(
+                ownerLevelSnapshot.exists ? 'failed-precondition' : 'not-found',
+                error instanceof Error && error.message
+                    ? error.message
+                    : 'The selected level could not be used for puzzle generation.',
+            );
+        }
+
+        const existingPending = normalizePendingPuzzleGeneration(ownerLevelSnapshot.data());
+        if (existingPending?.jobId) {
+            return {
+                jobId: existingPending.jobId,
+                reusedExisting: true,
+            };
+        }
+    }
 
     const bearerToken = runpodProxyBearer.value();
     if (!bearerToken) {
@@ -407,8 +298,8 @@ exports.startUserLevelPuzzleGeneration = onCall({
 
     const payload = {
         input: {
-            workflow: buildRunpodWorkflow(prompt, difficulty),
-            images: [{ name: '1.png', image: solutionImageBase64 }],
+            workflow: buildRunpodWorkflow(prompt, difficulty, solutionFileName),
+            images: [{ name: solutionFileName, image: solutionImageBase64 }],
         },
     };
 
@@ -419,20 +310,47 @@ exports.startUserLevelPuzzleGeneration = onCall({
         throw new HttpsError('internal', 'The generation backend did not return a job id.');
     }
 
-    return { jobId };
+    if (levelId) {
+        await db
+            .collection('userLevels')
+            .doc(uid)
+            .collection('levels')
+            .doc(levelId)
+            .set({
+                editorData: {
+                    pendingPuzzleGeneration: {
+                        status: 'running',
+                        jobId,
+                        jobStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    },
+                },
+                modifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, {merge: true});
+    }
+
+    return {
+        jobId,
+        reusedExisting: false,
+    };
 });
 
 exports.getUserLevelPuzzleGenerationStatus = onCall({
     secrets: [runpodProxyBearer],
     timeoutSeconds: 60,
 }, async (request) => {
-    if (!request.auth?.uid) {
+    const uid = request.auth?.uid;
+    if (!uid) {
         throw new HttpsError('unauthenticated', 'You must be signed in to check puzzle status.');
     }
 
     const jobId = String(request.data?.jobId || '').trim();
+    const levelId = String(request.data?.levelId || '').trim();
     if (!jobId) {
         throw new HttpsError('invalid-argument', 'A jobId is required.');
+    }
+    if (!levelId) {
+        throw new HttpsError('invalid-argument', 'A levelId is required.');
     }
 
     const bearerToken = runpodProxyBearer.value();
@@ -440,13 +358,41 @@ exports.getUserLevelPuzzleGenerationStatus = onCall({
         throw new HttpsError('internal', 'The generation proxy secret is not configured.');
     }
 
+    const db = admin.firestore();
+    await assertCreatorCanUseUserLevels(db, uid);
+    const ownerLevelSnapshot = await db
+        .collection('userLevels')
+        .doc(uid)
+        .collection('levels')
+        .doc(levelId)
+        .get();
+    try {
+        validatePuzzleGenerationDraftForStatus(ownerLevelSnapshot.data(), jobId);
+    } catch (error) {
+        throw new HttpsError(
+            ownerLevelSnapshot.exists ? 'failed-precondition' : 'not-found',
+            error instanceof Error && error.message
+                ? error.message
+                : 'The selected draft can no longer be used for puzzle generation.',
+        );
+    }
+
     const statusData = await callRunpodProxy('/api/generate-status', { jobId }, bearerToken);
     const status = String(statusData.status || 'UNKNOWN').trim().toUpperCase();
     const imageBase64 = extractGeneratedImage(statusData);
+    const errorMessage = String(
+        statusData.error ||
+        statusData.errorMessage ||
+        statusData.message ||
+        '',
+    ).trim();
 
     return {
         status,
         imageBase64,
+        errorMessage,
+        retryable: statusData.retryable === true,
+        retryAfterMs: Number(statusData.retryAfterMs || 0) || 0,
     };
 });
 
@@ -472,17 +418,49 @@ exports.sanitizeUserLevelUpload = onCall({
 
     const db = admin.firestore();
     await assertCreatorCanUseUserLevels(db, uid);
+    const ownerLevelSnapshot = await db
+        .collection('userLevels')
+        .doc(uid)
+        .collection('levels')
+        .doc(levelId)
+        .get();
+    try {
+        validateWritableCreatorDraft(ownerLevelSnapshot.data(), {
+            lockedMessage: 'Submitted levels are locked and cannot change the face photo.',
+        });
+    } catch (error) {
+        throw new HttpsError(
+            ownerLevelSnapshot.exists ? 'failed-precondition' : 'not-found',
+            error instanceof Error && error.message
+                ? error.message
+                : 'The selected level could not be used for this upload.',
+        );
+    }
 
-    const base64Payload = extractBase64Payload(request.data?.imageBase64);
+    let base64Payload;
+    try {
+        base64Payload = extractBase64Payload(request.data?.imageBase64);
+    } catch (error) {
+        throw new HttpsError(
+            'invalid-argument',
+            error instanceof Error && error.message
+                ? error.message
+                : 'A face photo is required.',
+        );
+    }
     const imageBuffer = Buffer.from(base64Payload, 'base64');
     if (!imageBuffer.length) {
         throw new HttpsError('invalid-argument', 'A face photo is required.');
     }
 
-    if (imageBuffer.length > MAX_UPLOAD_BYTES) {
+    try {
+        assertFaceUploadBufferWithinSizeLimit(imageBuffer);
+    } catch (error) {
         throw new HttpsError(
             'invalid-argument',
-            'That face photo is too large. Please choose a smaller image.',
+            error instanceof Error && error.message
+                ? error.message
+                : 'That face photo is too large. Please choose a smaller image.',
         );
     }
 
@@ -502,7 +480,17 @@ exports.sanitizeUserLevelUpload = onCall({
         );
     }
 
-    const sanitized = await sanitizeUploadedFaceImage(imageBuffer);
+    let sanitized;
+    try {
+        sanitized = await sanitizeUploadedFaceImage(imageBuffer);
+    } catch (error) {
+        throw new HttpsError(
+            'invalid-argument',
+            error instanceof Error && error.message
+                ? error.message
+                : 'Could not read that face photo.',
+        );
+    }
     const storagePath = `user-levels/${uid}/${levelId}/source.webp`;
     await admin.storage().bucket().file(storagePath).save(sanitized.bytes, {
         contentType: 'image/webp',
@@ -565,72 +553,26 @@ exports.submitUserLevelSubmission = onCall(async (request) => {
             );
         }
 
-        const creatorName = String(levelData.creatorName || '').trim();
-        const answer = String(levelData.name || '').trim();
-        const editorMode = String(levelData.editorMode || 'draw_object').trim();
-        const contentCategory = normalizeContentCategory(
-            levelData.contentCategory,
-            editorMode,
-        );
-        const factText = String(levelData?.hints?.fact || '').trim();
-        const tooltipStart = String(levelData.tooltipStart || '').trim();
-        const tooltipEnd = String(levelData.tooltipEnd || '').trim();
-        const sourceImageSafetyStatus = String(
-            levelData.sourceImageSafetyStatus ||
-            levelData?.editorData?.sourceImageSafetyStatus ||
-            '',
-        ).trim().toLowerCase();
-        const sourceImagePath = String(
-            levelData?.editorData?.sourceImagePath || '',
-        ).trim();
-
-        if (!creatorName || answer.length < 2) {
+        let validatedSubmission;
+        try {
+            validatedSubmission = validateUserLevelSubmission(levelData);
+        } catch (error) {
             throw new HttpsError(
                 'failed-precondition',
-                'The level is missing a creator name or answer.',
+                error instanceof Error && error.message
+                    ? error.message
+                    : 'This level is not ready for review yet.',
             );
         }
-
-        if (editorMode !== 'highlight' && !factText) {
-            throw new HttpsError(
-                'failed-precondition',
-                'The level is missing a fact hint.',
-            );
-        }
-
-        if ((editorMode === 'photoSketch' || editorMode === 'photo_sketch') &&
-            (sourceImageSafetyStatus !== 'clean' || !sourceImagePath)) {
-            throw new HttpsError(
-                'failed-precondition',
-                'Save this face level again so the face photo can be safety-checked before review.',
-            );
-        }
-
-        if (!hasReviewReadyPuzzleImage(levelData)) {
-            throw new HttpsError(
-                'failed-precondition',
-                'Add the actual puzzle image before submitting this level.',
-            );
-        }
-
-        const profanityCheckedValues = [
+        const {
             creatorName,
             answer,
+            editorMode,
+            contentCategory,
+            editorData,
             tooltipStart,
             tooltipEnd,
-        ];
-        if (editorMode !== 'highlight') {
-            profanityCheckedValues.push(factText);
-        }
-
-        for (const value of profanityCheckedValues) {
-            if (containsBlockedTerm(value)) {
-                throw new HttpsError(
-                    'failed-precondition',
-                    'Please remove profanity before submitting this level.',
-                );
-            }
-        }
+        } = validatedSubmission;
 
         const submissionRef = db.collection('userLevelSubmissions').doc();
         const submittedAt = admin.firestore.FieldValue.serverTimestamp();
@@ -652,7 +594,7 @@ exports.submitUserLevelSubmission = onCall(async (request) => {
             tooltipEnd,
             isEnabled: false,
             status: 'pending_review',
-            editorData: levelData.editorData || {},
+            editorData,
             createdAt: levelData.createdAt || submittedAt,
             submittedAt,
         });
