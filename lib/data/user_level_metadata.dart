@@ -12,9 +12,9 @@ class UserLevelEditorMode {
   static String labelFor(String mode) {
     switch (mode) {
       case photoSketch:
-        return 'Face';
+        return 'Photo';
       case drawObject:
-        return 'Object';
+        return 'Draw';
       case highlight:
         return 'Word';
       default:
@@ -62,7 +62,7 @@ class UserLevelContentCategory {
   static List<String> optionsForEditorMode(String editorMode) {
     switch (editorMode) {
       case UserLevelEditorMode.photoSketch:
-        return const <String>[faces, characters];
+        return const <String>[faces, characters, objects];
       case UserLevelEditorMode.highlight:
         return const <String>[words];
       case UserLevelEditorMode.drawObject:

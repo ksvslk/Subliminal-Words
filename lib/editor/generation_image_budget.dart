@@ -5,6 +5,7 @@ import 'package:image/image.dart' as img;
 
 const int kGenerationPayloadTargetBytes = 50 * 1024;
 const int kGenerationPayloadDimension = 1024;
+const int kGenerationControlTargetBytes = 64 * 1024;
 const int kStoredFactSolutionTargetBytes = 40 * 1024;
 const int kStoredFactSolutionDimension = 1024;
 const int kStoredPuzzleTargetBytes = 150 * 1024;
@@ -30,9 +31,10 @@ Future<Uint8List> compressGenerationImageWebp(
   return candidate;
 }
 
-Future<Uint8List> buildGenerationControlPng(
+Future<Uint8List> buildGenerationControlJpeg(
   Uint8List sourceBytes, {
   int dimension = kGenerationPayloadDimension,
+  int targetBytes = kGenerationControlTargetBytes,
   String failureLabel = 'generation control image',
 }) async {
   final decoded = img.decodeImage(sourceBytes);
@@ -40,13 +42,53 @@ Future<Uint8List> buildGenerationControlPng(
     throw StateError('Could not decode the $failureLabel.');
   }
 
-  final resized = img.copyResize(
-    decoded,
-    width: dimension,
-    height: dimension,
-    interpolation: img.Interpolation.average,
-  );
-  return Uint8List.fromList(img.encodePng(resized, level: 6));
+  final dimensions = <int>[];
+  var candidateDimension = dimension;
+  while (candidateDimension >= 384) {
+    if (!dimensions.contains(candidateDimension)) {
+      dimensions.add(candidateDimension);
+    }
+    if (candidateDimension <= 512) {
+      break;
+    }
+    candidateDimension = (candidateDimension * 0.88).round();
+  }
+
+  const qualities = <int>[96, 92, 88, 84, 80, 76, 72, 68, 64, 60, 54, 48];
+  Uint8List? bestUnderBudget;
+  var smallestUnderDelta = 1 << 30;
+
+  for (final candidateDimension in dimensions) {
+    final resized = img.copyResize(
+      decoded,
+      width: candidateDimension,
+      height: candidateDimension,
+      interpolation: img.Interpolation.average,
+    );
+
+    for (final quality in qualities) {
+      final encoded = Uint8List.fromList(
+        img.encodeJpg(resized, quality: quality),
+      );
+      if (encoded.isEmpty) {
+        continue;
+      }
+      final delta = encoded.length - targetBytes;
+      if (delta <= 0) {
+        final underDelta = -delta;
+        if (underDelta < smallestUnderDelta) {
+          smallestUnderDelta = underDelta;
+          bestUnderBudget = encoded;
+        }
+      }
+    }
+  }
+
+  if (bestUnderBudget == null) {
+    throw StateError('Could not compress the $failureLabel.');
+  }
+
+  return bestUnderBudget;
 }
 
 Future<Uint8List> compressStoredFactSolutionWebp(

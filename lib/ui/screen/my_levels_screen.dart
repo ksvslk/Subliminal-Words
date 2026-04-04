@@ -73,7 +73,7 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
             .trim()
             .toLowerCase();
     if (message.contains('safety-checked before review')) {
-      return 'Open this face level and save it again before submitting for review.';
+      return 'Open this photo level and save it again before submitting for review.';
     }
     if (message.contains('level creation is unavailable')) {
       return 'Level creation is unavailable for this account right now.';
@@ -135,6 +135,9 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
         message.contains('service unavailable')) {
       return 'Could not delete this draft right now. Check your connection and try again.';
     }
+    if (message.contains('puzzle generation')) {
+      return 'Wait for puzzle generation to finish before deleting this level.';
+    }
     return 'Could not delete this draft right now. Please try again.';
   }
 
@@ -176,12 +179,23 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
   }
 
   Future<void> _deleteLevel(BuildContext context, SWLevel level) async {
+    final isPublished =
+        level.submissionStatus == UserLevelSubmissionStatus.approved;
+    final removesAdminSubmission = !isPublished;
+    final displayName = level.name.isEmpty ? 'Untitled Level' : level.name;
     final shouldDelete = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: const Text('Delete draft?'),
+            title: Text(isPublished ? 'Remove private copy?' : 'Delete draft?'),
             content: Text(
-              'Delete "${level.name.isEmpty ? 'Untitled Level' : level.name}" from My Levels?',
+              isPublished
+                  ? 'Remove "$displayName" from My Levels? The published live level will stay available to other players.'
+                  : level.submissionStatus ==
+                          UserLevelSubmissionStatus.pendingReview
+                      ? 'Delete "$displayName" from My Levels and remove it from admin review too?'
+                      : removesAdminSubmission
+                          ? 'Delete "$displayName" from My Levels? Any pending or rejected submission history for this draft will also be removed from admin.'
+                          : 'Delete "$displayName" from My Levels?',
             ),
             actions: <Widget>[
               TextButton(
@@ -202,8 +216,17 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
     }
 
     try {
-      await context.read<FirebaseService>().deleteMyLevel(level.documentId);
-      showAppSnackBar('Draft deleted.');
+      final deleteMode = await context
+          .read<FirebaseService>()
+          .deleteMyLevel(level.documentId);
+      if (!context.mounted) {
+        return;
+      }
+      showAppSnackBar(
+        deleteMode == 'private_copy_deleted'
+            ? 'Removed from My Levels. The published live level stays available to players.'
+            : 'Draft deleted.',
+      );
     } catch (error) {
       showAppSnackBar(_friendlyDeleteError(error));
     }
@@ -489,7 +512,7 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                       if (needsFaceSafetyResave) ...<Widget>[
                         const SizedBox(height: 8),
                         Text(
-                          'Open this face level and save it again before submitting it for review.',
+                          'Open this photo level and save it again before submitting it for review.',
                           style: textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),
@@ -599,18 +622,20 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                                       : hasPendingPuzzleGeneration
                                           ? 'Wait for puzzle generation to finish before submitting for review.'
                                       : needsFaceSafetyResave
-                                          ? 'Open this face level and save it again before submitting for review.'
+                                          ? 'Open this photo level and save it again before submitting for review.'
                                           : 'This level is already submitted and waiting for review.',
                             ),
                             isPrimary: true,
                           ),
                           const SizedBox(width: 8),
                           _LevelActionIconButton(
-                            tooltip: 'Delete Draft',
+                            tooltip: level.submissionStatus ==
+                                    UserLevelSubmissionStatus.approved
+                                ? 'Remove from My Levels'
+                                : 'Delete Draft',
                             icon: Icons.delete_outline_rounded,
-                            enabled: !level.isLocked &&
-                                !hasPendingPuzzleGeneration &&
-                                !isLevelBusy,
+                            enabled:
+                                !hasPendingPuzzleGeneration && !isLevelBusy,
                             isLoading: _isActionBusy(
                               level.documentId,
                               _LevelCardAction.delete,
@@ -622,11 +647,9 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                             ),
                             onUnavailable: () => _showActionBlocked(
                               context,
-                              !level.isLocked
-                                  ? hasPendingPuzzleGeneration
-                                      ? 'Open this draft and let puzzle generation finish before deleting it.'
-                                      : 'Please wait for the current action to finish.'
-                                  : 'Submitted levels cannot be deleted.',
+                              hasPendingPuzzleGeneration
+                                  ? 'Open this draft and let puzzle generation finish before deleting it.'
+                                  : 'Please wait for the current action to finish.',
                             ),
                             isDestructive: true,
                           ),

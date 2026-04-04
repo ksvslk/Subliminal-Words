@@ -70,16 +70,16 @@ class _CreateLevelTypeDialog extends StatelessWidget {
               ],
             ),
             Text(
-              'What kind of level do you want to make?',
+              'How do you want to build this level?',
               style: textTheme.bodyMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 18),
             _CreateLevelTypeOption(
-              icon: Icons.face_retouching_natural_outlined,
-              title: 'Face',
-              subtitle: 'Upload a face photo, shape the sketch, then generate the puzzle.',
+              icon: Icons.add_photo_alternate_outlined,
+              title: 'Photo',
+              subtitle: 'Upload a photo, frame the sketch, then generate the puzzle.',
               enabled: true,
               colorScheme: colorScheme,
               onTap: () => Navigator.of(context).pop(
@@ -89,8 +89,8 @@ class _CreateLevelTypeDialog extends StatelessWidget {
             const SizedBox(height: 12),
             _CreateLevelTypeOption(
               icon: Icons.draw_outlined,
-              title: 'Object',
-              subtitle: 'Draw the solution, then generate the puzzle.',
+              title: 'Draw',
+              subtitle: 'Sketch the solution by hand, then generate the puzzle.',
               enabled: true,
               colorScheme: colorScheme,
               onTap: () => Navigator.of(context).pop(

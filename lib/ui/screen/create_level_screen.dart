@@ -20,7 +20,6 @@ import 'package:operation_hermes/ui/app_scaffold_messenger.dart';
 import 'package:operation_hermes/ui/shimmer_placeholder.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 enum _StagePreviewMode {
   solution,
@@ -35,15 +34,14 @@ enum _CreatorErrorContext {
   reviewSubmit,
 }
 
-DrawingBrushType _brushFromName(String? name) {
+DrawingBrushType _brushFromName(
+  String? name, {
+  DrawingBrushType fallback = DrawingBrushType.none,
+}) {
   return DrawingBrushType.values.firstWhere(
     (brush) => brush.name == name,
-    orElse: () => DrawingBrushType.none,
+    orElse: () => fallback,
   );
-}
-
-double _effectiveRunpodControlStrength(double difficulty) {
-  return math.max(0.1, difficulty / 5);
 }
 
 double _normalizeStoredGenerationDifficulty(double? rawValue) {
@@ -62,6 +60,7 @@ double _normalizeStoredGenerationDifficulty(double? rawValue) {
 
 DrawingController _buildDrawingControllerFromEditorData(
   Map<dynamic, dynamic>? rawEditorData,
+  {DrawingBrushType defaultBrush = DrawingBrushType.none}
 ) {
   final editorData = rawEditorData == null
       ? const <String, dynamic>{}
@@ -99,39 +98,13 @@ DrawingController _buildDrawingControllerFromEditorData(
 
   return DrawingController(
     initialStrokes: initialStrokes,
-    initialBrush: _brushFromName(editorData['selectedBrush'] as String?),
+    initialBrush: _brushFromName(
+      editorData['selectedBrush'] as String?,
+      fallback: defaultBrush,
+    ),
     initialBrushWidths: initialBrushWidths,
     initialBrushOpacities: initialBrushOpacities,
   );
-}
-
-Map<String, dynamic>? _extractPendingPuzzleGenerationFromEditorData(
-  Map<dynamic, dynamic>? rawEditorData, {
-  required String? levelId,
-}) {
-  final normalizedLevelId = (levelId ?? '').trim();
-  if (normalizedLevelId.isEmpty || rawEditorData == null) {
-    return null;
-  }
-
-  final editorData = Map<String, dynamic>.from(rawEditorData);
-  final rawPending = editorData['pendingPuzzleGeneration'];
-  if (rawPending is! Map) {
-    return null;
-  }
-
-  final pendingData = Map<String, dynamic>.from(rawPending);
-  final status = '${pendingData['status'] ?? ''}'.trim().toLowerCase();
-  if (status.isNotEmpty && status != 'running') {
-    return null;
-  }
-
-  return <String, dynamic>{
-    'levelId': normalizedLevelId,
-    'jobId': '${pendingData['jobId'] ?? ''}'.trim(),
-    'jobStartedAt': pendingData['jobStartedAt'],
-    'savedAt': pendingData['updatedAt'] ?? pendingData['jobStartedAt'],
-  };
 }
 
 List<WordOverlayLetter> _extractWordLettersFromEditorData(
@@ -159,19 +132,15 @@ class CreateLevelScreen extends StatefulWidget {
   State<CreateLevelScreen> createState() => _CreateLevelScreenState();
 }
 
-class _CreateLevelScreenState extends State<CreateLevelScreen>
-    with WidgetsBindingObserver {
+class _CreateLevelScreenState extends State<CreateLevelScreen> {
   static const Color _generationExportBackground = Colors.white;
   static const int _minSolutionLength = 2;
   static const int _maxSolutionLength = 16;
-  static const String _pendingPuzzleGenerationPrefsKey =
-      'pending_user_level_generation_v1';
 
   late final TextEditingController _creatorNameController;
   late final TextEditingController _answerController;
   late final TextEditingController _factController;
   late final TextEditingController _generationPromptController;
-  late final FocusNode _generationPromptFocusNode;
   late final ValueNotifier<String> _creatorNameTextNotifier;
   late final ValueNotifier<String> _answerTextNotifier;
   late final ValueNotifier<String> _factTextNotifier;
@@ -179,6 +148,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
   late final ValueNotifier<bool> _drawingHasContentNotifier;
   late final ValueNotifier<bool> _wordDrawingHasContentNotifier;
   late final ValueNotifier<bool> _wordOverlayHasContentNotifier;
+  late final ScrollController _editorScrollController;
   late final DrawingController _drawingController;
   late final DrawingController _wordDrawingController;
   late final WordOverlayController _wordOverlayController;
@@ -188,7 +158,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
   bool _isSaving = false;
   bool _isSubmittingForReview = false;
   bool _isGeneratingPuzzle = false;
-  bool _didBackgroundWhilePuzzleGenerating = false;
   bool _isStageInteracting = false;
   bool _isLoadingWordEditorData = false;
   bool _isLoadingFaceEditorData = false;
@@ -209,10 +178,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
   int _lastSeenWordContentVersion = 0;
   int _puzzleInputRevision = 0;
   int _activeGenerationToken = 0;
+  String? _activePuzzleGenerationJobId;
   int _faceSketchGenerationRevision = 0;
   bool _isFaceSketchGenerationInFlight = false;
   String? _currentLevelId;
-  String? _pendingPuzzleGenerationJobId;
   late String _editorMode;
   late String _contentCategory;
   late FaceSketchSettings _faceSketchSettings;
@@ -224,14 +193,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
   bool get _hasStoredPuzzleImage =>
       widget.initialLevel?.hasReviewReadyPuzzleImage == true &&
       !_hasPuzzleInvalidatedByEdit;
-  bool get _hasActivePendingPuzzleGeneration =>
-      _pendingPuzzleGenerationJobId != null &&
-      _pendingPuzzleGenerationJobId!.isNotEmpty;
-  bool get _shouldHideStoredPuzzleWhilePendingGeneration =>
-      _hasActivePendingPuzzleGeneration && _generatedPuzzleImageBytes == null;
   bool get _hasPuzzleImageForReview =>
-      _generatedPuzzleImageBytes != null ||
-      (_hasStoredPuzzleImage && !_shouldHideStoredPuzzleWhilePendingGeneration);
+      _generatedPuzzleImageBytes != null || _hasStoredPuzzleImage;
   bool get _isSolutionEditingLocked =>
       !_isLocked && _hasPuzzleImageForReview;
   bool get _hasDraftStageContent =>
@@ -256,9 +219,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
               ? _faceSketchImageBytes != null
               : _drawingController.hasCommittedStrokes;
   bool get _canAccessPuzzleStep => _isLocked || _isSolutionStepComplete;
-  bool get _isPuzzleGenerationSafeToLeave =>
-      _isGeneratingPuzzle &&
-      _hasActivePendingPuzzleGeneration;
   String get _visiblePuzzleGenerationStatus =>
       _isGeneratingPuzzle ? _puzzleGenerationStatus : '';
 
@@ -267,17 +227,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       return null;
     }
 
-    if (_isPuzzleGenerationSafeToLeave) {
-      return 'Safe to leave now. We will keep this puzzle with your draft.';
-    }
-
-    return 'Keep this screen open until we secure the puzzle generation with your draft.';
+    return 'Keep this screen open while your puzzle is generating.';
   }
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     final initialLevel = widget.initialLevel;
     final initialEditorData =
         initialLevel?.editorData ?? const <String, dynamic>{};
@@ -294,6 +249,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     _drawingHasContentNotifier = ValueNotifier<bool>(false);
     _wordDrawingHasContentNotifier = ValueNotifier<bool>(false);
     _wordOverlayHasContentNotifier = ValueNotifier<bool>(false);
+    _editorScrollController = ScrollController();
     _editorMode = initialLevel?.editorMode ??
         (initialEditorMode != null &&
                 UserLevelEditorMode.supported.contains(initialEditorMode)
@@ -304,15 +260,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       editorMode: _editorMode,
     );
     _currentLevelId = initialLevel?.documentId;
-    final initialPendingPuzzleGeneration =
-        _extractPendingPuzzleGenerationFromEditorData(
-      initialEditorData,
-      levelId: _currentLevelId,
-    );
-    final initialPendingJobId =
-        '${initialPendingPuzzleGeneration?['jobId'] ?? ''}'.trim();
-    _pendingPuzzleGenerationJobId =
-        initialPendingJobId.isEmpty ? null : initialPendingJobId;
     _generationPromptController = TextEditingController(
       text: initialEditorData['generationPrompt'] as String? ??
           initialLevel?.name ??
@@ -321,7 +268,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     _generationPromptTextNotifier = ValueNotifier<String>(
       _generationPromptController.text,
     );
-    _generationPromptFocusNode = FocusNode();
     _generationDifficulty = _normalizeStoredGenerationDifficulty(
       (initialEditorData['generationDifficulty'] as num?)?.toDouble(),
     );
@@ -333,10 +279,13 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     );
     _imagePicker = ImagePicker();
 
-    _drawingController =
-        _buildDrawingControllerFromEditorData(initialEditorData);
+    _drawingController = _buildDrawingControllerFromEditorData(
+      initialEditorData,
+      defaultBrush: DrawingBrushType.pencil,
+    );
     _wordDrawingController = _buildDrawingControllerFromEditorData(
       initialEditorData['wordDrawing'] as Map<dynamic, dynamic>?,
+      defaultBrush: DrawingBrushType.text,
     );
     _wordOverlayController = WordOverlayController(
       initialLetters: _extractWordLettersFromEditorData(initialEditorData),
@@ -372,20 +321,15 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
         _loadExistingWordLetters();
       });
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_resumePendingPuzzleGenerationIfNeeded());
-    });
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _faceSketchDebounceTimer?.cancel();
     _creatorNameController.dispose();
     _answerController.dispose();
     _factController.dispose();
     _generationPromptController.dispose();
-    _generationPromptFocusNode.dispose();
     _creatorNameTextNotifier.dispose();
     _answerTextNotifier.dispose();
     _factTextNotifier.dispose();
@@ -393,6 +337,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     _drawingHasContentNotifier.dispose();
     _wordDrawingHasContentNotifier.dispose();
     _wordOverlayHasContentNotifier.dispose();
+    _editorScrollController.dispose();
     _drawingController.removeListener(_handleDrawingControllerChanged);
     _wordDrawingController.removeListener(_handleWordDrawingControllerChanged);
     _wordOverlayController.removeListener(_handleWordOverlayControllerChanged);
@@ -404,34 +349,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     _wordDrawingController.dispose();
     _wordOverlayController.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    switch (state) {
-      case AppLifecycleState.resumed:
-        if (_didBackgroundWhilePuzzleGenerating &&
-            _pendingPuzzleGenerationJobId != null &&
-            _pendingPuzzleGenerationJobId!.isNotEmpty &&
-            !_hasPuzzleImageForReview &&
-            mounted) {
-          setState(() {
-            _isGeneratingPuzzle = false;
-            _puzzleGenerationStatus = 'Checking saved puzzle...';
-          });
-        }
-        _didBackgroundWhilePuzzleGenerating = false;
-        unawaited(_resumePendingPuzzleGenerationIfNeeded());
-        break;
-      case AppLifecycleState.inactive:
-      case AppLifecycleState.hidden:
-      case AppLifecycleState.paused:
-      case AppLifecycleState.detached:
-        if (_isPuzzleGenerationSafeToLeave) {
-          _didBackgroundWhilePuzzleGenerating = true;
-        }
-        break;
-    }
   }
 
   Color _canvasBackgroundColor(ThemeData theme) {
@@ -648,10 +565,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
 
     final shouldDiscard = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Discard face photo?'),
+        builder: (context) => AlertDialog(
+            title: const Text('Discard photo?'),
             content: const Text(
-              'This will remove the current face photo, sketch, and framing so you can start again.',
+              'This will remove the current photo, sketch, and framing so you can start again.',
             ),
             actions: <Widget>[
               TextButton(
@@ -871,13 +788,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       if (mounted) {
         setState(() => _isLoadingFaceEditorData = false);
       }
-      unawaited(_resumePendingPuzzleGenerationIfNeeded());
     }
   }
 
   void _invalidatePuzzlePreview({bool returnToSolutionStep = true}) {
     _puzzleInputRevision += 1;
-    unawaited(_clearPendingPuzzleGeneration(onlyForLevelId: _currentLevelId));
 
     if (_generatedPuzzleImageBytes == null && !_hasStoredPuzzleImage) {
       return;
@@ -897,170 +812,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
         _puzzleGenerationStatus = '';
       }
     });
-  }
-
-  Future<Map<String, dynamic>?> _readPendingPuzzleGeneration() async {
-    final prefs = await SharedPreferences.getInstance();
-    final rawValue = prefs.getString(_pendingPuzzleGenerationPrefsKey);
-    if (rawValue == null || rawValue.trim().isEmpty) {
-      return null;
-    }
-
-    try {
-      final decoded = jsonDecode(rawValue);
-      if (decoded is Map<String, dynamic>) {
-        return decoded;
-      }
-      if (decoded is Map) {
-        return Map<String, dynamic>.from(decoded);
-      }
-    } catch (_) {
-      await prefs.remove(_pendingPuzzleGenerationPrefsKey);
-    }
-    return null;
-  }
-
-  Future<void> _persistPendingPuzzleGeneration({
-    required String levelId,
-    String? jobId,
-  }) async {
-    final normalizedLevelId = levelId.trim();
-    if (normalizedLevelId.isEmpty) {
-      return;
-    }
-
-    final existing = await _readPendingPuzzleGeneration();
-    final payload = existing != null &&
-            '${existing['levelId'] ?? ''}'.trim() == normalizedLevelId
-        ? Map<String, dynamic>.from(existing)
-        : <String, dynamic>{};
-    payload['levelId'] = normalizedLevelId;
-    payload['editorMode'] = _editorMode;
-    payload['savedAt'] = DateTime.now().millisecondsSinceEpoch;
-    if (jobId != null && jobId.trim().isNotEmpty) {
-      payload['jobId'] = jobId.trim();
-      payload['jobStartedAt'] = DateTime.now().millisecondsSinceEpoch;
-    } else {
-      payload.remove('jobId');
-      payload.remove('jobStartedAt');
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _pendingPuzzleGenerationPrefsKey,
-      jsonEncode(payload),
-    );
-
-    final normalizedJobId = jobId?.trim();
-    _pendingPuzzleGenerationJobId =
-        normalizedJobId == null || normalizedJobId.isEmpty
-            ? null
-            : normalizedJobId;
-    if (mounted) {
-      setState(() {});
-      await context.read<FirebaseService>().persistPendingPuzzleGeneration(
-            levelId: normalizedLevelId,
-            jobId: normalizedJobId,
-          );
-    }
-  }
-
-  Future<void> _clearPendingPuzzleGeneration({String? onlyForLevelId}) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (onlyForLevelId == null || onlyForLevelId.trim().isEmpty) {
-      await prefs.remove(_pendingPuzzleGenerationPrefsKey);
-      _pendingPuzzleGenerationJobId = null;
-      if (mounted) {
-        setState(() {});
-      }
-      return;
-    }
-
-    final pending = await _readPendingPuzzleGeneration();
-    if (pending != null &&
-        '${pending['levelId'] ?? ''}'.trim() == onlyForLevelId.trim()) {
-      await prefs.remove(_pendingPuzzleGenerationPrefsKey);
-    }
-
-    if (_currentLevelId == onlyForLevelId.trim()) {
-      _pendingPuzzleGenerationJobId = null;
-      if (mounted) {
-        setState(() {});
-        await context
-            .read<FirebaseService>()
-            .clearPendingPuzzleGeneration(onlyForLevelId.trim());
-      }
-    }
-  }
-
-  Future<void> _resumePendingPuzzleGenerationIfNeeded() async {
-    if (!mounted ||
-        _isLocked ||
-        _isGeneratingPuzzle ||
-        _isSaving ||
-        _currentLevelId == null ||
-        _isLoadingWordEditorData ||
-        _isLoadingFaceEditorData ||
-        _isProcessingFaceSourceImage ||
-        _isGeneratingFaceSketch) {
-      return;
-    }
-
-    final firebaseService = context.read<FirebaseService>();
-    var pending = await _readPendingPuzzleGeneration();
-    pending ??= _extractPendingPuzzleGenerationFromEditorData(
-      widget.initialLevel?.editorData,
-      levelId: _currentLevelId,
-    );
-    if (pending == null && _currentLevelId != null) {
-      final latestLevel = await firebaseService.getMyLevel(_currentLevelId!);
-      if (!mounted) {
-        return;
-      }
-      pending = _extractPendingPuzzleGenerationFromEditorData(
-        latestLevel?.editorData,
-        levelId: latestLevel?.documentId ?? _currentLevelId,
-      );
-      if (pending != null) {
-        final latestJobId = '${pending['jobId'] ?? ''}'.trim();
-        await _persistPendingPuzzleGeneration(
-          levelId: '${pending['levelId'] ?? ''}'.trim(),
-          jobId: latestJobId.isEmpty ? null : latestJobId,
-        );
-      }
-    }
-    if (!mounted || pending == null) {
-      return;
-    }
-
-    final pendingLevelId = '${pending['levelId'] ?? ''}'.trim();
-    if (pendingLevelId.isEmpty || pendingLevelId != _currentLevelId) {
-      return;
-    }
-
-    if (_generatedPuzzleImageBytes != null ||
-        (_hasStoredPuzzleImage && !_hasActivePendingPuzzleGeneration)) {
-      await _clearPendingPuzzleGeneration(onlyForLevelId: pendingLevelId);
-      if (mounted) {
-        setState(() {
-          _isGeneratingPuzzle = false;
-          _puzzleGenerationStatus = '';
-        });
-      }
-      return;
-    }
-
-    final pendingJobId = '${pending['jobId'] ?? ''}'.trim();
-    _pendingPuzzleGenerationJobId =
-        pendingJobId.isEmpty ? null : pendingJobId;
-
-    unawaited(
-      _generatePuzzle(
-        skipExistingPuzzleConfirmation: true,
-        triggeredFromPendingResume: true,
-        resumeJobId: pendingJobId.isEmpty ? null : pendingJobId,
-      ),
-    );
   }
 
   Future<bool> _confirmRegeneratePuzzle() async {
@@ -1130,47 +881,23 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       return true;
     }
 
-    if (!_isPuzzleGenerationSafeToLeave) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Just a moment'),
-          content: const Text(
-            'We are still saving this draft before puzzle generation can continue safely. Please keep this screen open for a moment.',
-          ),
-          actions: <Widget>[
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK'),
-            ),
-          ],
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Keep This Screen Open'),
+        content: const Text(
+          'Please stay on this screen while your puzzle is generating. Leaving the app can interrupt the generation.',
         ),
-      );
-      return false;
-    }
-
-    final shouldLeave = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Leave puzzle generation?'),
-            content: const Text(
-              'Puzzle generation is still running, but it is now safe to leave. We will keep it with this draft and resume it when you come back.',
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Stay'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Leave'),
-              ),
-            ],
+        actions: <Widget>[
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
           ),
-        ) ??
-        false;
+        ],
+      ),
+    );
 
-    return shouldLeave;
+    return false;
   }
 
   FaceSourceTransform _sanitizedFaceTransform(FaceSourceTransform transform) {
@@ -1219,7 +946,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       if (mounted) {
         setState(() => _isLoadingWordEditorData = false);
       }
-      unawaited(_resumePendingPuzzleGenerationIfNeeded());
     }
   }
 
@@ -1255,10 +981,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     return completeCount / checkpoints.length;
   }
 
-  void _selectStagePreview(
-    _StagePreviewMode mode, {
-    bool requestPromptFocus = false,
-  }) {
+  void _selectStagePreview(_StagePreviewMode mode) {
     if (!mounted) {
       return;
     }
@@ -1271,30 +994,46 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     }
 
     if (_stagePreviewMode == mode) {
-      if (requestPromptFocus && mode == _StagePreviewMode.puzzle) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _generationPromptFocusNode.requestFocus();
-          }
-        });
-      }
       return;
     }
 
     setState(() => _stagePreviewMode = mode);
-    if (requestPromptFocus && mode == _StagePreviewMode.puzzle) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _generationPromptFocusNode.requestFocus();
-        }
-      });
+  }
+
+  bool _isPuzzleGenerationRequestCancelled(int generationToken) {
+    return generationToken != _activeGenerationToken;
+  }
+
+  Future<void> _bestEffortCancelPuzzleGeneration(String jobId) async {
+    try {
+      await context.read<FirebaseService>().cancelPuzzleGeneration(jobId);
+    } catch (_) {
+      // Local cancel is still valuable even if the remote job can't be stopped.
+    }
+  }
+
+  void _cancelPuzzleGeneration() {
+    if (!_isGeneratingPuzzle || !mounted) {
+      return;
+    }
+
+    final activeJobId = _activePuzzleGenerationJobId?.trim();
+    setState(() {
+      _activeGenerationToken += 1;
+      _isGeneratingPuzzle = false;
+      _puzzleGenerationStatus = '';
+      _activePuzzleGenerationJobId = null;
+      _stagePreviewMode = _StagePreviewMode.puzzle;
+    });
+
+    _showSnack('Puzzle generation cancelled.');
+    if (activeJobId != null && activeJobId.isNotEmpty) {
+      unawaited(_bestEffortCancelPuzzleGeneration(activeJobId));
     }
   }
 
   Future<void> _generatePuzzle({
     bool skipExistingPuzzleConfirmation = false,
-    bool triggeredFromPendingResume = false,
-    String? resumeJobId,
   }) async {
     if (_isLocked) {
       _showSnack('Submitted levels are locked and can no longer be edited.');
@@ -1313,38 +1052,20 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       return;
     }
 
-    final prompt = _generationPromptController.text.trim();
-    final normalizedResumeJobId = resumeJobId?.trim();
-
-    if ((normalizedResumeJobId == null || normalizedResumeJobId.isEmpty) &&
-        _currentLevelId != null &&
-        !_hasPuzzleImageForReview) {
-      final pending = await _readPendingPuzzleGeneration();
-      final pendingLevelId = '${pending?['levelId'] ?? ''}'.trim();
-      final pendingJobId = '${pending?['jobId'] ?? ''}'.trim();
-      if (pendingLevelId == _currentLevelId && pendingJobId.isNotEmpty) {
-        resumeJobId = pendingJobId;
-      }
-    } else {
-      resumeJobId = normalizedResumeJobId;
-    }
-
     if (!mounted) {
       return;
     }
 
-    final isResumeFlow = resumeJobId != null && resumeJobId.isNotEmpty;
-    if (!isResumeFlow) {
-      final validationMessage = _validateGenerationInputs();
-      if (validationMessage != null) {
-        _showSnack(validationMessage);
-        return;
-      }
+    final prompt = _generationPromptController.text.trim();
+    final validationMessage = _validateGenerationInputs();
+    if (validationMessage != null) {
+      _showSnack(validationMessage);
+      return;
+    }
 
-      if (!skipExistingPuzzleConfirmation &&
-          !await _confirmRegeneratePuzzle()) {
-        return;
-      }
+    if (!skipExistingPuzzleConfirmation &&
+        !await _confirmRegeneratePuzzle()) {
+      return;
     }
 
     for (final value in <String>[prompt]) {
@@ -1354,70 +1075,58 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       }
     }
 
+    if (!mounted) {
+      return;
+    }
+
     FocusScope.of(context).unfocus();
+    _handleStageInteractionChanged(false);
     final firebaseService = context.read<FirebaseService>();
     final generationToken = ++_activeGenerationToken;
 
     setState(() {
       _isGeneratingPuzzle = true;
       _puzzleGenerationStatus = 'Saving draft...';
+      _activePuzzleGenerationJobId = null;
       _stagePreviewMode = _StagePreviewMode.puzzle;
     });
 
-    var startedRunpodGeneration = false;
     var puzzleGenerated = false;
-    String? pendingLevelId;
     try {
-      late final String levelId;
-      if (resumeJobId == null || resumeJobId.isEmpty) {
-        levelId = await _persistCurrentLevel(
-          firebaseService: firebaseService,
-          includeFaceSolutionAsset: false,
-        );
-        if (!mounted) {
-          return;
-        }
-        await _persistPendingPuzzleGeneration(levelId: levelId);
-      } else {
-        levelId = _currentLevelId ?? '';
-        if (levelId.isEmpty) {
-          throw StateError('Could not resume puzzle generation for this draft.');
-        }
-        await _persistPendingPuzzleGeneration(
-          levelId: levelId,
-          jobId: resumeJobId,
-        );
-      }
-      pendingLevelId = levelId;
-      if (!mounted) {
+      final levelId = await _persistCurrentLevel(
+        firebaseService: firebaseService,
+        includeFaceSolutionAsset: false,
+      );
+      if (!mounted || _isPuzzleGenerationRequestCancelled(generationToken)) {
         return;
       }
 
       final generationRevision = _puzzleInputRevision;
-      if (triggeredFromPendingResume && mounted) {
-        setState(() => _puzzleGenerationStatus = 'Resuming saved puzzle...');
-      } else if (resumeJobId != null && resumeJobId.isNotEmpty && mounted) {
-        setState(() => _puzzleGenerationStatus = 'Checking saved puzzle...');
-      } else if (mounted) {
-        setState(() => _puzzleGenerationStatus = 'Preparing solution image...');
-      }
-      startedRunpodGeneration = true;
+      setState(() => _puzzleGenerationStatus = 'Preparing solution image...');
       final sourceImageBytes = await _buildPuzzleGenerationSourceImage();
+      if (!mounted || _isPuzzleGenerationRequestCancelled(generationToken)) {
+        return;
+      }
       final puzzleBytes = await _runPuzzleGenerationWithAdaptiveCompression(
         firebaseService: firebaseService,
         generationToken: generationToken,
         sourceImageBytes: sourceImageBytes,
         prompt: prompt,
-        pendingLevelId: levelId,
-        existingJobId: resumeJobId,
+        levelId: levelId,
+        onJobStarted: (jobId) async {
+          if (!mounted ||
+              _isPuzzleGenerationRequestCancelled(generationToken)) {
+            return;
+          }
+          setState(() => _activePuzzleGenerationJobId = jobId);
+        },
       );
 
-      if (!mounted) {
+      if (!mounted || _isPuzzleGenerationRequestCancelled(generationToken)) {
         return;
       }
 
       if (generationRevision != _puzzleInputRevision) {
-        await _clearPendingPuzzleGeneration(onlyForLevelId: levelId);
         setState(() {
           _generatedPuzzleImageBytes = null;
           _hasPuzzleInvalidatedByEdit = true;
@@ -1439,15 +1148,16 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       if (mounted) {
         setState(() => _puzzleGenerationStatus = 'Saving puzzle...');
       }
-      final savedLevelId = await _persistCurrentLevel(
+      await _persistCurrentLevel(
         firebaseService: firebaseService,
         includeFaceSolutionAsset: false,
         puzzleImageBytesOverride: puzzleBytes,
       );
-      await _clearPendingPuzzleGeneration(onlyForLevelId: savedLevelId);
-      if (mounted) {
+      if (mounted && !_isPuzzleGenerationRequestCancelled(generationToken)) {
         setState(() => _puzzleGenerationStatus = 'Puzzle ready');
       }
+    } on PuzzleGenerationCancelledException {
+      return;
     } catch (error) {
       if (!mounted) {
         return;
@@ -1455,31 +1165,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       if (error is PendingPuzzleGenerationException) {
         setState(() {
           _stagePreviewMode = _StagePreviewMode.puzzle;
-          _puzzleGenerationStatus = 'Still preparing puzzle...';
+          _puzzleGenerationStatus = '';
         });
         _showSnack(
-          'Puzzle generation is still running. You can leave this screen and come back to your draft.',
+          'Puzzle generation is still preparing. Please keep this screen open a little longer.',
         );
         return;
-      }
-      if (!puzzleGenerated &&
-          _pendingPuzzleGenerationJobId != null &&
-          _pendingPuzzleGenerationJobId!.isNotEmpty &&
-          (startedRunpodGeneration || resumeJobId?.isNotEmpty == true) &&
-          _shouldKeepPendingPuzzleGenerationAfterError(error)) {
-        setState(() {
-          _stagePreviewMode = _StagePreviewMode.puzzle;
-          _puzzleGenerationStatus = 'Still preparing puzzle...';
-        });
-        _showSnack(
-          'We are still checking your puzzle. You can leave this screen and come back to your draft.',
-        );
-        return;
-      }
-      if (!puzzleGenerated) {
-        await _clearPendingPuzzleGeneration(
-          onlyForLevelId: pendingLevelId ?? _currentLevelId,
-        );
       }
       setState(() {
         _stagePreviewMode = _StagePreviewMode.puzzle;
@@ -1489,13 +1180,15 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
         error,
         context: puzzleGenerated
             ? _CreatorErrorContext.draftSave
-            : startedRunpodGeneration
-            ? _CreatorErrorContext.puzzleGeneration
-            : _CreatorErrorContext.draftSave,
+            : _CreatorErrorContext.puzzleGeneration,
       );
     } finally {
       if (mounted && generationToken == _activeGenerationToken) {
-        setState(() => _isGeneratingPuzzle = false);
+        _handleStageInteractionChanged(false);
+        setState(() {
+          _isGeneratingPuzzle = false;
+          _activePuzzleGenerationJobId = null;
+        });
       }
     }
   }
@@ -1528,56 +1221,47 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     required int generationToken,
     required Uint8List sourceImageBytes,
     required String prompt,
-    required String pendingLevelId,
-    String? existingJobId,
+    required String levelId,
+    required Future<void> Function(String jobId) onJobStarted,
   }) async {
     const controlDimensions = <int>[1024, 896, 768, 640, 512];
     Object? lastError;
-    var activeJobId = existingJobId?.trim();
 
     for (var i = 0; i < controlDimensions.length; i += 1) {
+      if (_isPuzzleGenerationRequestCancelled(generationToken)) {
+        throw const PuzzleGenerationCancelledException();
+      }
       if (mounted && generationToken == _activeGenerationToken) {
         setState(() {
-          _puzzleGenerationStatus = activeJobId?.isNotEmpty == true
-              ? 'Checking saved puzzle...'
-              : i == 0
+          _puzzleGenerationStatus = i == 0
               ? 'Preparing puzzle...'
               : 'Preparing a lighter image...';
         });
       }
 
-      final solutionBytes = await buildGenerationControlPng(
+      final solutionBytes = await buildGenerationControlJpeg(
         sourceImageBytes,
         dimension: controlDimensions[i],
         failureLabel: switch (_editorMode) {
           UserLevelEditorMode.highlight => 'word solution image',
-          UserLevelEditorMode.photoSketch => 'face solution projection',
+          UserLevelEditorMode.photoSketch => 'photo solution projection',
           _ => 'object solution image',
         },
       );
+      if (_isPuzzleGenerationRequestCancelled(generationToken)) {
+        throw const PuzzleGenerationCancelledException();
+      }
 
       try {
         return await firebaseService.generateDrawObjectPuzzle(
           solutionImageBytes: solutionBytes,
-          solutionFileName: '1.png',
-          solutionMimeType: 'image/png',
+          solutionFileName: '1.jpg',
+          solutionMimeType: 'image/jpeg',
           prompt: prompt,
           difficulty: _generationDifficulty,
-          levelId: pendingLevelId,
-          existingJobId: activeJobId,
-          onJobStarted: (jobId) async {
-            activeJobId = jobId;
-            await _persistPendingPuzzleGeneration(
-              levelId: pendingLevelId,
-              jobId: jobId,
-            );
-          },
-          onPendingJobInvalidated: (jobId) async {
-            if (activeJobId == jobId) {
-              activeJobId = null;
-            }
-            await _clearPendingPuzzleGeneration(onlyForLevelId: pendingLevelId);
-          },
+          levelId: levelId,
+          shouldCancel: () => _isPuzzleGenerationRequestCancelled(generationToken),
+          onJobStarted: onJobStarted,
           onStatusChanged: (status) {
             if (!mounted || generationToken != _activeGenerationToken) {
               return;
@@ -1587,15 +1271,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
         );
       } catch (error) {
         lastError = error;
-        if (error is PendingPuzzleGenerationException) {
-          rethrow;
-        }
         if (!_shouldRetryPuzzleGenerationWithSmallerImage(error) ||
             i == controlDimensions.length - 1) {
           rethrow;
         }
-        activeJobId = null;
-        await _persistPendingPuzzleGeneration(levelId: pendingLevelId);
       }
     }
 
@@ -1609,47 +1288,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
         message.contains('payload') ||
         message.contains('too detailed') ||
         message.contains('solution image');
-  }
-
-  bool _shouldKeepPendingPuzzleGenerationAfterError(Object error) {
-    final message = error.toString().toLowerCase();
-    if (_isClearlyPermanentPuzzleGenerationError(error)) {
-      return false;
-    }
-
-    return message.contains('still preparing') ||
-        message.contains('still starting') ||
-        message.contains('saving puzzle') ||
-        message.contains('checking saved puzzle') ||
-        message.contains('puzzle generation failed') ||
-        message.contains('failed') ||
-        message.contains('cancelled') ||
-        message.contains('app check') ||
-        message.contains('security verification') ||
-        message.contains('signed in') ||
-        message.contains('unauthorized') ||
-        message.contains('timeout') ||
-        message.contains('timed out') ||
-        message.contains('temporarily unavailable') ||
-        message.contains('service unavailable') ||
-        message.contains('internal server error') ||
-        message.contains('bad gateway') ||
-        message.contains('gateway');
-  }
-
-  bool _isClearlyPermanentPuzzleGenerationError(Object error) {
-    final message = error.toString().toLowerCase();
-    return message.contains('too large') ||
-        message.contains('(413)') ||
-        message.contains('payload') ||
-        message.contains('unsupported') ||
-        message.contains('invalid image') ||
-        message.contains('corrupt') ||
-        message.contains('unreadable') ||
-        message.contains('malformed') ||
-        message.contains('bad request') ||
-        message.contains('add the solution before generating') ||
-        message.contains('add a puzzle scene before generating');
   }
 
   String? _validateGenerationInputs() {
@@ -1681,7 +1319,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       }
     } else if (_editorMode == UserLevelEditorMode.photoSketch) {
       if (_faceSketchImageBytes == null) {
-        return 'Add a face photo before generating.';
+        return 'Add a photo before generating.';
       }
     } else if (!_drawingController.hasCommittedStrokes) {
       return 'Draw something before generating.';
@@ -1708,7 +1346,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
         }
       } else if (_editorMode == UserLevelEditorMode.photoSketch) {
         if (_faceSourceImageBytes == null) {
-          return 'Add a face photo before saving a draft.';
+          return 'Add a photo before saving a draft.';
         }
       } else if (!_drawingController.hasCommittedStrokes) {
         return 'Draw something before saving a draft.';
@@ -1719,13 +1357,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
 
     if (_editorMode == UserLevelEditorMode.photoSketch &&
         _isGeneratingFaceSketch) {
-      return 'Wait for the face sketch to finish updating before saving.';
-    }
-
-    if (forSubmission &&
-        _pendingPuzzleGenerationJobId != null &&
-        _pendingPuzzleGenerationJobId!.isNotEmpty) {
-      return 'Wait for puzzle generation to finish before submitting for review.';
+      return 'Wait for the photo sketch to finish updating before saving.';
     }
 
     if (creatorName.isEmpty) {
@@ -1766,7 +1398,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
       }
     } else if (_editorMode == UserLevelEditorMode.photoSketch) {
       if (_faceSourceImageBytes == null || _faceSketchImageBytes == null) {
-        return 'Add a face photo before saving.';
+        return 'Add a photo before saving.';
       }
       if (forSubmission && !_hasPuzzleImageForReview) {
         return 'Generate the puzzle before submitting for review.';
@@ -1922,7 +1554,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
 
       if (submitAfterSave) {
         await firebaseService.submitUserLevelForReview(levelId);
-        await _clearPendingPuzzleGeneration(onlyForLevelId: levelId);
       }
 
       if (!mounted) {
@@ -2003,43 +1634,53 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
         message.contains('racy') ||
         message.contains('violence');
     final isUnreadableImage = message.contains('could not read that face photo') ||
+        message.contains('could not read that photo') ||
         message.contains('invalid source image') ||
         message.contains('valid solution image');
 
     switch (context) {
       case _CreatorErrorContext.facePhotoPick:
         if (message.contains('permission')) {
-          return 'Please allow photo access to add a face photo.';
+          return 'Please allow photo access to add a photo.';
         }
         if (isTooLarge) {
           return 'That photo is too large. Please choose a smaller one.';
         }
-        return 'Could not open that face photo. Please try a different image.';
+        return 'Could not open that photo. Please try a different image.';
 
       case _CreatorErrorContext.faceSketch:
         if (message.contains('level creation is unavailable')) {
           return 'Level creation is unavailable for this account right now.';
         }
         if (isTooLarge) {
-          return 'That face photo is too detailed right now. Try a smaller or simpler image.';
+          return 'That photo is too detailed right now. Try a smaller or simpler image.';
         }
-        return 'Could not update the face sketch right now. Please try again.';
+        return 'Could not update the photo sketch right now. Please try again.';
 
       case _CreatorErrorContext.puzzleGeneration:
         if (message.contains('level creation is unavailable')) {
           return 'Level creation is unavailable for this account right now.';
         }
+        if (message.contains('today\'s puzzle generation limit')) {
+          return 'You have reached today\'s puzzle generation limit. Please try again tomorrow.';
+        }
+        if (message.contains('another puzzle generation is already running')) {
+          return 'Wait for your current puzzle generation to finish first.';
+        }
+        if (message.contains('please wait a moment before starting another puzzle')) {
+          return 'Please wait a moment before starting another puzzle.';
+        }
         if (isWarmupDelay) {
-          return 'Puzzle generation is taking a bit longer than usual. Please try again in a moment.';
+          return 'Puzzle generation is taking longer than usual. Please keep this screen open and try again in a moment.';
         }
         if (isTooLarge) {
           return 'This puzzle image is still too detailed right now. Try a simpler image or scene.';
         }
         if (isAuthIssue) {
-          return 'Could not reach the puzzle generator right now. Please reopen Subliminal Words and try again.';
+          return 'The puzzle generator is still getting ready. Please keep this screen open and try again in a moment.';
         }
         if (isNetworkIssue) {
-          return 'The connection to the puzzle generator was interrupted. Please try again.';
+          return 'The connection to the puzzle generator was interrupted. Please keep this screen open and try again.';
         }
         return 'Could not generate the puzzle right now. Please try again.';
 
@@ -2048,13 +1689,13 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
           return 'Level creation is unavailable for this account right now.';
         }
         if (isUnsupportedUpload) {
-          return 'Only JPG, PNG, or WebP face photos are allowed.';
+          return 'Only JPG, PNG, or WebP photos are allowed.';
         }
         if (isUnsafeImage) {
-          return 'That face photo looks too explicit for Subliminal Words. Please choose a different image.';
+          return 'That photo looks too explicit for Subliminal Words. Please choose a different image.';
         }
         if (isUnreadableImage) {
-          return 'Could not read that face photo. Please choose a different image.';
+          return 'Could not read that photo. Please choose a different image.';
         }
         if (isAuthIssue) {
           return 'Could not save this level right now. Please reopen Subliminal Words and try again.';
@@ -2069,7 +1710,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
           return 'Level creation is unavailable for this account right now.';
         }
         if (message.contains('safety-checked before review')) {
-          return 'Save this face level again before submitting it for review.';
+          return 'Save this photo level again before submitting it for review.';
         }
         if (message.contains('missing a creator name or answer')) {
           return 'Add the creator name and solution before submitting for review.';
@@ -2092,13 +1733,13 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
           return 'Could not find this draft anymore. Please reopen My Levels and try again.';
         }
         if (isUnsupportedUpload) {
-          return 'Only JPG, PNG, or WebP face photos are allowed.';
+          return 'Only JPG, PNG, or WebP photos are allowed.';
         }
         if (isUnsafeImage) {
-          return 'That face photo looks too explicit for Subliminal Words. Please choose a different image.';
+          return 'That photo looks too explicit for Subliminal Words. Please choose a different image.';
         }
         if (isUnreadableImage) {
-          return 'Could not read that face photo. Please choose a different image.';
+          return 'Could not read that photo. Please choose a different image.';
         }
         if (isAuthIssue) {
           return 'Could not submit this level right now. Please reopen Subliminal Words and try again.';
@@ -2134,6 +1775,10 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
     final isLevelMutationLocked = _isSaving;
+    final areMutationControlsLocked = _isSaving || _isGeneratingPuzzle;
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final isKeyboardVisible = keyboardInset > 0;
+    final bodyBottomPadding = isKeyboardVisible ? keyboardInset + 24 : 24.0;
     final canvasBackgroundColor = _canvasBackgroundColor(theme);
     final editorTheme = theme.copyWith(
       scaffoldBackgroundColor: colorScheme.surface,
@@ -2163,294 +1808,372 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
           }
         },
         child: Scaffold(
-        backgroundColor: colorScheme.surface,
-        appBar: AppBar(
+          resizeToAvoidBottomInset: false,
           backgroundColor: colorScheme.surface,
-          foregroundColor: colorScheme.onSurface,
-          scrolledUnderElevation: 0,
-          surfaceTintColor: Colors.transparent,
-          title: Text(
-            _isEditMode
-                ? 'Edit ${UserLevelEditorMode.labelFor(_editorMode)} Level'
-                : 'Create ${UserLevelEditorMode.labelFor(_editorMode)} Level',
+          appBar: AppBar(
+            backgroundColor: colorScheme.surface,
+            foregroundColor: colorScheme.onSurface,
+            scrolledUnderElevation: 0,
+            surfaceTintColor: Colors.transparent,
+            title: Text(
+              _isEditMode
+                  ? 'Edit ${UserLevelEditorMode.labelFor(_editorMode)} Level'
+                  : 'Create ${UserLevelEditorMode.labelFor(_editorMode)} Level',
+            ),
           ),
-        ),
-        bottomNavigationBar: IgnorePointer(
-          ignoring: isLevelMutationLocked,
-          child: SafeArea(
+          bottomNavigationBar: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeOutCubic,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SizeTransition(
+                sizeFactor: animation,
+                axisAlignment: -1,
+                child: child,
+              ),
+            ),
+            child: isKeyboardVisible
+                ? const SizedBox(key: ValueKey('keyboard-footer-gap'))
+                : MediaQuery.removeViewInsets(
+                    key: const ValueKey('editor-footer'),
+                    context: context,
+                    removeBottom: true,
+                    child: IgnorePointer(
+                      ignoring: areMutationControlsLocked,
+                      child: SafeArea(
+                        maintainBottomViewPadding: true,
+                        top: false,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: colorScheme.surface,
+                            border: Border(
+                              top: BorderSide(color: colorScheme.outlineVariant),
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                            child: AnimatedBuilder(
+                              animation: Listenable.merge(<Listenable>[
+                                _creatorNameTextNotifier,
+                                _answerTextNotifier,
+                                _factTextNotifier,
+                                _generationPromptTextNotifier,
+                                _drawingHasContentNotifier,
+                                _wordDrawingHasContentNotifier,
+                                _wordOverlayHasContentNotifier,
+                              ]),
+                              builder: (context, _) => Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: <Widget>[
+                                  _EditorStepProgress(
+                                    textTheme: textTheme,
+                                    colorScheme: colorScheme,
+                                    activeStep: _stagePreviewMode,
+                                    solutionProgress: _solutionStepProgress,
+                                    puzzleProgress: _puzzleStepProgress,
+                                    canAccessPuzzleStep: _canAccessPuzzleStep,
+                                    stepsEnabled: !_isGeneratingPuzzle,
+                                    onStepSelected: _selectStagePreview,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: <Widget>[
+                                      Expanded(
+                                        child: OutlinedButton(
+                                          onPressed: areMutationControlsLocked
+                                              ? null
+                                              : () =>
+                                                  _save(submitAfterSave: false),
+                                          child: _isSaving &&
+                                                  !_isSubmittingForReview
+                                              ? Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: <Widget>[
+                                                    SizedBox.square(
+                                                      dimension: 16,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                        strokeWidth: 2.2,
+                                                        valueColor:
+                                                            AlwaysStoppedAnimation<
+                                                              Color
+                                                            >(
+                                                          colorScheme.primary,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    const Flexible(
+                                                      child: AutoSizeText(
+                                                        'Saving...',
+                                                        maxLines: 1,
+                                                        minFontSize: 10,
+                                                        textAlign:
+                                                            TextAlign.center,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                )
+                                              : const AutoSizeText(
+                                                  'Save Draft',
+                                                  maxLines: 1,
+                                                  minFontSize: 10,
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: FilledButton(
+                                          onPressed: areMutationControlsLocked
+                                              ? null
+                                              : () =>
+                                                  _save(submitAfterSave: true),
+                                          child: _isSubmittingForReview
+                                              ? Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: <Widget>[
+                                                    SizedBox.square(
+                                                      dimension: 16,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                        strokeWidth: 2.4,
+                                                        backgroundColor:
+                                                            colorScheme.onPrimary
+                                                                .withValues(
+                                                                  alpha: 0.22,
+                                                                ),
+                                                        valueColor:
+                                                            AlwaysStoppedAnimation<
+                                                              Color
+                                                            >(
+                                                          colorScheme.onPrimary,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    const Flexible(
+                                                      child: AutoSizeText(
+                                                        'Submitting...',
+                                                        maxLines: 1,
+                                                        minFontSize: 10,
+                                                        textAlign:
+                                                            TextAlign.center,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                )
+                                              : const AutoSizeText(
+                                                  'Submit for Review',
+                                                  maxLines: 1,
+                                                  minFontSize: 10,
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+          body: SafeArea(
             top: false,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                border: Border(
-                  top: BorderSide(color: colorScheme.outlineVariant),
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                child: AnimatedBuilder(
-                  animation: Listenable.merge(<Listenable>[
-                    _creatorNameTextNotifier,
-                    _answerTextNotifier,
-                    _factTextNotifier,
-                    _generationPromptTextNotifier,
-                    _drawingHasContentNotifier,
-                    _wordDrawingHasContentNotifier,
-                    _wordOverlayHasContentNotifier,
-                  ]),
-                  builder: (context, _) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      _EditorStepProgress(
-                        textTheme: textTheme,
-                        colorScheme: colorScheme,
-                        activeStep: _stagePreviewMode,
-                        solutionProgress: _solutionStepProgress,
-                        puzzleProgress: _puzzleStepProgress,
-                        canAccessPuzzleStep: _canAccessPuzzleStep,
-                        onStepSelected: _selectStagePreview,
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: _isSaving
-                                  ? null
-                                  : () => _save(submitAfterSave: false),
-                              child: AutoSizeText(
-                                _isSaving && !_isSubmittingForReview
-                                    ? 'Saving...'
-                                    : 'Save Draft',
-                                maxLines: 1,
-                                minFontSize: 10,
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: FilledButton(
-                              onPressed: _isSaving
-                                  ? null
-                                  : () => _save(submitAfterSave: true),
-                              child: _isSubmittingForReview
-                                  ? Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: <Widget>[
-                                        SizedBox.square(
-                                          dimension: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.4,
-                                            backgroundColor: colorScheme
-                                                .onPrimary
-                                                .withValues(alpha: 0.22),
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(
-                                              colorScheme.onPrimary,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        const Flexible(
-                                          child: AutoSizeText(
-                                            'Submitting...',
-                                            maxLines: 1,
-                                            minFontSize: 10,
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : const AutoSizeText(
-                                      'Submit for Review',
-                                      maxLines: 1,
-                                      minFontSize: 10,
-                                      textAlign: TextAlign.center,
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              padding: EdgeInsets.fromLTRB(16, 6, 16, bodyBottomPadding),
+              child: IgnorePointer(
+                ignoring: isLevelMutationLocked,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Expanded(
+                      child: _editorMode == UserLevelEditorMode.highlight
+                              ? _WordEditorSection(
+                                  scrollController: _editorScrollController,
+                                isStageInteracting: _isStageInteracting,
+                                controller: _wordOverlayController,
+                                drawingController: _wordDrawingController,
+                                hasLettersListenable:
+                                    _wordOverlayHasContentNotifier,
+                                hasDrawingContentListenable:
+                                    _wordDrawingHasContentNotifier,
+                                solutionController: _answerController,
+                                solutionTextListenable: _answerTextNotifier,
+                                creatorNameController: _creatorNameController,
+                                promptController: _generationPromptController,
+                                promptTextListenable:
+                                    _generationPromptTextNotifier,
+                                textTheme: textTheme,
+                                colorScheme: colorScheme,
+                                canvasBackgroundColor: canvasBackgroundColor,
+                                isLocked: _isLocked,
+                                isSolutionLocked: _isSolutionEditingLocked,
+                                isLoadingInitialOverlay:
+                                    _isLoadingWordEditorData,
+                                stagePreviewMode: _stagePreviewMode,
+                                puzzleBytes: _generatedPuzzleImageBytes,
+                                existingPuzzlePreviewUrlFuture:
+                                    _existingPuzzlePreviewUrlFuture,
+                                hasStoredPuzzleImage: _hasStoredPuzzleImage,
+                                isGeneratingPuzzle: _isGeneratingPuzzle,
+                                puzzleGenerationStatus:
+                                    _visiblePuzzleGenerationStatus,
+                                puzzleGenerationLeaveHint:
+                                    _puzzleGenerationLeaveHint,
+                                generationDifficulty: _generationDifficulty,
+                                onStageInteractionChanged:
+                                    _handleStageInteractionChanged,
+                                normalizePoint: _normalizePoint,
+                                onSelectStagePreview: _selectStagePreview,
+                                onGeneratePuzzle: _generatePuzzle,
+                                onCancelPuzzle: _cancelPuzzleGeneration,
+                                onGenerationDifficultyChanged:
+                                    _updateGenerationDifficulty,
+                                onUnlockSolutionEditing:
+                                    _confirmUnlockSolutionEditing,
+                              )
+                          : _editorMode == UserLevelEditorMode.photoSketch
+                              ? _FaceEditorSection(
+                                  scrollController: _editorScrollController,
+                                  isStageInteracting: _isStageInteracting,
+                                    sourceImageBytes: _faceSourceImageBytes,
+                                    sourceImageSize: _faceSourceImageSize,
+                                    sketchImageBytes: _faceSketchImageBytes,
+                                    sourceTransform: _faceSourceTransform,
+                                    solutionController: _answerController,
+                                    solutionTextListenable:
+                                        _answerTextNotifier,
+                                    factController: _factController,
+                                    creatorNameController:
+                                        _creatorNameController,
+                                    promptController:
+                                        _generationPromptController,
+                                    promptTextListenable:
+                                        _generationPromptTextNotifier,
+                                    contentCategory: _contentCategory,
+                                    textTheme: textTheme,
+                                    colorScheme: colorScheme,
+                                    canvasBackgroundColor:
+                                        canvasBackgroundColor,
+                                    isLocked: _isLocked,
+                                    isSolutionLocked:
+                                        _isSolutionEditingLocked,
+                                    isLoadingSourceImage:
+                                        _isLoadingFaceEditorData ||
+                                            _isProcessingFaceSourceImage,
+                                    isGeneratingSketch: _isGeneratingFaceSketch,
+                                    isGeneratingTransform:
+                                        _isGeneratingAfterManipulate,
+                                    stagePreviewMode: _stagePreviewMode,
+                                    puzzleBytes: _generatedPuzzleImageBytes,
+                                    existingPuzzlePreviewUrlFuture:
+                                        _existingPuzzlePreviewUrlFuture,
+                                    hasStoredPuzzleImage: _hasStoredPuzzleImage,
+                                    isGeneratingPuzzle: _isGeneratingPuzzle,
+                                    puzzleGenerationStatus:
+                                        _visiblePuzzleGenerationStatus,
+                                    puzzleGenerationLeaveHint:
+                                        _puzzleGenerationLeaveHint,
+                                    generationDifficulty:
+                                        _generationDifficulty,
+                                    settings: _faceSketchSettings,
+                                    onPickImage: _pickFaceSourceImage,
+                                    onResetImageTransform:
+                                        _resetFaceSourceTransform,
+                                    isTransformInteractionLocked:
+                                        _isFaceTransformInteractionLocked,
+                                    onToggleTransformInteractionLock:
+                                        _toggleFaceTransformInteractionLock,
+                                    onDiscardImage: () => unawaited(
+                                      _confirmDiscardFaceSourceImage(),
                                     ),
-                            ),
-                          ),
-                        ],
-                      ),
+                                    onSourceTransformChanged:
+                                        _updateFaceSourceTransform,
+                                    onSourceTransformEnded:
+                                        _finishFaceSourceTransform,
+                                    onStageInteractionChanged:
+                                        _handleStageInteractionChanged,
+                                    onSelectStagePreview: _selectStagePreview,
+                                    onGeneratePuzzle: _generatePuzzle,
+                                    onCancelPuzzle: _cancelPuzzleGeneration,
+                                    onGenerationDifficultyChanged:
+                                        _updateGenerationDifficulty,
+                                    onContentCategoryChanged:
+                                        _updateContentCategory,
+                                    onSettingsChanged:
+                                        _updateFaceSketchSettings,
+                                    onLiveSettingsChanged: null,
+                                    onUnlockSolutionEditing:
+                                        _confirmUnlockSolutionEditing,
+                                  )
+                              : _CanvasEditorSection(
+                                  scrollController: _editorScrollController,
+                                  isStageInteracting: _isStageInteracting,
+                                    controller: _drawingController,
+                                    hasDrawingContentListenable:
+                                        _drawingHasContentNotifier,
+                                    solutionController: _answerController,
+                                    solutionTextListenable:
+                                        _answerTextNotifier,
+                                    factController: _factController,
+                                    creatorNameController:
+                                        _creatorNameController,
+                                    promptController:
+                                        _generationPromptController,
+                                    promptTextListenable:
+                                        _generationPromptTextNotifier,
+                                    textTheme: textTheme,
+                                    colorScheme: colorScheme,
+                                    canvasBackgroundColor:
+                                        canvasBackgroundColor,
+                                    isLocked: _isLocked,
+                                    isSolutionLocked:
+                                        _isSolutionEditingLocked,
+                                    stagePreviewMode: _stagePreviewMode,
+                                    puzzleBytes: _generatedPuzzleImageBytes,
+                                    existingPuzzlePreviewUrlFuture:
+                                        _existingPuzzlePreviewUrlFuture,
+                                    hasStoredPuzzleImage: _hasStoredPuzzleImage,
+                                    isGeneratingPuzzle: _isGeneratingPuzzle,
+                                    puzzleGenerationStatus:
+                                        _visiblePuzzleGenerationStatus,
+                                    puzzleGenerationLeaveHint:
+                                        _puzzleGenerationLeaveHint,
+                                    generationDifficulty:
+                                        _generationDifficulty,
+                                    normalizePoint: _normalizePoint,
+                                    onStageInteractionChanged:
+                                        _handleStageInteractionChanged,
+                                    onSelectStagePreview:
+                                        _selectStagePreview,
+                                    onGeneratePuzzle: _generatePuzzle,
+                                    onCancelPuzzle: _cancelPuzzleGeneration,
+                                    onGenerationDifficultyChanged:
+                                        _updateGenerationDifficulty,
+                                    onUnlockSolutionEditing:
+                                        _confirmUnlockSolutionEditing,
+                                  ),
+                    ),
+                    if (_isLocked) ...<Widget>[
+                      const SizedBox(height: 16),
+                      _LockedNotice(colorScheme: colorScheme),
                     ],
-                  ),
+                  ],
                 ),
               ),
             ),
           ),
-        ),
-        body: SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            physics: _isStageInteracting
-                ? const NeverScrollableScrollPhysics()
-                : const ClampingScrollPhysics(),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
-            child: IgnorePointer(
-              ignoring: isLevelMutationLocked,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  _SectionCard(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
-                    child: _editorMode == UserLevelEditorMode.highlight
-                      ? _WordEditorSection(
-                          controller: _wordOverlayController,
-                          drawingController: _wordDrawingController,
-                          hasLettersListenable: _wordOverlayHasContentNotifier,
-                          hasDrawingContentListenable:
-                              _wordDrawingHasContentNotifier,
-                          solutionController: _answerController,
-                          solutionTextListenable: _answerTextNotifier,
-                          creatorNameController: _creatorNameController,
-                          promptController: _generationPromptController,
-                          promptTextListenable: _generationPromptTextNotifier,
-                          textTheme: textTheme,
-                          colorScheme: colorScheme,
-                          canvasBackgroundColor: canvasBackgroundColor,
-                          isLocked: _isLocked,
-                          isSolutionLocked: _isSolutionEditingLocked,
-                          isLoadingInitialOverlay: _isLoadingWordEditorData,
-                          stagePreviewMode: _stagePreviewMode,
-                          puzzleBytes: _generatedPuzzleImageBytes,
-                          existingPuzzlePreviewUrlFuture:
-                              _existingPuzzlePreviewUrlFuture,
-                          hasStoredPuzzleImage:
-                              _hasStoredPuzzleImage &&
-                              !_shouldHideStoredPuzzleWhilePendingGeneration,
-                          isGeneratingPuzzle: _isGeneratingPuzzle,
-                          puzzleGenerationStatus: _visiblePuzzleGenerationStatus,
-                          puzzleGenerationLeaveHint:
-                              _puzzleGenerationLeaveHint,
-                          generationDifficulty: _generationDifficulty,
-                          onStageInteractionChanged:
-                              _handleStageInteractionChanged,
-                          normalizePoint: _normalizePoint,
-                          onSelectStagePreview: _selectStagePreview,
-                          onGeneratePuzzle: _generatePuzzle,
-                          onGenerationDifficultyChanged:
-                              _updateGenerationDifficulty,
-                          generationPromptFocusNode: _generationPromptFocusNode,
-                          onUnlockSolutionEditing:
-                              _confirmUnlockSolutionEditing,
-                        )
-                      : _editorMode == UserLevelEditorMode.photoSketch
-                          ? _FaceEditorSection(
-                              sourceImageBytes: _faceSourceImageBytes,
-                              sourceImageSize: _faceSourceImageSize,
-                              sketchImageBytes: _faceSketchImageBytes,
-                              sourceTransform: _faceSourceTransform,
-                              solutionController: _answerController,
-                              solutionTextListenable: _answerTextNotifier,
-                              factController: _factController,
-                              creatorNameController: _creatorNameController,
-                              promptController: _generationPromptController,
-                              promptTextListenable:
-                                  _generationPromptTextNotifier,
-                              generationPromptFocusNode:
-                                  _generationPromptFocusNode,
-                              contentCategory: _contentCategory,
-                              textTheme: textTheme,
-                              colorScheme: colorScheme,
-                              canvasBackgroundColor: canvasBackgroundColor,
-                              isLocked: _isLocked,
-                              isSolutionLocked: _isSolutionEditingLocked,
-                              isLoadingSourceImage: _isLoadingFaceEditorData || _isProcessingFaceSourceImage,
-                              isGeneratingSketch: _isGeneratingFaceSketch,
-                              isGeneratingTransform: _isGeneratingAfterManipulate,
-                              stagePreviewMode: _stagePreviewMode,
-                              puzzleBytes: _generatedPuzzleImageBytes,
-                              existingPuzzlePreviewUrlFuture:
-                                  _existingPuzzlePreviewUrlFuture,
-                              hasStoredPuzzleImage:
-                                  _hasStoredPuzzleImage &&
-                                  !_shouldHideStoredPuzzleWhilePendingGeneration,
-                              isGeneratingPuzzle: _isGeneratingPuzzle,
-                              puzzleGenerationStatus:
-                                  _visiblePuzzleGenerationStatus,
-                              puzzleGenerationLeaveHint:
-                                  _puzzleGenerationLeaveHint,
-                              generationDifficulty: _generationDifficulty,
-                              settings: _faceSketchSettings,
-                              onPickImage: _pickFaceSourceImage,
-                              onResetImageTransform: _resetFaceSourceTransform,
-                              isTransformInteractionLocked:
-                                  _isFaceTransformInteractionLocked,
-                              onToggleTransformInteractionLock:
-                                  _toggleFaceTransformInteractionLock,
-                              onDiscardImage: () => unawaited(
-                                _confirmDiscardFaceSourceImage(),
-                              ),
-                              onSourceTransformChanged:
-                                  _updateFaceSourceTransform,
-                              onSourceTransformEnded:
-                                  _finishFaceSourceTransform,
-                              onStageInteractionChanged:
-                                  _handleStageInteractionChanged,
-                              onSelectStagePreview: _selectStagePreview,
-                              onGeneratePuzzle: _generatePuzzle,
-                              onGenerationDifficultyChanged:
-                                  _updateGenerationDifficulty,
-                              onContentCategoryChanged: _updateContentCategory,
-                              onSettingsChanged: _updateFaceSketchSettings,
-                              onLiveSettingsChanged: null,
-                              onUnlockSolutionEditing:
-                                  _confirmUnlockSolutionEditing,
-                            )
-                          : _CanvasEditorSection(
-                              controller: _drawingController,
-                              hasDrawingContentListenable:
-                                  _drawingHasContentNotifier,
-                              solutionController: _answerController,
-                              solutionTextListenable: _answerTextNotifier,
-                              factController: _factController,
-                              creatorNameController: _creatorNameController,
-                              promptController: _generationPromptController,
-                              promptTextListenable:
-                                  _generationPromptTextNotifier,
-                              textTheme: textTheme,
-                              colorScheme: colorScheme,
-                              canvasBackgroundColor: canvasBackgroundColor,
-                              isLocked: _isLocked,
-                              isSolutionLocked: _isSolutionEditingLocked,
-                              stagePreviewMode: _stagePreviewMode,
-                              puzzleBytes: _generatedPuzzleImageBytes,
-                              existingPuzzlePreviewUrlFuture:
-                                  _existingPuzzlePreviewUrlFuture,
-                              hasStoredPuzzleImage:
-                                  _hasStoredPuzzleImage &&
-                                  !_shouldHideStoredPuzzleWhilePendingGeneration,
-                              isGeneratingPuzzle: _isGeneratingPuzzle,
-                              puzzleGenerationStatus:
-                                  _visiblePuzzleGenerationStatus,
-                              puzzleGenerationLeaveHint:
-                                  _puzzleGenerationLeaveHint,
-                              generationDifficulty: _generationDifficulty,
-                              normalizePoint: _normalizePoint,
-                              onStageInteractionChanged:
-                                  _handleStageInteractionChanged,
-                              onSelectStagePreview: _selectStagePreview,
-                              onGeneratePuzzle: _generatePuzzle,
-                              onGenerationDifficultyChanged:
-                                  _updateGenerationDifficulty,
-                              generationPromptFocusNode:
-                                  _generationPromptFocusNode,
-                              onUnlockSolutionEditing:
-                                  _confirmUnlockSolutionEditing,
-                            ),
-                  ),
-                  if (_isLocked) ...<Widget>[
-                    const SizedBox(height: 16),
-                    _LockedNotice(colorScheme: colorScheme),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
         ),
       ),
     );
@@ -2458,6 +2181,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen>
 }
 
 class _FaceEditorSection extends StatelessWidget {
+  final ScrollController scrollController;
+  final bool isStageInteracting;
   final Uint8List? sourceImageBytes;
   final Size? sourceImageSize;
   final Uint8List? sketchImageBytes;
@@ -2467,7 +2192,6 @@ class _FaceEditorSection extends StatelessWidget {
   final TextEditingController factController;
   final TextEditingController creatorNameController;
   final TextEditingController promptController;
-  final FocusNode generationPromptFocusNode;
   final ValueNotifier<String> promptTextListenable;
   final String contentCategory;
   final TextTheme textTheme;
@@ -2497,6 +2221,7 @@ class _FaceEditorSection extends StatelessWidget {
   final ValueChanged<bool> onStageInteractionChanged;
   final ValueChanged<_StagePreviewMode> onSelectStagePreview;
   final VoidCallback onGeneratePuzzle;
+  final VoidCallback onCancelPuzzle;
   final ValueChanged<double> onGenerationDifficultyChanged;
   final ValueChanged<String> onContentCategoryChanged;
   final ValueChanged<FaceSketchSettings> onSettingsChanged;
@@ -2504,6 +2229,8 @@ class _FaceEditorSection extends StatelessWidget {
   final VoidCallback onUnlockSolutionEditing;
 
   const _FaceEditorSection({
+    required this.scrollController,
+    required this.isStageInteracting,
     required this.sourceImageBytes,
     required this.sourceImageSize,
     required this.sketchImageBytes,
@@ -2513,7 +2240,6 @@ class _FaceEditorSection extends StatelessWidget {
     required this.factController,
     required this.creatorNameController,
     required this.promptController,
-    required this.generationPromptFocusNode,
     required this.promptTextListenable,
     required this.contentCategory,
     required this.textTheme,
@@ -2543,6 +2269,7 @@ class _FaceEditorSection extends StatelessWidget {
     required this.onStageInteractionChanged,
     required this.onSelectStagePreview,
     required this.onGeneratePuzzle,
+    required this.onCancelPuzzle,
     required this.onGenerationDifficultyChanged,
     required this.onContentCategoryChanged,
     required this.onSettingsChanged,
@@ -2553,145 +2280,150 @@ class _FaceEditorSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasFaceSketch = sketchImageBytes != null;
-    final solutionControlsLocked = isLocked || isSolutionLocked;
+    final solutionControlsLocked =
+        isLocked || isSolutionLocked || isGeneratingPuzzle;
+    final puzzleControlsLocked = isLocked || isGeneratingPuzzle;
+    final header = AnimatedBuilder(
+      animation: solutionTextListenable,
+      builder: (context, _) {
+        final isSolutionStepComplete =
+            solutionTextListenable.value.trim().length >=
+                    _CreateLevelScreenState._minSolutionLength &&
+                hasFaceSketch;
 
-    return Column(
+        return Row(
+          children: <Widget>[
+            SizedBox(
+              width: 178,
+              child: Row(
+                children: <Widget>[
+                  _CompactActionButton(
+                    icon: Icons.restart_alt_rounded,
+                    label: 'Reset',
+                    enabled: !solutionControlsLocked &&
+                        !isGeneratingSketch &&
+                        sourceImageBytes != null,
+                    onPressed: onResetImageTransform,
+                    disabledMessage: sourceImageBytes == null
+                        ? 'Add a photo first.'
+                        : isGeneratingPuzzle
+                            ? 'Wait for puzzle generation to finish.'
+                            : isSolutionLocked
+                                ? 'Unlock the solution first to edit it.'
+                                : isGeneratingSketch
+                                    ? 'Wait for the sketch to finish updating.'
+                                    : isLocked
+                                        ? 'Submitted levels are locked and can no longer be edited.'
+                                        : null,
+                    dimension: 40,
+                  ),
+                  const SizedBox(width: 6),
+                  _CompactActionButton(
+                    icon: isTransformInteractionLocked
+                        ? Icons.lock_rounded
+                        : Icons.lock_open_rounded,
+                    label: isTransformInteractionLocked
+                        ? 'Frame Locked'
+                        : 'Lock Frame',
+                    enabled: !solutionControlsLocked &&
+                        !isGeneratingSketch &&
+                        sourceImageBytes != null,
+                    onPressed: onToggleTransformInteractionLock,
+                    disabledMessage: sourceImageBytes == null
+                        ? 'Add a photo first.'
+                        : isGeneratingPuzzle
+                            ? 'Wait for puzzle generation to finish.'
+                            : isSolutionLocked
+                                ? 'Unlock the solution first to edit it.'
+                                : isGeneratingSketch
+                                    ? 'Wait for the sketch to finish updating.'
+                                    : isLocked
+                                        ? 'Submitted levels are locked and can no longer be edited.'
+                                        : null,
+                    dimension: 40,
+                  ),
+                  const SizedBox(width: 6),
+                  _CompactActionButton(
+                    icon: Icons.delete_outline_rounded,
+                    label: 'Discard',
+                    enabled: !solutionControlsLocked &&
+                        !isGeneratingSketch &&
+                        sourceImageBytes != null,
+                    onPressed: onDiscardImage,
+                    disabledMessage: sourceImageBytes == null
+                        ? 'Add a photo first.'
+                        : isGeneratingPuzzle
+                            ? 'Wait for puzzle generation to finish.'
+                            : isSolutionLocked
+                                ? 'Unlock the solution first to edit it.'
+                                : isGeneratingSketch
+                                    ? 'Wait for the sketch to finish updating.'
+                                    : isLocked
+                                        ? 'Submitted levels are locked and can no longer be edited.'
+                                        : null,
+                    dimension: 40,
+                  ),
+                ],
+              ),
+            ),
+            const Spacer(),
+            _StageStepToggle(
+              value: stagePreviewMode,
+              canAccessPuzzleStep: isLocked || isSolutionStepComplete,
+              enabled: !isGeneratingPuzzle,
+              textTheme: textTheme,
+              onChanged: onSelectStagePreview,
+            ),
+          ],
+        );
+      },
+    );
+
+    final stage = stagePreviewMode == _StagePreviewMode.solution
+        ? _FaceSolutionStage(
+            sourceImageBytes: sourceImageBytes,
+            sourceImageSize: sourceImageSize,
+            sketchImageBytes: sketchImageBytes,
+            sourceTransform: sourceTransform,
+            isLoading: isLoadingSourceImage,
+            isGeneratingSketch: isGeneratingSketch,
+            isGeneratingTransform: isGeneratingTransform,
+            isTransformInteractionLocked: isTransformInteractionLocked,
+            borderColor: colorScheme.outlineVariant,
+            backgroundColor: canvasBackgroundColor,
+            foregroundColor: colorScheme.onSurfaceVariant,
+            isLocked: solutionControlsLocked,
+            onPickImage: onPickImage,
+            onTransformChanged: onSourceTransformChanged,
+            onTransformEnded: onSourceTransformEnded,
+            onInteractionChanged: onStageInteractionChanged,
+          )
+        : _PuzzleStage(
+            puzzleBytes: puzzleBytes,
+            existingPreviewUrlFuture: existingPuzzlePreviewUrlFuture,
+            hasStoredPuzzleImage: hasStoredPuzzleImage,
+            isGeneratingPuzzle: isGeneratingPuzzle,
+            statusText: puzzleGenerationStatus,
+            borderColor: colorScheme.outlineVariant,
+            backgroundColor: canvasBackgroundColor,
+            foregroundColor: colorScheme.onSurfaceVariant,
+            solutionBackdrop: sketchImageBytes == null
+                ? null
+                : IgnorePointer(
+                    child: Opacity(
+                      opacity: 0.14,
+                      child: Image.memory(
+                        sketchImageBytes!,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                      ),
+                    ),
+                  ),
+          );
+
+    final metadata = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        AnimatedBuilder(
-          animation: solutionTextListenable,
-          builder: (context, _) {
-            final isSolutionStepComplete =
-                solutionTextListenable.value.trim().length >=
-                        _CreateLevelScreenState._minSolutionLength &&
-                    hasFaceSketch;
-
-            return Row(
-              children: <Widget>[
-                SizedBox(
-                  width: 178,
-                  child: Row(
-                    children: <Widget>[
-                      _CompactActionButton(
-                        icon: Icons.restart_alt_rounded,
-                        label: 'Reset',
-                        enabled: !solutionControlsLocked &&
-                            !isGeneratingSketch &&
-                            sourceImageBytes != null,
-                        onPressed: onResetImageTransform,
-                        disabledMessage: sourceImageBytes == null
-                            ? 'Add a face photo first.'
-                            : isSolutionLocked
-                                ? 'Unlock the solution first to edit it.'
-                                : isGeneratingSketch
-                                    ? 'Wait for the sketch to finish updating.'
-                                    : isLocked
-                                        ? 'Submitted levels are locked and can no longer be edited.'
-                                        : null,
-                        dimension: 40,
-                      ),
-                      const SizedBox(width: 6),
-                      _CompactActionButton(
-                        icon: isTransformInteractionLocked
-                            ? Icons.lock_rounded
-                            : Icons.lock_open_rounded,
-                        label: isTransformInteractionLocked
-                            ? 'Frame Locked'
-                            : 'Lock Frame',
-                        enabled: !solutionControlsLocked &&
-                            !isGeneratingSketch &&
-                            sourceImageBytes != null,
-                        onPressed: onToggleTransformInteractionLock,
-                        disabledMessage: sourceImageBytes == null
-                            ? 'Add a face photo first.'
-                            : isSolutionLocked
-                                ? 'Unlock the solution first to edit it.'
-                                : isGeneratingSketch
-                                    ? 'Wait for the sketch to finish updating.'
-                                    : isLocked
-                                        ? 'Submitted levels are locked and can no longer be edited.'
-                                        : null,
-                        dimension: 40,
-                      ),
-                      const SizedBox(width: 6),
-                      _CompactActionButton(
-                        icon: Icons.delete_outline_rounded,
-                        label: 'Discard',
-                        enabled: !solutionControlsLocked &&
-                            !isGeneratingSketch &&
-                            sourceImageBytes != null,
-                        onPressed: onDiscardImage,
-                        disabledMessage: sourceImageBytes == null
-                            ? 'Add a face photo first.'
-                            : isSolutionLocked
-                                ? 'Unlock the solution first to edit it.'
-                                : isGeneratingSketch
-                                    ? 'Wait for the sketch to finish updating.'
-                                    : isLocked
-                                        ? 'Submitted levels are locked and can no longer be edited.'
-                                        : null,
-                        dimension: 40,
-                      ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                _StageStepToggle(
-                  value: stagePreviewMode,
-                  canAccessPuzzleStep: isLocked || isSolutionStepComplete,
-                  textTheme: textTheme,
-                  onChanged: onSelectStagePreview,
-                ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        AspectRatio(
-          aspectRatio: 1,
-          child: stagePreviewMode == _StagePreviewMode.solution
-              ? _FaceSolutionStage(
-                  sourceImageBytes: sourceImageBytes,
-                  sourceImageSize: sourceImageSize,
-                  sketchImageBytes: sketchImageBytes,
-                  sourceTransform: sourceTransform,
-                  isLoading: isLoadingSourceImage,
-                  isGeneratingSketch: isGeneratingSketch,
-                  isGeneratingTransform: isGeneratingTransform,
-                  isTransformInteractionLocked: isTransformInteractionLocked,
-                  borderColor: colorScheme.outlineVariant,
-                  backgroundColor: canvasBackgroundColor,
-                  foregroundColor: colorScheme.onSurfaceVariant,
-                  isLocked: solutionControlsLocked,
-                  onPickImage: onPickImage,
-                  onTransformChanged: onSourceTransformChanged,
-                  onTransformEnded: onSourceTransformEnded,
-                  onInteractionChanged: onStageInteractionChanged,
-                )
-              : _PuzzleStage(
-                  puzzleBytes: puzzleBytes,
-                  existingPreviewUrlFuture: existingPuzzlePreviewUrlFuture,
-                  hasStoredPuzzleImage: hasStoredPuzzleImage,
-                  isGeneratingPuzzle: isGeneratingPuzzle,
-                  statusText: puzzleGenerationStatus,
-                  borderColor: colorScheme.outlineVariant,
-                  backgroundColor: canvasBackgroundColor,
-                  foregroundColor: colorScheme.onSurfaceVariant,
-                  solutionBackdrop: sketchImageBytes == null
-                      ? null
-                      : IgnorePointer(
-                          child: Opacity(
-                            opacity: 0.14,
-                            child: Image.memory(
-                              sketchImageBytes!,
-                              fit: BoxFit.cover,
-                              gaplessPlayback: true,
-                            ),
-                          ),
-                        ),
-                ),
-        ),
-        const SizedBox(height: 12),
         if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
           if (isSolutionLocked) ...<Widget>[
             _SolutionPuzzleLinkNotice(
@@ -2700,11 +2432,13 @@ class _FaceEditorSection extends StatelessWidget {
             ),
             const SizedBox(height: 12),
           ],
-          TextField(
+          _ModalTextEditLauncher(
             controller: solutionController,
+            label: 'Solution',
+            icon: Icons.text_fields_rounded,
             enabled: !solutionControlsLocked,
+            emptyLabel: 'Tap to enter the solution',
             textCapitalization: TextCapitalization.characters,
-            textInputAction: TextInputAction.next,
             autocorrect: false,
             enableSuggestions: false,
             inputFormatters: <TextInputFormatter>[
@@ -2712,11 +2446,6 @@ class _FaceEditorSection extends StatelessWidget {
                 _CreateLevelScreenState._maxSolutionLength,
               ),
             ],
-            style: textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: colorScheme.onSurface,
-            ),
-            decoration: _solutionFieldDecoration(colorScheme),
           ),
           const SizedBox(height: 12),
           Row(
@@ -2839,17 +2568,16 @@ class _FaceEditorSection extends StatelessWidget {
             ],
           ),
         ] else ...<Widget>[
-          TextField(
+          _ModalTextEditLauncher(
             controller: promptController,
-            focusNode: generationPromptFocusNode,
+            label: 'Puzzle Scene',
+            icon: Icons.auto_awesome_outlined,
             enabled: !isLocked && !isGeneratingPuzzle,
-            textInputAction: TextInputAction.done,
-            maxLines: 2,
-            decoration: _sharedFieldDecoration(
-              colorScheme,
-              label: 'Puzzle Scene',
-              icon: Icons.auto_awesome_outlined,
-            ),
+            emptyLabel: 'Tap to describe the puzzle scene',
+            maxLines: 3,
+            editorMinLines: 8,
+            editorMaxLines: 12,
+            helperText: 'Describe the scene you want the generator to create.',
           ),
           const SizedBox(height: 6),
           Row(
@@ -2857,7 +2585,7 @@ class _FaceEditorSection extends StatelessWidget {
               SizedBox(
                 width: 54,
                 child: Text(
-                  'Hard',
+                  'Easy',
                   style: textTheme.labelMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w700,
@@ -2889,7 +2617,7 @@ class _FaceEditorSection extends StatelessWidget {
               SizedBox(
                 width: 54,
                 child: Text(
-                  'Easy',
+                  'Hard',
                   textAlign: TextAlign.end,
                   style: textTheme.labelMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
@@ -2902,7 +2630,7 @@ class _FaceEditorSection extends StatelessWidget {
           Align(
             alignment: Alignment.center,
             child: Text(
-              'Difficulty ${generationDifficulty.toStringAsFixed(1)} / 10 -> RunPod ${_effectiveRunpodControlStrength(generationDifficulty).toStringAsFixed(2)}',
+              'Difficulty ${generationDifficulty.toStringAsFixed(1)} / 10',
               style: textTheme.labelSmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -2915,20 +2643,25 @@ class _FaceEditorSection extends StatelessWidget {
               promptTextListenable,
             ]),
             builder: (context, _) {
-              final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
+              final hasPuzzlePreview =
+                  puzzleBytes != null || hasStoredPuzzleImage;
 
               return SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: onGeneratePuzzle,
-                  icon: Icon(
-                    hasPuzzlePreview
-                        ? Icons.refresh_rounded
-                        : Icons.auto_awesome_outlined,
-                  ),
+                  onPressed: isGeneratingPuzzle
+                      ? onCancelPuzzle
+                      : onGeneratePuzzle,
+                  icon: isGeneratingPuzzle
+                      ? const Icon(Icons.stop_circle_outlined)
+                      : Icon(
+                          hasPuzzlePreview
+                              ? Icons.refresh_rounded
+                              : Icons.auto_awesome_outlined,
+                        ),
                   label: Text(
                     isGeneratingPuzzle
-                        ? 'Generating...'
+                        ? 'Cancel Generation'
                         : hasPuzzlePreview
                             ? 'Regenerate Puzzle'
                             : 'Generate Puzzle',
@@ -2937,69 +2670,71 @@ class _FaceEditorSection extends StatelessWidget {
               );
             },
           ),
-          if (puzzleGenerationStatus.isNotEmpty) ...<Widget>[
+          if (puzzleGenerationLeaveHint != null) ...<Widget>[
             const SizedBox(height: 10),
             Text(
-              puzzleGenerationStatus,
+              puzzleGenerationLeaveHint!,
               style: textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+                color: colorScheme.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            if (puzzleGenerationLeaveHint != null) ...<Widget>[
-              const SizedBox(height: 4),
-              Text(
-                puzzleGenerationLeaveHint!,
-                style: textTheme.bodySmall?.copyWith(
-                  color: colorScheme.primary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
           ],
           const SizedBox(height: 12),
           _ContentCategorySelector(
-            label: 'Category',
+            label: 'Publish Category',
             value: contentCategory,
-            enabled: !isLocked,
+            enabled: !puzzleControlsLocked,
             textTheme: textTheme,
             colorScheme: colorScheme,
-            options: const <String>[
-              UserLevelContentCategory.faces,
-              UserLevelContentCategory.characters,
-            ],
+            options: UserLevelContentCategory.optionsForEditorMode(
+              UserLevelEditorMode.photoSketch,
+            ),
             onChanged: onContentCategoryChanged,
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: factController,
-            enabled: !isLocked,
-            textInputAction: TextInputAction.next,
-            maxLines: 2,
-            decoration: _sharedFieldDecoration(
-              colorScheme,
-              label: 'Fact Hint',
-              icon: Icons.lightbulb_outline,
+          const SizedBox(height: 6),
+          Text(
+            'Choose where this photo-based level belongs once it is reviewed.',
+            style: textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
+          _ModalTextEditLauncher(
+            controller: factController,
+            label: 'Fact Hint',
+            icon: Icons.lightbulb_outline,
+            enabled: !puzzleControlsLocked,
+            emptyLabel: 'Tap to add a fact hint',
+            maxLines: 3,
+          ),
+          const SizedBox(height: 12),
+          _ModalTextEditLauncher(
             controller: creatorNameController,
-            enabled: !isLocked,
+            label: 'Creator Name',
+            icon: Icons.badge_outlined,
+            enabled: !puzzleControlsLocked,
+            emptyLabel: 'Tap to enter creator name',
             textCapitalization: TextCapitalization.words,
-            decoration: _sharedFieldDecoration(
-              colorScheme,
-              label: 'Creator Name',
-              icon: Icons.badge_outlined,
-            ),
           ),
         ],
       ],
+    );
+
+    return _StableEditorSectionLayout(
+      scrollController: scrollController,
+      isStageInteracting: isStageInteracting,
+      header: header,
+      stage: stage,
+      metadata: metadata,
+      scrollStorageKey: 'face-editor-${stagePreviewMode.name}',
     );
   }
 }
 
 class _CanvasEditorSection extends StatelessWidget {
+  final ScrollController scrollController;
+  final bool isStageInteracting;
   final DrawingController controller;
   final ValueNotifier<bool> hasDrawingContentListenable;
   final TextEditingController solutionController;
@@ -3007,7 +2742,6 @@ class _CanvasEditorSection extends StatelessWidget {
   final TextEditingController factController;
   final TextEditingController creatorNameController;
   final TextEditingController promptController;
-  final FocusNode generationPromptFocusNode;
   final ValueNotifier<String> promptTextListenable;
   final TextTheme textTheme;
   final ColorScheme colorScheme;
@@ -3026,10 +2760,13 @@ class _CanvasEditorSection extends StatelessWidget {
   final ValueChanged<bool> onStageInteractionChanged;
   final ValueChanged<_StagePreviewMode> onSelectStagePreview;
   final VoidCallback onGeneratePuzzle;
+  final VoidCallback onCancelPuzzle;
   final ValueChanged<double> onGenerationDifficultyChanged;
   final VoidCallback onUnlockSolutionEditing;
 
   const _CanvasEditorSection({
+    required this.scrollController,
+    required this.isStageInteracting,
     required this.controller,
     required this.hasDrawingContentListenable,
     required this.solutionController,
@@ -3037,7 +2774,6 @@ class _CanvasEditorSection extends StatelessWidget {
     required this.factController,
     required this.creatorNameController,
     required this.promptController,
-    required this.generationPromptFocusNode,
     required this.promptTextListenable,
     required this.textTheme,
     required this.colorScheme,
@@ -3056,112 +2792,116 @@ class _CanvasEditorSection extends StatelessWidget {
     required this.onStageInteractionChanged,
     required this.onSelectStagePreview,
     required this.onGeneratePuzzle,
+    required this.onCancelPuzzle,
     required this.onGenerationDifficultyChanged,
     required this.onUnlockSolutionEditing,
   });
 
   @override
   Widget build(BuildContext context) {
-    final solutionControlsLocked = isLocked || isSolutionLocked;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        AnimatedBuilder(
-          animation: Listenable.merge(<Listenable>[
-            hasDrawingContentListenable,
-            solutionTextListenable,
-          ]),
-          builder: (context, _) {
-            final hasDrawingContent = hasDrawingContentListenable.value;
-            final isSolutionStepComplete =
-                solutionTextListenable.value.trim().length >=
-                        _CreateLevelScreenState._minSolutionLength &&
-                    hasDrawingContent;
-            final canEditCanvas =
-                stagePreviewMode == _StagePreviewMode.solution &&
-                    !solutionControlsLocked &&
-                    hasDrawingContent;
+    final solutionControlsLocked =
+        isLocked || isSolutionLocked || isGeneratingPuzzle;
+    final puzzleControlsLocked = isLocked || isGeneratingPuzzle;
+    final header = AnimatedBuilder(
+      animation: Listenable.merge(<Listenable>[
+        hasDrawingContentListenable,
+        solutionTextListenable,
+      ]),
+      builder: (context, _) {
+        final hasDrawingContent = hasDrawingContentListenable.value;
+        final isSolutionStepComplete =
+            solutionTextListenable.value.trim().length >=
+                    _CreateLevelScreenState._minSolutionLength &&
+                hasDrawingContent;
+        final canEditCanvas = stagePreviewMode == _StagePreviewMode.solution &&
+            !solutionControlsLocked &&
+            hasDrawingContent;
 
-            return Row(
-              children: <Widget>[
-                SizedBox(
-                  width: 86,
-                  child: Row(
-                    children: <Widget>[
-                      _CompactActionButton(
-                        icon: Icons.undo_rounded,
-                        label: 'Undo',
-                        enabled: canEditCanvas,
-                        onPressed: controller.undo,
-                        disabledMessage: isLocked
-                            ? 'Submitted levels are locked and can no longer be edited.'
+        return Row(
+          children: <Widget>[
+            SizedBox(
+              width: 86,
+              child: Row(
+                children: <Widget>[
+                  _CompactActionButton(
+                    icon: Icons.undo_rounded,
+                    label: 'Undo',
+                    enabled: canEditCanvas,
+                    onPressed: controller.undo,
+                    disabledMessage: isLocked
+                        ? 'Submitted levels are locked and can no longer be edited.'
+                        : isGeneratingPuzzle
+                            ? 'Wait for puzzle generation to finish.'
                             : isSolutionLocked
                                 ? 'Unlock the solution first to edit it.'
                                 : 'Nothing to undo yet.',
-                        dimension: 40,
-                      ),
-                      const SizedBox(width: 6),
-                      _CompactActionButton(
-                        icon: Icons.delete_outline_rounded,
-                        label: 'Delete',
-                        enabled: canEditCanvas,
-                        onPressed: controller.clear,
-                        disabledMessage: isLocked
-                            ? 'Submitted levels are locked and can no longer be edited.'
+                    dimension: 40,
+                  ),
+                  const SizedBox(width: 6),
+                  _CompactActionButton(
+                    icon: Icons.delete_outline_rounded,
+                    label: 'Delete',
+                    enabled: canEditCanvas,
+                    onPressed: controller.clear,
+                    disabledMessage: isLocked
+                        ? 'Submitted levels are locked and can no longer be edited.'
+                        : isGeneratingPuzzle
+                            ? 'Wait for puzzle generation to finish.'
                             : isSolutionLocked
                                 ? 'Unlock the solution first to edit it.'
                                 : 'Nothing to clear yet.',
-                        dimension: 40,
-                      ),
-                    ],
+                    dimension: 40,
                   ),
-                ),
-                const Spacer(),
-                const SizedBox(width: 8),
-                _StageStepToggle(
-                  value: stagePreviewMode,
-                  canAccessPuzzleStep: isLocked || isSolutionStepComplete,
-                  textTheme: textTheme,
-                  onChanged: onSelectStagePreview,
-                ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        AspectRatio(
-          aspectRatio: 1,
-          child: stagePreviewMode == _StagePreviewMode.solution
-              ? _DrawingStage(
+                ],
+              ),
+            ),
+            const Spacer(),
+            const SizedBox(width: 8),
+            _StageStepToggle(
+              value: stagePreviewMode,
+              canAccessPuzzleStep: isLocked || isSolutionStepComplete,
+              enabled: !isGeneratingPuzzle,
+              textTheme: textTheme,
+              onChanged: onSelectStagePreview,
+            ),
+          ],
+        );
+      },
+    );
+
+    final stage = stagePreviewMode == _StagePreviewMode.solution
+        ? _DrawingStage(
+            controller: controller,
+            backgroundColor: canvasBackgroundColor,
+            borderColor: colorScheme.outlineVariant,
+            isLocked: solutionControlsLocked,
+            normalizePoint: normalizePoint,
+            onInteractionChanged: onStageInteractionChanged,
+          )
+        : _PuzzleStage(
+            puzzleBytes: puzzleBytes,
+            existingPreviewUrlFuture: existingPuzzlePreviewUrlFuture,
+            hasStoredPuzzleImage: hasStoredPuzzleImage,
+            isGeneratingPuzzle: isGeneratingPuzzle,
+            statusText: puzzleGenerationStatus,
+            borderColor: colorScheme.outlineVariant,
+            backgroundColor: canvasBackgroundColor,
+            foregroundColor: colorScheme.onSurfaceVariant,
+            solutionBackdrop: IgnorePointer(
+              child: Opacity(
+                opacity: 0.14,
+                child: DrawingCanvas(
                   controller: controller,
                   backgroundColor: canvasBackgroundColor,
-                  borderColor: colorScheme.outlineVariant,
-                  isLocked: solutionControlsLocked,
-                  normalizePoint: normalizePoint,
-                  onInteractionChanged: onStageInteractionChanged,
-                )
-              : _PuzzleStage(
-                  puzzleBytes: puzzleBytes,
-                  existingPreviewUrlFuture: existingPuzzlePreviewUrlFuture,
-                  hasStoredPuzzleImage: hasStoredPuzzleImage,
-                  isGeneratingPuzzle: isGeneratingPuzzle,
-                  statusText: puzzleGenerationStatus,
-                  borderColor: colorScheme.outlineVariant,
-                  backgroundColor: canvasBackgroundColor,
-                  foregroundColor: colorScheme.onSurfaceVariant,
-                  solutionBackdrop: IgnorePointer(
-                    child: Opacity(
-                      opacity: 0.14,
-                      child: DrawingCanvas(
-                        controller: controller,
-                        backgroundColor: canvasBackgroundColor,
-                        paintBackground: false,
-                      ),
-                    ),
-                  ),
+                  paintBackground: false,
                 ),
-        ),
-        const SizedBox(height: 8),
+              ),
+            ),
+          );
+
+    final metadata = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
         if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
           if (isSolutionLocked) ...<Widget>[
             _SolutionPuzzleLinkNotice(
@@ -3234,8 +2974,8 @@ class _CanvasEditorSection extends StatelessWidget {
                                 min: 0.2,
                                 max: 1.0,
                                 divisions: 8,
-                                onChanged: canAdjustOpacity
-                                    && !solutionControlsLocked
+                                onChanged: canAdjustOpacity &&
+                                        !solutionControlsLocked
                                     ? controller.setOpacity
                                     : null,
                               ),
@@ -3283,35 +3023,32 @@ class _CanvasEditorSection extends StatelessWidget {
             },
           ),
           const SizedBox(height: 12),
-          TextField(
+          _ModalTextEditLauncher(
             controller: solutionController,
+            label: 'Solution',
+            icon: Icons.text_fields_rounded,
             enabled: !solutionControlsLocked,
+            emptyLabel: 'Tap to enter the solution',
             textCapitalization: TextCapitalization.characters,
-            textInputAction: TextInputAction.next,
             autocorrect: false,
             enableSuggestions: false,
             inputFormatters: <TextInputFormatter>[
               LengthLimitingTextInputFormatter(
-                  _CreateLevelScreenState._maxSolutionLength),
+                _CreateLevelScreenState._maxSolutionLength,
+              ),
             ],
-            style: textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: colorScheme.onSurface,
-            ),
-            decoration: _solutionFieldDecoration(colorScheme),
           ),
         ] else ...<Widget>[
-          TextField(
+          _ModalTextEditLauncher(
             controller: promptController,
-            focusNode: generationPromptFocusNode,
+            label: 'Puzzle Scene',
+            icon: Icons.auto_awesome_outlined,
             enabled: !isLocked && !isGeneratingPuzzle,
-            textInputAction: TextInputAction.done,
-            maxLines: 2,
-            decoration: _sharedFieldDecoration(
-              colorScheme,
-              label: 'Puzzle Scene',
-              icon: Icons.auto_awesome_outlined,
-            ),
+            emptyLabel: 'Tap to describe the puzzle scene',
+            maxLines: 3,
+            editorMinLines: 8,
+            editorMaxLines: 12,
+            helperText: 'Describe the scene you want the generator to create.',
           ),
           const SizedBox(height: 6),
           Row(
@@ -3319,7 +3056,7 @@ class _CanvasEditorSection extends StatelessWidget {
               SizedBox(
                 width: 54,
                 child: Text(
-                  'Hard',
+                  'Easy',
                   style: textTheme.labelMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w700,
@@ -3351,7 +3088,7 @@ class _CanvasEditorSection extends StatelessWidget {
               SizedBox(
                 width: 54,
                 child: Text(
-                  'Easy',
+                  'Hard',
                   textAlign: TextAlign.end,
                   style: textTheme.labelMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
@@ -3364,7 +3101,7 @@ class _CanvasEditorSection extends StatelessWidget {
           Align(
             alignment: Alignment.center,
             child: Text(
-              'Difficulty ${generationDifficulty.toStringAsFixed(1)} / 10 -> RunPod ${_effectiveRunpodControlStrength(generationDifficulty).toStringAsFixed(2)}',
+              'Difficulty ${generationDifficulty.toStringAsFixed(1)} / 10',
               style: textTheme.labelSmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -3378,20 +3115,25 @@ class _CanvasEditorSection extends StatelessWidget {
               promptTextListenable,
             ]),
             builder: (context, _) {
-              final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
+              final hasPuzzlePreview =
+                  puzzleBytes != null || hasStoredPuzzleImage;
 
               return SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: onGeneratePuzzle,
-                  icon: Icon(
-                    hasPuzzlePreview
-                        ? Icons.refresh_rounded
-                        : Icons.auto_awesome_outlined,
-                  ),
+                  onPressed: isGeneratingPuzzle
+                      ? onCancelPuzzle
+                      : onGeneratePuzzle,
+                  icon: isGeneratingPuzzle
+                      ? const Icon(Icons.stop_circle_outlined)
+                      : Icon(
+                          hasPuzzlePreview
+                              ? Icons.refresh_rounded
+                              : Icons.auto_awesome_outlined,
+                        ),
                   label: Text(
                     isGeneratingPuzzle
-                        ? 'Generating...'
+                        ? 'Cancel Generation'
                         : hasPuzzlePreview
                             ? 'Regenerate Puzzle'
                             : 'Generate Puzzle',
@@ -3400,51 +3142,45 @@ class _CanvasEditorSection extends StatelessWidget {
               );
             },
           ),
-          if (puzzleGenerationStatus.isNotEmpty) ...<Widget>[
+          if (puzzleGenerationLeaveHint != null) ...<Widget>[
             const SizedBox(height: 10),
             Text(
-              puzzleGenerationStatus,
+              puzzleGenerationLeaveHint!,
               style: textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+                color: colorScheme.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            if (puzzleGenerationLeaveHint != null) ...<Widget>[
-              const SizedBox(height: 4),
-              Text(
-                puzzleGenerationLeaveHint!,
-                style: textTheme.bodySmall?.copyWith(
-                  color: colorScheme.primary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
           ],
           const SizedBox(height: 12),
-          TextField(
+          _ModalTextEditLauncher(
             controller: factController,
-            enabled: !isLocked,
-            textInputAction: TextInputAction.next,
-            maxLines: 2,
-            decoration: _sharedFieldDecoration(
-              colorScheme,
-              label: 'Fact Hint',
-              icon: Icons.lightbulb_outline,
-            ),
+            label: 'Fact Hint',
+            icon: Icons.lightbulb_outline,
+            enabled: !puzzleControlsLocked,
+            emptyLabel: 'Tap to add a fact hint',
+            maxLines: 3,
           ),
           const SizedBox(height: 12),
-          TextField(
+          _ModalTextEditLauncher(
             controller: creatorNameController,
-            enabled: !isLocked,
+            label: 'Creator Name',
+            icon: Icons.badge_outlined,
+            enabled: !puzzleControlsLocked,
+            emptyLabel: 'Tap to enter creator name',
             textCapitalization: TextCapitalization.words,
-            decoration: _sharedFieldDecoration(
-              colorScheme,
-              label: 'Creator Name',
-              icon: Icons.badge_outlined,
-            ),
           ),
         ],
       ],
+    );
+
+    return _StableEditorSectionLayout(
+      scrollController: scrollController,
+      isStageInteracting: isStageInteracting,
+      header: header,
+      stage: stage,
+      metadata: metadata,
+      scrollStorageKey: 'canvas-editor-${stagePreviewMode.name}',
     );
   }
 }
@@ -4079,7 +3815,7 @@ class _FaceUploadStagePlaceholder extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Add Face Photo',
+                    'Add Photo',
                     textAlign: TextAlign.center,
                     style: textTheme.titleSmall?.copyWith(
                       color: foregroundColor.withValues(alpha: 0.94),
@@ -4352,55 +4088,6 @@ class _StageStatusLabel extends StatelessWidget {
   }
 }
 
-InputDecoration _sharedFieldDecoration(
-  ColorScheme colorScheme, {
-  required String label,
-  IconData? icon,
-}) {
-  final border = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(18),
-    borderSide: BorderSide(color: colorScheme.outlineVariant),
-  );
-
-  return InputDecoration(
-    labelText: label,
-    prefixIcon: icon == null ? null : Icon(icon),
-    filled: true,
-    fillColor: colorScheme.surface,
-    border: border,
-    enabledBorder: border,
-    disabledBorder: border,
-    focusedBorder: border.copyWith(
-      borderSide: BorderSide(color: colorScheme.primary, width: 2),
-    ),
-  );
-}
-
-InputDecoration _solutionFieldDecoration(
-  ColorScheme colorScheme, {
-  String label = 'Solution',
-  String hint = 'What should players guess?',
-}) {
-  final border = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(20),
-    borderSide: BorderSide(color: colorScheme.outlineVariant),
-  );
-
-  return InputDecoration(
-    labelText: label,
-    hintText: hint,
-    prefixIcon: const Icon(Icons.track_changes_outlined),
-    filled: true,
-    fillColor: colorScheme.surface,
-    border: border,
-    enabledBorder: border,
-    disabledBorder: border,
-    focusedBorder: border.copyWith(
-      borderSide: BorderSide(color: colorScheme.primary, width: 2),
-    ),
-  );
-}
-
 class _ContentCategorySelector extends StatelessWidget {
   final String label;
   final String value;
@@ -4458,12 +4145,14 @@ class _StageStepToggle extends StatelessWidget {
   final ValueChanged<_StagePreviewMode>? onChanged;
   final TextTheme textTheme;
   final bool canAccessPuzzleStep;
+  final bool enabled;
 
   const _StageStepToggle({
     required this.value,
     required this.onChanged,
     required this.textTheme,
     required this.canAccessPuzzleStep,
+    this.enabled = true,
   });
 
   @override
@@ -4493,8 +4182,9 @@ class _StageStepToggle extends StatelessWidget {
       ],
       selected: <_StagePreviewMode>{value},
       showSelectedIcon: false,
-      onSelectionChanged:
-          onChanged == null ? null : (selection) => onChanged!(selection.first),
+      onSelectionChanged: !enabled || onChanged == null
+          ? null
+          : (selection) => onChanged!(selection.first),
     );
   }
 }
@@ -4506,6 +4196,7 @@ class _EditorStepProgress extends StatelessWidget {
   final ColorScheme colorScheme;
   final TextTheme textTheme;
   final bool canAccessPuzzleStep;
+  final bool stepsEnabled;
   final ValueChanged<_StagePreviewMode> onStepSelected;
 
   const _EditorStepProgress({
@@ -4515,6 +4206,7 @@ class _EditorStepProgress extends StatelessWidget {
     required this.colorScheme,
     required this.textTheme,
     required this.canAccessPuzzleStep,
+    required this.stepsEnabled,
     required this.onStepSelected,
   });
 
@@ -4539,10 +4231,12 @@ class _EditorStepProgress extends StatelessWidget {
                 label: '1. Solution',
                 progress: solutionProgress,
                 isActive: solutionActive,
-                enabled: true,
+                enabled: stepsEnabled,
                 colorScheme: colorScheme,
                 textTheme: textTheme,
-                onTap: () => onStepSelected(_StagePreviewMode.solution),
+                onTap: stepsEnabled
+                    ? () => onStepSelected(_StagePreviewMode.solution)
+                    : null,
                 borderRadius: const BorderRadius.horizontal(
                   left: Radius.circular(15),
                 ),
@@ -4560,10 +4254,12 @@ class _EditorStepProgress extends StatelessWidget {
                 label: '2. Puzzle',
                 progress: puzzleProgress,
                 isActive: activeStep == _StagePreviewMode.puzzle,
-                enabled: canAccessPuzzleStep,
+                enabled: stepsEnabled && canAccessPuzzleStep,
                 colorScheme: colorScheme,
                 textTheme: textTheme,
-                onTap: () => onStepSelected(_StagePreviewMode.puzzle),
+                onTap: stepsEnabled && canAccessPuzzleStep
+                    ? () => onStepSelected(_StagePreviewMode.puzzle)
+                    : null,
                 borderRadius: const BorderRadius.horizontal(
                   right: Radius.circular(15),
                 ),
@@ -4706,7 +4402,60 @@ class _StepProgressSegment extends StatelessWidget {
   }
 }
 
+class _StableEditorSectionLayout extends StatelessWidget {
+  final ScrollController scrollController;
+  final bool isStageInteracting;
+  final Widget header;
+  final Widget stage;
+  final Widget metadata;
+  final String scrollStorageKey;
+
+  const _StableEditorSectionLayout({
+    required this.scrollController,
+    required this.isStageInteracting,
+    required this.header,
+    required this.stage,
+    required this.metadata,
+    required this.scrollStorageKey,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Expanded(
+          child: SingleChildScrollView(
+            key: PageStorageKey<String>(scrollStorageKey),
+            controller: scrollController,
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            physics: isStageInteracting
+                ? const NeverScrollableScrollPhysics()
+                : const ClampingScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                header,
+                const SizedBox(height: 8),
+                AspectRatio(
+                  aspectRatio: 1,
+                  child: RepaintBoundary(child: stage),
+                ),
+                const SizedBox(height: 12),
+                metadata,
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _WordEditorSection extends StatelessWidget {
+  final ScrollController scrollController;
+  final bool isStageInteracting;
   final WordOverlayController controller;
   final DrawingController drawingController;
   final ValueNotifier<bool> hasLettersListenable;
@@ -4715,7 +4464,6 @@ class _WordEditorSection extends StatelessWidget {
   final ValueNotifier<String> solutionTextListenable;
   final TextEditingController creatorNameController;
   final TextEditingController promptController;
-  final FocusNode generationPromptFocusNode;
   final ValueNotifier<String> promptTextListenable;
   final TextTheme textTheme;
   final ColorScheme colorScheme;
@@ -4735,10 +4483,13 @@ class _WordEditorSection extends StatelessWidget {
   final ValueChanged<bool> onStageInteractionChanged;
   final ValueChanged<_StagePreviewMode> onSelectStagePreview;
   final VoidCallback onGeneratePuzzle;
+  final VoidCallback onCancelPuzzle;
   final ValueChanged<double> onGenerationDifficultyChanged;
   final VoidCallback onUnlockSolutionEditing;
 
   const _WordEditorSection({
+    required this.scrollController,
+    required this.isStageInteracting,
     required this.controller,
     required this.drawingController,
     required this.hasLettersListenable,
@@ -4747,7 +4498,6 @@ class _WordEditorSection extends StatelessWidget {
     required this.solutionTextListenable,
     required this.creatorNameController,
     required this.promptController,
-    required this.generationPromptFocusNode,
     required this.promptTextListenable,
     required this.textTheme,
     required this.colorScheme,
@@ -4767,13 +4517,16 @@ class _WordEditorSection extends StatelessWidget {
     required this.onStageInteractionChanged,
     required this.onSelectStagePreview,
     required this.onGeneratePuzzle,
+    required this.onCancelPuzzle,
     required this.onGenerationDifficultyChanged,
     required this.onUnlockSolutionEditing,
   });
 
   @override
   Widget build(BuildContext context) {
-    final solutionControlsLocked = isLocked || isSolutionLocked;
+    final solutionControlsLocked =
+        isLocked || isSolutionLocked || isGeneratingPuzzle;
+    final puzzleControlsLocked = isLocked || isGeneratingPuzzle;
     final compactSegmentStyle = ButtonStyle(
       visualDensity: VisualDensity.compact,
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -4785,130 +4538,131 @@ class _WordEditorSection extends StatelessWidget {
       ),
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        AnimatedBuilder(
-          animation: Listenable.merge(<Listenable>[
-            hasLettersListenable,
-            hasDrawingContentListenable,
-            solutionTextListenable,
-          ]),
-          builder: (context, _) {
-            final hasLetters = hasLettersListenable.value;
-            final hasDrawingContent = hasDrawingContentListenable.value;
-            final isSolutionStepComplete =
-                solutionTextListenable.value.trim().length >=
-                        _CreateLevelScreenState._minSolutionLength &&
-                    hasLetters;
-            final canEditDrawing =
-                stagePreviewMode == _StagePreviewMode.solution &&
-                    !solutionControlsLocked &&
-                    hasDrawingContent;
+    final header = AnimatedBuilder(
+      animation: Listenable.merge(<Listenable>[
+        hasLettersListenable,
+        hasDrawingContentListenable,
+        solutionTextListenable,
+      ]),
+      builder: (context, _) {
+        final hasLetters = hasLettersListenable.value;
+        final hasDrawingContent = hasDrawingContentListenable.value;
+        final isSolutionStepComplete =
+            solutionTextListenable.value.trim().length >=
+                    _CreateLevelScreenState._minSolutionLength &&
+                hasLetters;
+        final canEditDrawing = stagePreviewMode == _StagePreviewMode.solution &&
+            !solutionControlsLocked &&
+            hasDrawingContent;
 
-            return Row(
-              children: <Widget>[
-                SizedBox(
-                  width: 86,
-                  child: Row(
-                    children: <Widget>[
-                      _CompactActionButton(
-                        icon: Icons.undo_rounded,
-                        label: 'Undo',
-                        enabled: canEditDrawing,
-                        onPressed: drawingController.undo,
-                        disabledMessage: isLocked
-                            ? 'Submitted levels are locked and can no longer be edited.'
+        return Row(
+          children: <Widget>[
+            SizedBox(
+              width: 86,
+              child: Row(
+                children: <Widget>[
+                  _CompactActionButton(
+                    icon: Icons.undo_rounded,
+                    label: 'Undo',
+                    enabled: canEditDrawing,
+                    onPressed: drawingController.undo,
+                    disabledMessage: isLocked
+                        ? 'Submitted levels are locked and can no longer be edited.'
+                        : isGeneratingPuzzle
+                            ? 'Wait for puzzle generation to finish.'
                             : isSolutionLocked
                                 ? 'Unlock the solution first to edit it.'
                                 : 'Nothing to undo yet.',
-                        dimension: 40,
-                      ),
-                      const SizedBox(width: 6),
-                      _CompactActionButton(
-                        icon: Icons.delete_outline_rounded,
-                        label: 'Delete',
-                        enabled: canEditDrawing,
-                        onPressed: drawingController.clear,
-                        disabledMessage: isLocked
-                            ? 'Submitted levels are locked and can no longer be edited.'
+                    dimension: 40,
+                  ),
+                  const SizedBox(width: 6),
+                  _CompactActionButton(
+                    icon: Icons.delete_outline_rounded,
+                    label: 'Delete',
+                    enabled: canEditDrawing,
+                    onPressed: drawingController.clear,
+                    disabledMessage: isLocked
+                        ? 'Submitted levels are locked and can no longer be edited.'
+                        : isGeneratingPuzzle
+                            ? 'Wait for puzzle generation to finish.'
                             : isSolutionLocked
                                 ? 'Unlock the solution first to edit it.'
                                 : 'Nothing to clear yet.',
-                        dimension: 40,
-                      ),
-                    ],
+                    dimension: 40,
                   ),
-                ),
-                const Spacer(),
-                _StageStepToggle(
-                  value: stagePreviewMode,
-                  canAccessPuzzleStep: isLocked || isSolutionStepComplete,
-                  textTheme: textTheme,
-                  onChanged: onSelectStagePreview,
-                ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        AspectRatio(
-          aspectRatio: 1,
-          child: Stack(
-            fit: StackFit.expand,
-            children: <Widget>[
-              stagePreviewMode == _StagePreviewMode.solution
-                  ? WordOverlayStage(
+                ],
+              ),
+            ),
+            const Spacer(),
+            _StageStepToggle(
+              value: stagePreviewMode,
+              canAccessPuzzleStep: isLocked || isSolutionStepComplete,
+              enabled: !isGeneratingPuzzle,
+              textTheme: textTheme,
+              onChanged: onSelectStagePreview,
+            ),
+          ],
+        );
+      },
+    );
+
+    final stage = Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        stagePreviewMode == _StagePreviewMode.solution
+            ? WordOverlayStage(
+                controller: controller,
+                drawingController: drawingController,
+                isLocked: solutionControlsLocked,
+                normalizePoint: normalizePoint,
+                onInteractionChanged: onStageInteractionChanged,
+                borderColor: colorScheme.outlineVariant,
+                backgroundColor: canvasBackgroundColor,
+                foregroundColor: colorScheme.onSurfaceVariant,
+              )
+            : _PuzzleStage(
+                puzzleBytes: puzzleBytes,
+                existingPreviewUrlFuture: existingPuzzlePreviewUrlFuture,
+                hasStoredPuzzleImage: hasStoredPuzzleImage,
+                isGeneratingPuzzle: isGeneratingPuzzle,
+                statusText: puzzleGenerationStatus,
+                borderColor: colorScheme.outlineVariant,
+                backgroundColor: canvasBackgroundColor,
+                foregroundColor: colorScheme.onSurfaceVariant,
+                solutionBackdrop: IgnorePointer(
+                  child: Opacity(
+                    opacity: 0.14,
+                    child: WordOverlayStage(
                       controller: controller,
                       drawingController: drawingController,
-                      isLocked: solutionControlsLocked,
-                      normalizePoint: normalizePoint,
-                      onInteractionChanged: onStageInteractionChanged,
-                      borderColor: colorScheme.outlineVariant,
-                      backgroundColor: canvasBackgroundColor,
+                      isLocked: true,
+                      normalizePoint: null,
+                      onInteractionChanged: (_) {},
+                      borderColor: Colors.transparent,
+                      backgroundColor: Colors.transparent,
                       foregroundColor: colorScheme.onSurfaceVariant,
-                    )
-                  : _PuzzleStage(
-                      puzzleBytes: puzzleBytes,
-                      existingPreviewUrlFuture: existingPuzzlePreviewUrlFuture,
-                      hasStoredPuzzleImage: hasStoredPuzzleImage,
-                      isGeneratingPuzzle: isGeneratingPuzzle,
-                      statusText: puzzleGenerationStatus,
-                      borderColor: colorScheme.outlineVariant,
-                      backgroundColor: canvasBackgroundColor,
-                      foregroundColor: colorScheme.onSurfaceVariant,
-                      solutionBackdrop: IgnorePointer(
-                        child: Opacity(
-                          opacity: 0.14,
-                          child: WordOverlayStage(
-                            controller: controller,
-                            drawingController: drawingController,
-                            isLocked: true,
-                            normalizePoint: null,
-                            onInteractionChanged: (_) {},
-                            borderColor: Colors.transparent,
-                            backgroundColor: Colors.transparent,
-                            foregroundColor: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
                     ),
-          if (isLoadingInitialOverlay)
-                const Positioned(
-                  left: -2,
-                  top: -2,
-                  right: -2,
-                  bottom: -2,
-                  child: ShimmerLoadingPlaceholder(
-                    width: double.infinity,
-                    height: double.infinity,
-                    borderRadius: 0,
                   ),
                 ),
-            ],
+              ),
+        if (isLoadingInitialOverlay)
+          const Positioned(
+            left: -2,
+            top: -2,
+            right: -2,
+            bottom: -2,
+            child: ShimmerLoadingPlaceholder(
+              width: double.infinity,
+              height: double.infinity,
+              borderRadius: 0,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
+      ],
+    );
+
+    final metadata = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
         if (stagePreviewMode == _StagePreviewMode.solution) ...<Widget>[
           if (isSolutionLocked) ...<Widget>[
             _SolutionPuzzleLinkNotice(
@@ -4982,8 +4736,8 @@ class _WordEditorSection extends StatelessWidget {
                                 min: 0.2,
                                 max: 1.0,
                                 divisions: 8,
-                                onChanged: canAdjustOpacity
-                                    && !solutionControlsLocked
+                                onChanged: canAdjustOpacity &&
+                                        !solutionControlsLocked
                                     ? drawingController.setOpacity
                                     : null,
                               ),
@@ -5031,26 +4785,21 @@ class _WordEditorSection extends StatelessWidget {
             },
           ),
           const SizedBox(height: 12),
-          TextField(
+          _ModalTextEditLauncher(
             controller: solutionController,
+            label: 'Solution',
+            icon: Icons.text_fields_rounded,
             enabled: !solutionControlsLocked,
+            emptyLabel: 'Tap to enter the word solution',
             textCapitalization: TextCapitalization.characters,
-            textInputAction: TextInputAction.next,
             autocorrect: false,
             enableSuggestions: false,
             inputFormatters: <TextInputFormatter>[
               LengthLimitingTextInputFormatter(
-                  _CreateLevelScreenState._maxSolutionLength),
+                _CreateLevelScreenState._maxSolutionLength,
+              ),
             ],
-            style: textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: colorScheme.onSurface,
-              letterSpacing: 0.5,
-            ),
-            decoration: _solutionFieldDecoration(
-              colorScheme,
-              hint: 'Type the word and letters appear on the stage.',
-            ),
+            helperText: 'Type the word and the letters will update when you save.',
           ),
           const SizedBox(height: 12),
           Text(
@@ -5082,16 +4831,16 @@ class _WordEditorSection extends StatelessWidget {
             ),
           ),
         ] else ...<Widget>[
-          TextField(
+          _ModalTextEditLauncher(
             controller: promptController,
-            focusNode: generationPromptFocusNode,
+            label: 'Puzzle Scene',
+            icon: Icons.auto_awesome_outlined,
             enabled: !isLocked && !isGeneratingPuzzle,
-            maxLines: 2,
-            decoration: _sharedFieldDecoration(
-              colorScheme,
-              label: 'Puzzle Scene',
-              icon: Icons.auto_awesome_outlined,
-            ),
+            emptyLabel: 'Tap to describe the puzzle scene',
+            maxLines: 3,
+            editorMinLines: 8,
+            editorMaxLines: 12,
+            helperText: 'Describe the scene you want the generator to create.',
           ),
           const SizedBox(height: 6),
           Row(
@@ -5099,7 +4848,7 @@ class _WordEditorSection extends StatelessWidget {
               SizedBox(
                 width: 54,
                 child: Text(
-                  'Hard',
+                  'Easy',
                   style: textTheme.labelMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w700,
@@ -5122,7 +4871,7 @@ class _WordEditorSection extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    'Easy',
+                    'Hard',
                     textAlign: TextAlign.end,
                     style: textTheme.labelMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
@@ -5136,7 +4885,7 @@ class _WordEditorSection extends StatelessWidget {
           Align(
             alignment: Alignment.center,
             child: Text(
-              'Difficulty ${generationDifficulty.toStringAsFixed(1)} / 10 -> RunPod ${_effectiveRunpodControlStrength(generationDifficulty).toStringAsFixed(2)}',
+              'Difficulty ${generationDifficulty.toStringAsFixed(1)} / 10',
               style: textTheme.labelSmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -5150,20 +4899,25 @@ class _WordEditorSection extends StatelessWidget {
               promptTextListenable,
             ]),
             builder: (context, _) {
-              final hasPuzzlePreview = puzzleBytes != null || hasStoredPuzzleImage;
+              final hasPuzzlePreview =
+                  puzzleBytes != null || hasStoredPuzzleImage;
 
               return SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: onGeneratePuzzle,
-                  icon: Icon(
-                    hasPuzzlePreview
-                        ? Icons.refresh_rounded
-                        : Icons.auto_awesome_outlined,
-                  ),
+                  onPressed: isGeneratingPuzzle
+                      ? onCancelPuzzle
+                      : onGeneratePuzzle,
+                  icon: isGeneratingPuzzle
+                      ? const Icon(Icons.stop_circle_outlined)
+                      : Icon(
+                          hasPuzzlePreview
+                              ? Icons.refresh_rounded
+                              : Icons.auto_awesome_outlined,
+                        ),
                   label: Text(
                     isGeneratingPuzzle
-                        ? 'Generating...'
+                        ? 'Cancel Generation'
                         : hasPuzzlePreview
                             ? 'Regenerate Puzzle'
                             : 'Generate Puzzle',
@@ -5172,39 +4926,36 @@ class _WordEditorSection extends StatelessWidget {
               );
             },
           ),
-          if (puzzleGenerationStatus.isNotEmpty) ...<Widget>[
+          if (puzzleGenerationLeaveHint != null) ...<Widget>[
             const SizedBox(height: 10),
             Text(
-              puzzleGenerationStatus,
+              puzzleGenerationLeaveHint!,
               style: textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+                color: colorScheme.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            if (puzzleGenerationLeaveHint != null) ...<Widget>[
-              const SizedBox(height: 4),
-              Text(
-                puzzleGenerationLeaveHint!,
-                style: textTheme.bodySmall?.copyWith(
-                  color: colorScheme.primary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
           ],
           const SizedBox(height: 12),
-          TextField(
+          _ModalTextEditLauncher(
             controller: creatorNameController,
-            enabled: !isLocked,
+            label: 'Creator Name',
+            icon: Icons.badge_outlined,
+            enabled: !puzzleControlsLocked,
+            emptyLabel: 'Tap to enter creator name',
             textCapitalization: TextCapitalization.words,
-            decoration: _sharedFieldDecoration(
-              colorScheme,
-              label: 'Creator Name',
-              icon: Icons.badge_outlined,
-            ),
           ),
         ],
       ],
+    );
+
+    return _StableEditorSectionLayout(
+      scrollController: scrollController,
+      isStageInteracting: isStageInteracting,
+      header: header,
+      stage: stage,
+      metadata: metadata,
+      scrollStorageKey: 'word-editor-${stagePreviewMode.name}',
     );
   }
 }
@@ -5738,28 +5489,262 @@ class _SolutionPuzzleLinkNotice extends StatelessWidget {
   }
 }
 
-class _SectionCard extends StatelessWidget {
-  final Widget child;
-  final EdgeInsetsGeometry padding;
+class _ModalTextEditLauncher extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final bool enabled;
+  final String emptyLabel;
+  final int maxLines;
+  final int? editorMinLines;
+  final int? editorMaxLines;
+  final TextCapitalization textCapitalization;
+  final List<TextInputFormatter> inputFormatters;
+  final bool autocorrect;
+  final bool enableSuggestions;
+  final String? helperText;
 
-  const _SectionCard({
-    required this.child,
-    this.padding = const EdgeInsets.all(16),
+  const _ModalTextEditLauncher({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    required this.enabled,
+    required this.emptyLabel,
+    this.maxLines = 1,
+    this.editorMinLines,
+    this.editorMaxLines,
+    this.textCapitalization = TextCapitalization.sentences,
+    this.inputFormatters = const <TextInputFormatter>[],
+    this.autocorrect = true,
+    this.enableSuggestions = true,
+    this.helperText,
   });
+
+  Future<void> _openEditor(BuildContext context) async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        fullscreenDialog: true,
+        builder: (_) => _ModalTextEditPage(
+          initialValue: controller.text,
+          label: label,
+          minLines: editorMinLines ?? (maxLines == 1 ? 1 : maxLines),
+          maxLines: editorMaxLines ?? maxLines,
+          textCapitalization: textCapitalization,
+          inputFormatters: inputFormatters,
+          autocorrect: autocorrect,
+          enableSuggestions: enableSuggestions,
+          helperText: helperText,
+        ),
+      ),
+    );
+
+    if (result == null) {
+      return;
+    }
+
+    controller.value = controller.value.copyWith(
+      text: result,
+      selection: TextSelection.collapsed(offset: result.length),
+      composing: TextRange.empty,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final colorScheme = Theme.of(context).colorScheme;
+        final textTheme = Theme.of(context).textTheme;
+        final value = controller.text.trim();
+        final hasValue = value.isNotEmpty;
+
+        return Opacity(
+          opacity: enabled ? 1 : 0.56,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: enabled ? () => _openEditor(context) : null,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: colorScheme.outlineVariant),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Icon(icon, color: colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            label,
+                            style: textTheme.labelLarge?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            hasValue ? value : emptyLabel,
+                            maxLines: maxLines == 1 ? 1 : 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: hasValue
+                                  ? colorScheme.onSurface
+                                  : colorScheme.onSurfaceVariant,
+                              fontWeight:
+                                  hasValue ? FontWeight.w600 : FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Icon(
+                      Icons.edit_outlined,
+                      size: 18,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ModalTextEditPage extends StatefulWidget {
+  final String initialValue;
+  final String label;
+  final int minLines;
+  final int maxLines;
+  final TextCapitalization textCapitalization;
+  final List<TextInputFormatter> inputFormatters;
+  final bool autocorrect;
+  final bool enableSuggestions;
+  final String? helperText;
+
+  const _ModalTextEditPage({
+    required this.initialValue,
+    required this.label,
+    required this.minLines,
+    required this.maxLines,
+    required this.textCapitalization,
+    required this.inputFormatters,
+    required this.autocorrect,
+    required this.enableSuggestions,
+    required this.helperText,
+  });
+
+  @override
+  State<_ModalTextEditPage> createState() => _ModalTextEditPageState();
+}
+
+class _ModalTextEditPageState extends State<_ModalTextEditPage> {
+  late final TextEditingController _draftController;
+  late final FocusNode _focusNode;
+  bool _isClosing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _draftController = TextEditingController(text: widget.initialValue);
+    _focusNode = FocusNode();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      if (!mounted) {
+        return;
+      }
+      _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _draftController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _commitAndClose() async {
+    if (_isClosing) {
+      return;
+    }
+    _isClosing = true;
+    FocusScope.of(context).unfocus();
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(context).pop(_draftController.text);
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colorScheme.outlineVariant),
+    final textTheme = Theme.of(context).textTheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.label),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => _commitAndClose(),
+            child: const Text('Done'),
+          ),
+        ],
       ),
-      child: Padding(
-        padding: padding,
-        child: child,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              if (widget.helperText != null &&
+                  widget.helperText!.trim().isNotEmpty) ...<Widget>[
+                Text(
+                  widget.helperText!,
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              TextField(
+                controller: _draftController,
+                focusNode: _focusNode,
+                minLines: widget.minLines,
+                maxLines: widget.maxLines,
+                textCapitalization: widget.textCapitalization,
+                inputFormatters: widget.inputFormatters,
+                autocorrect: widget.autocorrect,
+                enableSuggestions: widget.enableSuggestions,
+                textInputAction:
+                    widget.maxLines > 1 ? TextInputAction.newline : TextInputAction.done,
+                decoration: InputDecoration(
+                  labelText: widget.label,
+                  border: const OutlineInputBorder(),
+                ),
+                onSubmitted: widget.maxLines > 1
+                    ? null
+                    : (_) => _commitAndClose(),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => _commitAndClose(),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

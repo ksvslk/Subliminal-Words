@@ -20,6 +20,7 @@ const {
 } = require('./src/face_upload_validation');
 const { sanitizeUploadedFaceImage } = require('./src/face_upload_processing');
 const { validateWritableCreatorDraft } = require('./src/creator_draft_access');
+const { planUserLevelDeletion } = require('./src/user_level_deletion');
 admin.initializeApp();
 
 const runpodProxyBearer = defineSecret('RUNPOD_PROXY_BEARER');
@@ -45,6 +46,23 @@ async function assertCreatorCanUseUserLevels(db, uid) {
             ? `Level creation is unavailable for this account right now. ${reason}`
             : 'Level creation is unavailable for this account right now.',
     );
+}
+
+async function deleteStorageFileIfExists(bucket, storagePath) {
+    const normalizedPath = String(storagePath || '').trim();
+    if (!normalizedPath) {
+        return;
+    }
+
+    try {
+        await bucket.file(normalizedPath).delete();
+    } catch (error) {
+        const code = Number(error?.code || 0);
+        if (code === 404) {
+            return;
+        }
+        throw error;
+    }
 }
 
 exports.checkAndAssignPromoCode = onDocumentUpdated('players/{playerId}', async (event) => {
@@ -154,7 +172,7 @@ function buildRunpodWorkflow(prompt, difficulty, solutionFileName = '1.png') {
         '16': {
             class_type: 'ControlNetApplyAdvanced',
             inputs: {
-                strength: Math.max(0.1, difficulty / 5),
+                strength: 5.0 - (Math.min(1, Math.max(0, (difficulty - 1.0) / 9.0)) * 4.9),
                 start_percent: 0.0,
                 end_percent: 1.0,
                 positive: ['11', 0],
@@ -263,7 +281,6 @@ exports.startUserLevelPuzzleGeneration = onCall({
     }
 
     const db = admin.firestore();
-    await assertCreatorCanUseUserLevels(db, uid);
     if (levelId) {
         const ownerLevelSnapshot = await db
             .collection('userLevels')
@@ -520,6 +537,90 @@ exports.sanitizeUserLevelUpload = onCall({
         safetyStatus: 'clean',
         nsfwCheckStatus: safeSearch.status,
         safeSearch,
+    };
+});
+
+exports.deleteUserLevelDraft = onCall(async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+        throw new HttpsError('unauthenticated', 'You must be signed in before deleting a level.');
+    }
+
+    const levelId = String(request.data?.levelId || '').trim();
+    if (!levelId) {
+        throw new HttpsError('invalid-argument', 'A levelId is required.');
+    }
+
+    const db = admin.firestore();
+    await assertCreatorCanUseUserLevels(db, uid);
+
+    const ownerLevelRef = db.collection('userLevels').doc(uid).collection('levels').doc(levelId);
+    const ownerLevelSnapshot = await ownerLevelRef.get();
+    if (!ownerLevelSnapshot.exists) {
+        return {
+            deleted: false,
+            mode: 'missing',
+            deletedSubmissionCount: 0,
+        };
+    }
+
+    const levelData = ownerLevelSnapshot.data() || {};
+    const submissionsSnapshot = await db
+        .collection('userLevelSubmissions')
+        .where('ownerLevelPath', '==', ownerLevelRef.path)
+        .get();
+    const submissionDocs = submissionsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        data: doc.data() || {},
+    }));
+
+    const deletionPlan = planUserLevelDeletion({
+        levelData,
+        submissionDocs,
+    });
+
+    const batch = db.batch();
+    batch.delete(ownerLevelRef);
+    if (deletionPlan.deleteSubmissionDocs) {
+        for (const submissionDoc of submissionsSnapshot.docs) {
+            batch.delete(submissionDoc.ref);
+        }
+    }
+    await batch.commit();
+
+    const bucket = admin.storage().bucket();
+    const editorData = levelData.editorData && typeof levelData.editorData === 'object'
+        ? levelData.editorData
+        : {};
+    const explicitStoragePaths = new Set([
+        String(levelData.solutionPath || '').trim(),
+        String(levelData.puzzlePath || '').trim(),
+        String(levelData.puzzleThumbnailPath || '').trim(),
+        String(editorData.sourceImagePath || '').trim(),
+    ]);
+
+    for (const storagePath of explicitStoragePaths) {
+        await deleteStorageFileIfExists(bucket, storagePath);
+    }
+
+    try {
+        await bucket.deleteFiles({
+            force: true,
+            prefix: `user-levels/${uid}/${levelId}/`,
+        });
+    } catch (error) {
+        const code = Number(error?.code || 0);
+        if (code !== 404) {
+            throw error;
+        }
+    }
+
+    return {
+        deleted: true,
+        mode: deletionPlan.published
+            ? 'private_copy_deleted'
+            : 'draft_and_submission_deleted',
+        deletedSubmissionCount: deletionPlan.submissionDocIdsToDelete.length,
     };
 });
 
