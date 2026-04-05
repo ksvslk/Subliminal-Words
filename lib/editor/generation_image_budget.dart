@@ -1,5 +1,4 @@
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image/image.dart' as img;
 
@@ -37,6 +36,25 @@ Future<Uint8List> buildGenerationControlJpeg(
   int targetBytes = kGenerationControlTargetBytes,
   String failureLabel = 'generation control image',
 }) async {
+  return compute(
+    _buildGenerationControlJpegIsolate,
+    <String, dynamic>{
+      'sourceBytes': sourceBytes,
+      'dimension': dimension,
+      'targetBytes': targetBytes,
+      'failureLabel': failureLabel,
+    },
+  );
+}
+
+Uint8List _buildGenerationControlJpegIsolate(Map<String, dynamic> payload) {
+  final sourceBytes = payload['sourceBytes'] as Uint8List;
+  final dimension = payload['dimension'] as int? ?? kGenerationPayloadDimension;
+  final targetBytes =
+      payload['targetBytes'] as int? ?? kGenerationControlTargetBytes;
+  final failureLabel =
+      payload['failureLabel'] as String? ?? 'generation control image';
+
   final decoded = img.decodeImage(sourceBytes);
   if (decoded == null) {
     throw StateError('Could not decode the $failureLabel.');
@@ -118,6 +136,19 @@ Future<Uint8List> compressStoredPuzzleWebp(
   return candidate;
 }
 
+Future<Uint8List> prepareStoredPuzzleSourceJpeg(
+  Uint8List sourceBytes, {
+  String failureLabel = 'puzzle image',
+}) {
+  return compute(
+    _prepareStoredPuzzleSourceJpegIsolate,
+    <String, dynamic>{
+      'sourceBytes': sourceBytes,
+      'failureLabel': failureLabel,
+    },
+  );
+}
+
 Future<Uint8List> compressStoredPuzzleThumbnailWebp(
   Uint8List sourceBytes, {
   String failureLabel = 'puzzle thumbnail',
@@ -142,6 +173,35 @@ Future<({Uint8List imageBytes, Uint8List thumbnailBytes})>
   return (
     imageBytes: imageBytes,
     thumbnailBytes: thumbnailBytes,
+  );
+}
+
+Uint8List _prepareStoredPuzzleSourceJpegIsolate(Map<String, dynamic> payload) {
+  final sourceBytes = payload['sourceBytes'] as Uint8List;
+  final failureLabel = payload['failureLabel'] as String? ?? 'puzzle image';
+
+  final decodedImage = img.decodeImage(sourceBytes);
+  if (decodedImage == null) {
+    throw StateError('Could not read the selected $failureLabel.');
+  }
+
+  final normalizedImage =
+      decodedImage.width > kStoredPuzzleDimension ||
+              decodedImage.height > kStoredPuzzleDimension
+          ? img.copyResize(
+              decodedImage,
+              width: decodedImage.width >= decodedImage.height
+                  ? kStoredPuzzleDimension
+                  : null,
+              height: decodedImage.height > decodedImage.width
+                  ? kStoredPuzzleDimension
+                  : null,
+              interpolation: img.Interpolation.average,
+            )
+          : decodedImage;
+
+  return Uint8List.fromList(
+    img.encodeJpg(normalizedImage, quality: 94),
   );
 }
 

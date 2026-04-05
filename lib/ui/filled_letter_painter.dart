@@ -58,16 +58,17 @@ class FilledLetterPainter extends CustomPainter {
 
     final glyphPath = path;
     if (glyphPath != null) {
-      final Paint neonBase = Paint()
-        ..color = firstColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 6.0;
-
       final Paint neonGlow = Paint()
-        ..color = secondColor
+        ..color = secondColor.withValues(alpha: opacity)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 8.0
+        ..strokeWidth = glowStrokeWidth
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0);
+
+      final Paint neonBase = Paint()
+        ..color = firstColor.withValues(alpha: opacity)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = baseStrokeWidth;
+
       canvas.drawPath(glyphPath, neonGlow);
       canvas.drawPath(glyphPath, neonBase);
       return;
@@ -102,6 +103,7 @@ class FilledLetterPainter extends CustomPainter {
         ..color = secondColor.withValues(alpha: opacity)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0),
     );
+
     final baseStyle = TextStyle(
       fontSize: fontSize,
       fontWeight: wordLetterFontWeight(fontWeightValue),
@@ -116,6 +118,7 @@ class FilledLetterPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.center,
     )..layout();
+
     final basePainter = TextPainter(
       text: TextSpan(text: glyphText, style: baseStyle),
       textDirection: TextDirection.ltr,
@@ -127,7 +130,12 @@ class FilledLetterPainter extends CustomPainter {
       -glowPainter.height / 2,
     );
     glowPainter.paint(canvas, offset);
-    basePainter.paint(canvas, offset);
+    
+    final baseOffset = Offset(
+      -basePainter.width / 2,
+      -basePainter.height / 2,
+    );
+    basePainter.paint(canvas, baseOffset);
     canvas.restore();
   }
 }

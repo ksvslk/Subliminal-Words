@@ -78,10 +78,11 @@ class SWLevel {
   factory SWLevel.fromFirestore(
       String id, String packId, Map<String, dynamic> data) {
     final hintType = data['hintType'] as String?;
+    final resolvedNr = int.tryParse(id) ?? data['nr'] ?? 0;
     return SWLevel(
-      id: '${packId}__${data['nr']}',
+      id: '${packId}__$resolvedNr',
       documentId: id,
-      nr: data['nr'] ?? 0,
+      nr: resolvedNr,
       packId: packId,
       name: data['name'] ?? 'Unnamed Level',
       hintType: hintType ?? 'fact',
@@ -187,6 +188,13 @@ class SWLevel {
   bool get hasEndTooltip => tooltipEnd.isNotEmpty;
   bool get isCreatorOwned => creatorUid.isNotEmpty;
   bool get usesDrawObjectEditor => editorMode == UserLevelEditorMode.drawObject;
+
+  bool get hasRequiredFieldsForSubmission {
+    if (creatorName.trim().isEmpty) return false;
+    if (usesDrawObjectEditor && !hasFactHint) return false;
+    if (solutionPath.isEmpty || puzzlePath.isEmpty) return false;
+    return true;
+  }
   Map<String, dynamic>? get pendingPuzzleGeneration {
     final rawPending = editorData['pendingPuzzleGeneration'];
     if (rawPending is Map) {

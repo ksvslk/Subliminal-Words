@@ -1563,33 +1563,14 @@ class _WordLetterHandleState extends State<_WordLetterHandle> {
     final totalWidth = centerX * 2;
     final totalHeight = centerY * 2;
 
-    final labelVisual = Stack(
-      alignment: Alignment.center,
-      children: <Widget>[
-        Text(
-          letter.letter,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: visualFontSize,
-            fontWeight: wordLetterFontWeight(letter.fontWeightValue),
-            foreground: Paint()
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = outlineWidth
-              ..color = outlineColor.withValues(
-                alpha: math.min(1.0, 0.6 + (letter.opacity * 0.4)),
-              ),
-          ),
-        ),
-        Text(
-          letter.letter,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: visualFontSize,
-            fontWeight: wordLetterFontWeight(letter.fontWeightValue),
-            color: fillColor,
-          ),
-        ),
-      ],
+    final labelVisual = Text(
+      letter.letter,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        fontSize: visualFontSize,
+        fontWeight: wordLetterFontWeight(letter.fontWeightValue),
+        color: fillColor,
+      ),
     );
 
     final stageCenter = Offset(

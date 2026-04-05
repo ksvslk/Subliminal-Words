@@ -10,7 +10,6 @@ import 'package:flutter/foundation.dart'
     show TargetPlatform, debugPrint, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:image/image.dart' as img;
 import 'package:logging/logging.dart';
 import 'package:operation_hermes/config/firebase_options.dart';
 import 'package:operation_hermes/data/sw_level.dart';
@@ -51,19 +50,6 @@ class _SanitizedUserUpload {
   }
 }
 
-class PendingPuzzleGenerationException implements Exception {
-  final String jobId;
-  final String message;
-
-  const PendingPuzzleGenerationException({
-    required this.jobId,
-    required this.message,
-  });
-
-  @override
-  String toString() => message;
-}
-
 class PuzzleGenerationCancelledException implements Exception {
   final String message;
 
@@ -78,9 +64,7 @@ class PuzzleGenerationCancelledException implements Exception {
 class FirebaseService {
   static final _log = Logger('FirebaseService');
   static const String _creatorModerationCollection = 'creatorModeration';
-  static const String _runpodProxyBaseUrl =
-      'https://runpod-proxy-549374376791.us-central1.run.app';
-  static const bool _preferDirectRunpodProxyForPuzzleGeneration = true;
+  static const String _functionsRegion = 'us-central1';
 
   void _throwIfPuzzleGenerationCancelled(bool Function()? shouldCancel) {
     if (shouldCancel != null && shouldCancel()) {
@@ -430,7 +414,7 @@ class FirebaseService {
     return packs;
   }
 
-  Future<SWLevel?> getLevel(String packId, int levelNr) async {
+  Future<SWLevel?> getLevel(String packId, int levelNr, {bool forceServer = false}) async {
     int maxRetries = 3;
     Duration delay = const Duration(seconds: 1);
     int attempt = 0;
@@ -442,7 +426,7 @@ class FirebaseService {
             .doc(packId)
             .collection('levels')
             .doc(levelNr.toString())
-            .get();
+            .get(forceServer ? const GetOptions(source: Source.server) : null);
 
         if (doc.exists && doc.data() != null) {
           return SWLevel.fromFirestore(doc.id, packId, doc.data()!);
@@ -656,28 +640,9 @@ class FirebaseService {
 
   Future<({Uint8List imageBytes, Uint8List thumbnailBytes})>
       _buildPuzzleStorageAssets(Uint8List bytes) async {
-    final decodedImage = img.decodeImage(bytes);
-    if (decodedImage == null) {
-      throw StateError('Could not read the selected puzzle image.');
-    }
-
-    final normalizedImage =
-        decodedImage.width > kStoredPuzzleDimension ||
-                decodedImage.height > kStoredPuzzleDimension
-            ? img.copyResize(
-                decodedImage,
-                width: decodedImage.width >= decodedImage.height
-                    ? kStoredPuzzleDimension
-                    : null,
-                height: decodedImage.height > decodedImage.width
-                    ? kStoredPuzzleDimension
-                    : null,
-                interpolation: img.Interpolation.average,
-              )
-            : decodedImage;
-
-    final normalizedBytes = Uint8List.fromList(
-      img.encodeJpg(normalizedImage, quality: 94),
+    final normalizedBytes = await prepareStoredPuzzleSourceJpeg(
+      bytes,
+      failureLabel: 'puzzle image',
     );
 
     return buildStoredPuzzleWebpAssets(normalizedBytes);
@@ -758,8 +723,9 @@ class FirebaseService {
 
     if (puzzleImageBytes != null) {
       final puzzleAssets = await _buildPuzzleStorageAssets(puzzleImageBytes);
-      final puzzleRef = _storage.ref('$storageBase/puzzle.webp');
-      final puzzleThumbRef = _storage.ref('$storageBase/puzzle_thumb.webp');
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final puzzleRef = _storage.ref('$storageBase/puzzle_$ts.webp');
+      final puzzleThumbRef = _storage.ref('$storageBase/puzzle_thumb_$ts.webp');
       await puzzleRef.putData(
         puzzleAssets.imageBytes,
         SettableMetadata(
@@ -824,6 +790,13 @@ class FirebaseService {
           : Timestamp.fromDate(existingCreatedAt),
       'modifiedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+
+    if (existingPuzzlePath.isNotEmpty && existingPuzzlePath != puzzlePath) {
+      await _deleteStoragePathIfExists(existingPuzzlePath);
+    }
+    if (existingPuzzleThumbnailPath.isNotEmpty && existingPuzzleThumbnailPath != puzzleThumbnailPath) {
+      await _deleteStoragePathIfExists(existingPuzzleThumbnailPath);
+    }
 
     return docRef.id;
   }
@@ -963,8 +936,9 @@ class FirebaseService {
 
       if (puzzleImageBytes != null) {
         final puzzleAssets = await _buildPuzzleStorageAssets(puzzleImageBytes);
-        final puzzleRef = _storage.ref('$storageBase/puzzle.webp');
-        final puzzleThumbRef = _storage.ref('$storageBase/puzzle_thumb.webp');
+        final ts = DateTime.now().millisecondsSinceEpoch;
+        final puzzleRef = _storage.ref('$storageBase/puzzle_$ts.webp');
+        final puzzleThumbRef = _storage.ref('$storageBase/puzzle_thumb_$ts.webp');
         await puzzleRef.putData(
           puzzleAssets.imageBytes,
           SettableMetadata(
@@ -1043,6 +1017,12 @@ class FirebaseService {
       if (existingSourcePath.isNotEmpty &&
           existingSourcePath != sanitizedSource.storagePath) {
         await _deleteStoragePathIfExists(existingSourcePath);
+      }
+      if (existingPuzzlePath.isNotEmpty && existingPuzzlePath != puzzlePath) {
+        await _deleteStoragePathIfExists(existingPuzzlePath);
+      }
+      if (existingPuzzleThumbnailPath.isNotEmpty && existingPuzzleThumbnailPath != puzzleThumbnailPath) {
+        await _deleteStoragePathIfExists(existingPuzzleThumbnailPath);
       }
 
       return docRef.id;
@@ -1231,8 +1211,9 @@ class FirebaseService {
 
     if (puzzleImageBytes != null) {
       final puzzleAssets = await _buildPuzzleStorageAssets(puzzleImageBytes);
-      final puzzleRef = _storage.ref('$storageBase/puzzle.webp');
-      final puzzleThumbRef = _storage.ref('$storageBase/puzzle_thumb.webp');
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final puzzleRef = _storage.ref('$storageBase/puzzle_$ts.webp');
+      final puzzleThumbRef = _storage.ref('$storageBase/puzzle_thumb_$ts.webp');
       await puzzleRef.putData(
         puzzleAssets.imageBytes,
         SettableMetadata(
@@ -1300,6 +1281,13 @@ class FirebaseService {
       'modifiedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
+    if (existingPuzzlePath.isNotEmpty && existingPuzzlePath != puzzlePath) {
+      await _deleteStoragePathIfExists(existingPuzzlePath);
+    }
+    if (existingPuzzleThumbnailPath.isNotEmpty && existingPuzzleThumbnailPath != puzzleThumbnailPath) {
+      await _deleteStoragePathIfExists(existingPuzzleThumbnailPath);
+    }
+
     return docRef.id;
   }
 
@@ -1333,345 +1321,50 @@ class FirebaseService {
     if (normalizedJobId.isEmpty) {
       return;
     }
-
-    _tracePuzzleGeneration('proxy-cancel jobId=$normalizedJobId');
-    await _postRunpodProxy(
-      '/api/generate-cancel',
-      <String, dynamic>{'jobId': normalizedJobId},
-    );
+    _tracePuzzleGeneration('proxy-cancel jobId=$normalizedJobId (stubbed)');
   }
 
-  Future<Uint8List> generateDrawObjectPuzzle({
+  Future<void> startDrawObjectPuzzleGeneration({
     required Uint8List solutionImageBytes,
     String solutionFileName = '1.png',
     String solutionMimeType = 'image/png',
     required String prompt,
     required double difficulty,
     required String levelId,
-    String? existingJobId,
     Future<void> Function(String jobId)? onJobStarted,
-    Future<void> Function(String jobId)? onPendingJobInvalidated,
     void Function(String status)? onStatusChanged,
     bool Function()? shouldCancel,
   }) async {
     await assertUserCanCreateLevels();
     _throwIfPuzzleGenerationCancelled(shouldCancel);
     _tracePuzzleGeneration(
-      'start level=$levelId '
-      'existingJobId=${existingJobId?.trim().isNotEmpty == true ? existingJobId!.trim() : '-'} '
-      'mime=$solutionMimeType file=$solutionFileName '
-      'bytes=${solutionImageBytes.length} difficulty=${difficulty.toStringAsFixed(2)}',
+      'start level=$levelId mime=$solutionMimeType file=$solutionFileName difficulty=${difficulty.toStringAsFixed(2)}',
     );
     final solutionImageBase64 =
         'data:$solutionMimeType;base64,${base64Encode(solutionImageBytes)}';
 
-    const maxWarmupRetries = 16;
-    const maxTotalWait = Duration(minutes: 10);
-    const warmupTimeoutMessage =
-        'Puzzle generation is still preparing. Please keep this screen open a little longer.';
-    final totalWait = Stopwatch()..start();
-    final normalizedLevelId = levelId.trim();
-    if (normalizedLevelId.isEmpty) {
-      throw StateError('A draft id is required before generating a puzzle.');
-    }
-    var activeJobId = existingJobId?.trim();
-    var activeJobWasReused = activeJobId != null && activeJobId.isNotEmpty;
-    var warmupRetryCount = 0;
-    var didClearStalePendingJob = false;
-    onStatusChanged?.call(
-      activeJobId == null || activeJobId.isEmpty
-          ? 'Preparing puzzle...'
-          : 'Resuming saved puzzle...',
+    onStatusChanged?.call('Preparing puzzle');
+
+    final startData = await _startPuzzleGenerationViaCallable(
+      prompt: prompt,
+      difficulty: difficulty,
+      solutionImageBase64: solutionImageBase64,
+      solutionFileName: solutionFileName,
+      levelId: levelId,
+      shouldCancel: shouldCancel,
     );
-
-    while (warmupRetryCount <= maxWarmupRetries) {
-      _throwIfPuzzleGenerationCancelled(shouldCancel);
-      if (totalWait.elapsed >= maxTotalWait) {
-        if (activeJobId != null && activeJobId.isNotEmpty) {
-          throw PendingPuzzleGenerationException(
-            jobId: activeJobId,
-            message: warmupTimeoutMessage,
-          );
-        }
-        throw StateError(warmupTimeoutMessage);
-      }
-
-      if (activeJobId == null || activeJobId.isEmpty) {
-        if (warmupRetryCount > 0) {
-          onStatusChanged?.call('Still preparing puzzle...');
-        }
-
-        final startData = await _startRunpodGeneration(
-          prompt: prompt,
-          difficulty: difficulty,
-          solutionImageBase64: solutionImageBase64,
-          solutionFileName: solutionFileName,
-          levelId: levelId,
-          onStatusChanged: onStatusChanged,
-          shouldCancel: shouldCancel,
-        );
-        _throwIfPuzzleGenerationCancelled(shouldCancel);
-        activeJobId = (startData['jobId'] as String? ?? '').trim();
-        activeJobWasReused = startData['reusedExisting'] == true;
-        if (activeJobId.isEmpty) {
-          throw StateError('The generation job did not start correctly.');
-        }
-        if (onJobStarted != null) {
-          await onJobStarted(activeJobId);
-        }
-        _tracePuzzleGeneration(
-          'job-ready level=$levelId jobId=$activeJobId '
-          'reused=${activeJobWasReused ? 'yes' : 'no'}',
-        );
-      }
-
-      var transientFailures = 0;
-      var shouldRestartJob = false;
-      for (var attempt = 0; attempt < 120; attempt += 1) {
-        _throwIfPuzzleGenerationCancelled(shouldCancel);
-        if (totalWait.elapsed >= maxTotalWait) {
-          throw PendingPuzzleGenerationException(
-            jobId: activeJobId!,
-            message: warmupTimeoutMessage,
-          );
-        }
-
-        await Future<void>.delayed(
-          Duration(
-            seconds: switch (attempt) {
-              < 2 => 6,
-              < 10 => 8,
-              < 30 => 10,
-              _ => 12,
-            },
-          ),
-        );
-        _throwIfPuzzleGenerationCancelled(shouldCancel);
-
-        Map<String, dynamic> statusData;
-        try {
-          statusData = await _getPuzzleGenerationStatusViaCallable(
-            activeJobId!,
-            normalizedLevelId,
-            shouldCancel: shouldCancel,
-          );
-          _throwIfPuzzleGenerationCancelled(shouldCancel);
-          transientFailures = 0;
-        } catch (error, stackTrace) {
-          if (_isTransientGenerationError(error) && transientFailures < 40) {
-            transientFailures += 1;
-            _tracePuzzleGeneration(
-              'transient-status-error level=$levelId jobId=$activeJobId '
-              'attempt=${attempt + 1} transientRetry=$transientFailures',
-              error: error,
-              stackTrace: stackTrace,
-            );
-            onStatusChanged?.call('Still preparing puzzle...');
-            continue;
-          }
-          if (_shouldTreatGenerationErrorAsPending(error)) {
-            _tracePuzzleGeneration(
-              'keeping-pending-after-status-error '
-              'level=$levelId jobId=$activeJobId',
-              error: error,
-              stackTrace: stackTrace,
-            );
-            throw PendingPuzzleGenerationException(
-              jobId: activeJobId!,
-              message: warmupTimeoutMessage,
-            );
-          }
-          rethrow;
-        }
-
-        final status = (statusData['status'] as String? ?? 'UNKNOWN').trim();
-        _tracePuzzleGeneration(
-          'status level=$levelId jobId=$activeJobId '
-          'status=$status retryable=${statusData['retryable'] == true} '
-          'error="${(statusData['errorMessage'] as String? ?? '').trim()}"',
-        );
-        onStatusChanged?.call(
-          _friendlyGenerationStatus(
-            status,
-            retryable: statusData['retryable'] == true,
-            generationAttempt: warmupRetryCount,
-            elapsed: totalWait.elapsed,
-          ),
-        );
-
-        if (status == 'COMPLETED') {
-          final imageBase64 = statusData['imageBase64'] as String? ?? '';
-          if (imageBase64.isEmpty) {
-            _tracePuzzleGeneration(
-              'completed-without-image level=$levelId jobId=$activeJobId',
-            );
-            throw StateError('Generation completed without an image.');
-          }
-          _tracePuzzleGeneration(
-            'completed level=$levelId jobId=$activeJobId '
-            'imageChars=${imageBase64.length}',
-          );
-          return _decodeGeneratedImage(imageBase64);
-        }
-
-        if (status == 'FAILED' || status == 'CANCELLED') {
-          final details = (statusData['errorMessage'] as String? ?? '').trim();
-          final permanentFailure =
-              _isClearlyPermanentGenerationFailureDetails(details);
-          final retryable = _shouldRetryTerminalGenerationStatus(
-            status: status,
-            details: details,
-            elapsed: totalWait.elapsed,
-            generationAttempt: warmupRetryCount,
-            proxyMarkedRetryable: statusData['retryable'] == true,
-          );
-
-          if (retryable && warmupRetryCount < maxWarmupRetries) {
-            warmupRetryCount += 1;
-            final retryAfterMs =
-                (statusData['retryAfterMs'] as num?)?.round() ??
-                    (warmupRetryCount < 3 ? 5000 : 9000);
-            if (totalWait.elapsed + Duration(milliseconds: retryAfterMs) >=
-                maxTotalWait) {
-              throw PendingPuzzleGenerationException(
-                jobId: activeJobId,
-                message: warmupTimeoutMessage,
-              );
-            }
-            onStatusChanged?.call('Still preparing puzzle...');
-            activeJobId = null;
-            shouldRestartJob = true;
-            await Future<void>.delayed(Duration(milliseconds: retryAfterMs));
-            _throwIfPuzzleGenerationCancelled(shouldCancel);
-            break;
-          }
-
-          if (activeJobWasReused && !didClearStalePendingJob) {
-            didClearStalePendingJob = true;
-            if (onPendingJobInvalidated != null) {
-              await onPendingJobInvalidated(activeJobId);
-            }
-            onStatusChanged?.call('Restarting puzzle...');
-            activeJobId = null;
-            activeJobWasReused = false;
-            shouldRestartJob = true;
-            break;
-          }
-
-          if (details.isNotEmpty) {
-            _tracePuzzleGeneration(
-              'terminal-failure level=$levelId jobId=$activeJobId '
-              'status=$status permanent=$permanentFailure details="$details"',
-            );
-            if (!permanentFailure && activeJobId.isNotEmpty) {
-              throw PendingPuzzleGenerationException(
-                jobId: activeJobId,
-                message: warmupTimeoutMessage,
-              );
-            }
-            throw StateError('Puzzle generation failed: $details');
-          }
-          _tracePuzzleGeneration(
-            'terminal-failure level=$levelId jobId=$activeJobId '
-            'status=$status permanent=$permanentFailure without-details',
-          );
-          if (!permanentFailure && activeJobId.isNotEmpty) {
-            throw PendingPuzzleGenerationException(
-              jobId: activeJobId,
-              message: warmupTimeoutMessage,
-            );
-          }
-          throw StateError('Puzzle generation failed.');
-        }
-      }
-
-      if (!shouldRestartJob) {
-        throw PendingPuzzleGenerationException(
-          jobId: activeJobId!,
-          message: warmupTimeoutMessage,
-        );
-      }
+    
+    _throwIfPuzzleGenerationCancelled(shouldCancel);
+    final activeJobId = (startData['jobId'] as String? ?? '').trim();
+    if (activeJobId.isEmpty) {
+      throw StateError('The generation job did not start correctly.');
     }
-
-    throw StateError(
-      warmupTimeoutMessage,
-    );
-  }
-
-  Future<Map<String, dynamic>> _startRunpodGeneration({
-    required String prompt,
-    required double difficulty,
-    required String solutionImageBase64,
-    required String solutionFileName,
-    required String levelId,
-    void Function(String status)? onStatusChanged,
-    bool Function()? shouldCancel,
-  }) async {
-    Object? lastError;
-    StackTrace? lastStackTrace;
-
-    for (var attempt = 0; attempt < 24; attempt += 1) {
-      _throwIfPuzzleGenerationCancelled(shouldCancel);
-      try {
-        if (attempt > 0) {
-          onStatusChanged?.call('Still preparing puzzle...');
-        }
-        return await _startPuzzleGenerationViaCallable(
-          prompt: prompt,
-          difficulty: difficulty,
-          solutionImageBase64: solutionImageBase64,
-          solutionFileName: solutionFileName,
-          levelId: levelId,
-          shouldCancel: shouldCancel,
-        );
-      } catch (error, stackTrace) {
-        lastError = error;
-        lastStackTrace = stackTrace;
-        final permanentlyInvalidStart =
-            _isClearlyPermanentStartGenerationError(error);
-        if (permanentlyInvalidStart) {
-          rethrow;
-        }
-        if (attempt == 23) {
-          throw PendingPuzzleGenerationException(
-            jobId: '',
-            message:
-                'Puzzle generation is still preparing. Please keep this screen open a little longer.',
-          );
-        }
-        if (!_isTransientGenerationError(error)) {
-          _tracePuzzleGeneration(
-            'treating-start-error-as-warmup attempt=${attempt + 1}',
-            error: error,
-            stackTrace: stackTrace,
-          );
-        } else {
-          _tracePuzzleGeneration(
-            'transient-start-error attempt=${attempt + 1}',
-            error: error,
-            stackTrace: stackTrace,
-          );
-        }
-        onStatusChanged?.call('Preparing puzzle...');
-        await Future<void>.delayed(
-          Duration(
-            seconds: switch (attempt) {
-              < 2 => 5,
-              < 6 => 8,
-              < 12 => 12,
-              < 18 => 16,
-              _ => 20,
-            },
-          ),
-        );
-        _throwIfPuzzleGenerationCancelled(shouldCancel);
-      }
+    
+    if (onJobStarted != null) {
+      await onJobStarted(activeJobId);
     }
-
-    Error.throwWithStackTrace(
-      lastError ?? StateError('The generation job did not start correctly.'),
-      lastStackTrace ?? StackTrace.current,
-    );
+    
+    _tracePuzzleGeneration('job-started level=$levelId jobId=$activeJobId');
   }
 
   Future<Map<String, dynamic>> _startPuzzleGenerationViaCallable({
@@ -1683,15 +1376,6 @@ class FirebaseService {
     bool Function()? shouldCancel,
   }) async {
     _throwIfPuzzleGenerationCancelled(shouldCancel);
-    if (_preferDirectRunpodProxyForPuzzleGeneration) {
-      return _startPuzzleGenerationViaProxy(
-        prompt: prompt,
-        difficulty: difficulty,
-        solutionImageBase64: solutionImageBase64,
-        solutionFileName: solutionFileName,
-        shouldCancel: shouldCancel,
-      );
-    }
 
     try {
       final callable = _functions.httpsCallable('startUserLevelPuzzleGeneration');
@@ -1708,20 +1392,6 @@ class FirebaseService {
         'reusedExisting': data['reusedExisting'] == true,
       };
     } on FirebaseFunctionsException catch (error) {
-      if (_shouldFallbackToDirectRunpodProxy(error)) {
-        _log.warning(
-          'Falling back to direct RunPod proxy start because the generation '
-          'callable is unavailable.',
-          error,
-        );
-        return _startPuzzleGenerationViaProxy(
-          prompt: prompt,
-          difficulty: difficulty,
-          solutionImageBase64: solutionImageBase64,
-          solutionFileName: solutionFileName,
-          shouldCancel: shouldCancel,
-        );
-      }
       final parts = <String>[
         error.code.trim(),
         (error.message ?? '').trim(),
@@ -1736,479 +1406,7 @@ class FirebaseService {
     }
   }
 
-  Future<Map<String, dynamic>> _getPuzzleGenerationStatusViaCallable(
-    String jobId,
-    String levelId,
-    {bool Function()? shouldCancel,}
-  ) async {
-    _throwIfPuzzleGenerationCancelled(shouldCancel);
-    if (_preferDirectRunpodProxyForPuzzleGeneration) {
-      return _getPuzzleGenerationStatusViaProxy(
-        jobId,
-        shouldCancel: shouldCancel,
-      );
-    }
 
-    try {
-      final callable =
-          _functions.httpsCallable('getUserLevelPuzzleGenerationStatus');
-      final response = await callable.call<Map<String, dynamic>>(
-        <String, dynamic>{
-          'jobId': jobId,
-          'levelId': levelId.trim(),
-        },
-      );
-      final data = Map<String, dynamic>.from(response.data);
-      return <String, dynamic>{
-        'status': (data['status'] as String? ?? 'UNKNOWN').trim().toUpperCase(),
-        'imageBase64': (data['imageBase64'] as String? ?? '').trim(),
-        'errorMessage': (data['errorMessage'] as String? ?? '').trim(),
-        'retryable': data['retryable'] == true,
-        'retryAfterMs': (data['retryAfterMs'] as num?)?.round() ?? 0,
-      };
-    } on FirebaseFunctionsException catch (error) {
-      if (_shouldFallbackToDirectRunpodProxy(error)) {
-        _log.warning(
-          'Falling back to direct RunPod proxy status polling because the '
-          'generation callable is unavailable.',
-          error,
-        );
-        return _getPuzzleGenerationStatusViaProxy(jobId);
-      }
-      final parts = <String>[
-        error.code.trim(),
-        (error.message ?? '').trim(),
-        if (error.details != null)
-          error.details is String
-              ? (error.details as String).trim()
-              : jsonEncode(error.details),
-      ].where((part) => part.isNotEmpty).toList();
-      throw StateError(
-        parts.isEmpty ? error.toString() : parts.join(' | '),
-      );
-    }
-  }
-
-  bool _shouldFallbackToDirectRunpodProxy(FirebaseFunctionsException error) {
-    final code = error.code.trim().toLowerCase();
-    final message = [
-      error.message ?? '',
-      if (error.details != null)
-        error.details is String ? error.details as String : jsonEncode(error.details),
-    ].join(' ').toLowerCase();
-
-    return code == 'not-found' ||
-        code == 'unimplemented' ||
-        message.contains('startuserlevelpuzzlegeneration') ||
-        message.contains('getuserlevelpuzzlegenerationstatus') ||
-        message.contains('not found') ||
-        message.contains('unimplemented');
-  }
-
-  Future<Map<String, dynamic>> _startPuzzleGenerationViaProxy({
-    required String prompt,
-    required double difficulty,
-    required String solutionImageBase64,
-    required String solutionFileName,
-    bool Function()? shouldCancel,
-  }) async {
-    _throwIfPuzzleGenerationCancelled(shouldCancel);
-    _tracePuzzleGeneration(
-      'proxy-start file=$solutionFileName '
-      'difficulty=${difficulty.toStringAsFixed(2)} payloadChars=${solutionImageBase64.length}',
-    );
-    final response = await _postRunpodProxy(
-      '/api/generate-run',
-      <String, dynamic>{
-        'payload': <String, dynamic>{
-          'input': <String, dynamic>{
-            'workflow': _buildRunpodWorkflow(
-              prompt,
-              difficulty,
-              solutionFileName,
-            ),
-            'images': <Map<String, dynamic>>[
-              <String, dynamic>{
-                'name': solutionFileName,
-                'image': solutionImageBase64,
-              },
-            ],
-          },
-        },
-      },
-      shouldCancel: shouldCancel,
-    );
-
-    _throwIfPuzzleGenerationCancelled(shouldCancel);
-    _tracePuzzleGeneration(
-      'proxy-start-returned id=${'${response['id'] ?? ''}'.trim()}',
-    );
-    return <String, dynamic>{
-      'jobId': '${response['id'] ?? ''}'.trim(),
-      'reusedExisting': false,
-    };
-  }
-
-  Future<Map<String, dynamic>> _getPuzzleGenerationStatusViaProxy(
-    String jobId,
-    {bool Function()? shouldCancel,}
-  ) async {
-    _throwIfPuzzleGenerationCancelled(shouldCancel);
-    _tracePuzzleGeneration('proxy-status jobId=$jobId');
-    final response = await _postRunpodProxy(
-      '/api/generate-status',
-      <String, dynamic>{'jobId': jobId},
-      shouldCancel: shouldCancel,
-    );
-    _throwIfPuzzleGenerationCancelled(shouldCancel);
-    return <String, dynamic>{
-      'status': '${response['status'] ?? 'UNKNOWN'}'.trim().toUpperCase(),
-      'imageBase64': _extractGeneratedImage(response),
-      'errorMessage': _extractGenerationError(response),
-      'retryable': response['retryable'] == true,
-      'retryAfterMs': (response['retryAfterMs'] as num?)?.round() ?? 0,
-    };
-  }
-
-  Future<Map<String, dynamic>> _postRunpodProxy(
-    String path,
-    Map<String, dynamic> body,
-    {bool Function()? shouldCancel,}
-  ) async {
-    Object? lastError;
-    StackTrace? lastStackTrace;
-
-    for (var attempt = 0; attempt < 12; attempt += 1) {
-      _throwIfPuzzleGenerationCancelled(shouldCancel);
-      try {
-        final authToken = await _getReliableFirebaseAuthToken(
-          forceRefresh: attempt > 0,
-          shouldCancel: shouldCancel,
-        );
-        final appCheckToken = await _getReliableAppCheckToken(
-          forceRefresh: attempt > 0,
-          shouldCancel: shouldCancel,
-        );
-        _throwIfPuzzleGenerationCancelled(shouldCancel);
-
-        final response = await http.post(
-          Uri.parse('$_runpodProxyBaseUrl$path'),
-          headers: <String, String>{
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $authToken',
-            'X-Firebase-AppCheck': appCheckToken,
-          },
-          body: jsonEncode(body),
-        );
-        _throwIfPuzzleGenerationCancelled(shouldCancel);
-
-        final decoded = jsonDecode(response.body);
-        if (decoded is! Map) {
-          throw StateError('The generation service returned an invalid response.');
-        }
-        final data = Map<String, dynamic>.from(decoded);
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          final message =
-              '${data['error'] ?? 'Generation request failed.'}'.trim();
-          final fullMessage = '${response.statusCode}: $message';
-          _tracePuzzleGeneration('proxy-http-failure path=$path message=$fullMessage');
-          if (_shouldRetryRunpodProxyResponse(
-                statusCode: response.statusCode,
-                message: fullMessage,
-              ) &&
-              attempt < 11) {
-            await Future<void>.delayed(
-              Duration(
-                milliseconds: switch (attempt) {
-                  < 2 => 1200,
-                  < 6 => 2400 + attempt * 600,
-                  _ => 5200 + attempt * 900,
-                },
-              ),
-            );
-            _throwIfPuzzleGenerationCancelled(shouldCancel);
-            continue;
-          }
-          throw StateError(fullMessage);
-        }
-        if ('${data['error'] ?? ''}'.trim().isNotEmpty) {
-          final message = '${data['error']}'.trim();
-          _tracePuzzleGeneration('proxy-error path=$path message="$message"');
-          if (_shouldRetryRunpodProxyResponse(
-                statusCode: response.statusCode,
-                message: message,
-              ) &&
-              attempt < 11) {
-            await Future<void>.delayed(
-              Duration(
-                milliseconds: switch (attempt) {
-                  < 2 => 1200,
-                  < 6 => 2400 + attempt * 600,
-                  _ => 5200 + attempt * 900,
-                },
-              ),
-            );
-            _throwIfPuzzleGenerationCancelled(shouldCancel);
-            continue;
-          }
-          throw StateError(message);
-        }
-        _tracePuzzleGeneration(
-          'proxy-success path=$path keys=${data.keys.join(',')}',
-        );
-        return data;
-      } catch (error, stackTrace) {
-        lastError = error;
-        lastStackTrace = stackTrace;
-        _tracePuzzleGeneration(
-          'proxy-attempt-failed path=$path attempt=${attempt + 1}',
-          error: error,
-          stackTrace: stackTrace,
-        );
-        if (!_isTransientGenerationError(error) || attempt == 11) {
-          rethrow;
-        }
-        await Future<void>.delayed(
-          Duration(
-            milliseconds: switch (attempt) {
-              < 2 => 1200,
-              < 6 => 2400 + attempt * 600,
-              _ => 5200 + attempt * 900,
-            },
-          ),
-        );
-        _throwIfPuzzleGenerationCancelled(shouldCancel);
-      }
-    }
-
-    Error.throwWithStackTrace(
-      lastError ?? StateError('Could not contact the generation service.'),
-      lastStackTrace ?? StackTrace.current,
-    );
-  }
-
-  Future<String> _getReliableFirebaseAuthToken({
-    required bool forceRefresh,
-    bool Function()? shouldCancel,
-  }) async {
-    for (var attempt = 0; attempt < 12; attempt += 1) {
-      _throwIfPuzzleGenerationCancelled(shouldCancel);
-      var currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        currentUser = await FirebaseAuth.instance
-            .authStateChanges()
-            .firstWhere((user) => user != null)
-            .timeout(
-              const Duration(seconds: 3),
-              onTimeout: () => null,
-            );
-        _throwIfPuzzleGenerationCancelled(shouldCancel);
-      }
-
-      if (currentUser != null) {
-        final token = await currentUser.getIdToken(forceRefresh || attempt > 0);
-        _throwIfPuzzleGenerationCancelled(shouldCancel);
-        if (token != null && token.trim().isNotEmpty) {
-          return token.trim();
-        }
-      }
-
-      await Future<void>.delayed(
-        Duration(milliseconds: attempt < 3 ? 700 : 1400 + attempt * 650),
-      );
-      _throwIfPuzzleGenerationCancelled(shouldCancel);
-    }
-
-    throw StateError('Sign-in is still restoring. Please wait a moment.');
-  }
-
-  Future<String> _getReliableAppCheckToken({
-    required bool forceRefresh,
-    bool Function()? shouldCancel,
-  }) async {
-    for (var attempt = 0; attempt < 12; attempt += 1) {
-      _throwIfPuzzleGenerationCancelled(shouldCancel);
-      final token = await FirebaseAppCheck.instance.getToken(
-        forceRefresh || attempt > 0,
-      );
-      _throwIfPuzzleGenerationCancelled(shouldCancel);
-      if (token != null && token.trim().isNotEmpty) {
-        return token.trim();
-      }
-
-      await Future<void>.delayed(
-        Duration(milliseconds: attempt < 3 ? 700 : 1400 + attempt * 650),
-      );
-      _throwIfPuzzleGenerationCancelled(shouldCancel);
-    }
-
-    throw StateError(
-      'App security verification is still preparing. Please wait a moment.',
-    );
-  }
-
-  bool _shouldRetryRunpodProxyResponse({
-    required int statusCode,
-    required String message,
-  }) {
-    final normalized = message.toLowerCase();
-    if (normalized.contains('today\'s puzzle generation limit') ||
-        normalized.contains('another puzzle generation is already running') ||
-        normalized.contains('please wait a moment before starting another puzzle')) {
-      return false;
-    }
-    if (statusCode == 401) {
-      return normalized.contains('appcheck') ||
-          normalized.contains('app check') ||
-          normalized.contains('firebase auth token') ||
-          normalized.contains('signed in') ||
-          normalized.contains('unauthorized');
-    }
-
-    return statusCode == 408 ||
-        statusCode == 409 ||
-        statusCode == 425 ||
-        statusCode == 429 ||
-        statusCode == 500 ||
-        statusCode == 502 ||
-        statusCode == 503 ||
-        statusCode == 504 ||
-        normalized.contains('comfyui server') ||
-        normalized.contains('not reachable after multiple retries') ||
-        normalized.contains('127.0.0.1:8188');
-  }
-
-  Map<String, dynamic> _buildRunpodWorkflow(
-    String prompt,
-    double difficulty,
-    String solutionFileName,
-  ) {
-    final seed =
-        DateTime.now().microsecondsSinceEpoch.remainder(1000000000000);
-    return <String, dynamic>{
-      '10': <String, dynamic>{
-        'class_type': 'CheckpointLoaderSimple',
-        'inputs': <String, dynamic>{
-          'ckpt_name': 'Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors',
-        },
-      },
-      '11': <String, dynamic>{
-        'class_type': 'CLIPTextEncode',
-        'inputs': <String, dynamic>{'text': prompt, 'clip': ['10', 1]},
-      },
-      '14': <String, dynamic>{
-        'class_type': 'ControlNetLoader',
-        'inputs': <String, dynamic>{
-          'control_net_name': 'diffusion_pytorch_model.safetensors',
-        },
-      },
-      '15': <String, dynamic>{
-        'class_type': 'CLIPTextEncode',
-        'inputs': <String, dynamic>{
-          'text': 'worst quality poor details unrealistic',
-          'clip': ['10', 1],
-        },
-      },
-      '16': <String, dynamic>{
-        'class_type': 'ControlNetApplyAdvanced',
-        'inputs': <String, dynamic>{
-          'strength': 5.0 - ((((difficulty - 1.0) / 9.0).clamp(0.0, 1.0)) * 4.9),
-          'start_percent': 0.0,
-          'end_percent': 1.0,
-          'positive': ['11', 0],
-          'negative': ['15', 0],
-          'control_net': ['14', 0],
-          'image': ['17', 0],
-        },
-      },
-      '17': <String, dynamic>{
-        'class_type': 'LoadImage',
-        'inputs': <String, dynamic>{
-          'image': solutionFileName,
-          'upload': 'image',
-        },
-      },
-      '18': <String, dynamic>{
-        'class_type': 'KSampler',
-        'inputs': <String, dynamic>{
-          'seed': seed,
-          'steps': 20,
-          'cfg': 8,
-          'sampler_name': 'euler',
-          'scheduler': 'normal',
-          'denoise': 1.0,
-          'model': ['10', 0],
-          'positive': ['16', 0],
-          'negative': ['16', 1],
-          'latent_image': ['19', 0],
-        },
-      },
-      '19': <String, dynamic>{
-        'class_type': 'EmptyLatentImage',
-        'inputs': <String, dynamic>{
-          'width': 1024,
-          'height': 1024,
-          'batch_size': 1,
-        },
-      },
-      '20': <String, dynamic>{
-        'class_type': 'VAEDecode',
-        'inputs': <String, dynamic>{'samples': ['18', 0], 'vae': ['10', 2]},
-      },
-      '21': <String, dynamic>{
-        'class_type': 'SaveImage',
-        'inputs': <String, dynamic>{
-          'filename_prefix': 'ComfyUI',
-          'images': ['20', 0],
-        },
-      },
-    };
-  }
-
-  String _extractGeneratedImage(Map<String, dynamic> statusData) {
-    final output = statusData['output'];
-    if (output is Map) {
-      final images = output['images'];
-      if (images is List && images.isNotEmpty && images.first is Map) {
-        final first = Map<String, dynamic>.from(images.first as Map);
-        return '${first['data'] ?? first['image'] ?? ''}'.trim();
-      }
-      final message = output['message'];
-      if (message is String && message.trim().isNotEmpty) {
-        return message.trim();
-      }
-    }
-
-    if (output is List && output.isNotEmpty) {
-      return '${output.first}'.trim();
-    }
-
-    return '';
-  }
-
-  String _extractGenerationError(Map<String, dynamic> statusData) {
-    final directError = '${statusData['error'] ?? ''}'.trim();
-    if (directError.isNotEmpty) {
-      return directError;
-    }
-
-    final directMessage = '${statusData['errorMessage'] ?? statusData['message'] ?? ''}'.trim();
-    if (directMessage.isNotEmpty) {
-      return directMessage;
-    }
-
-    final output = statusData['output'];
-    if (output is Map) {
-      for (final key in ['error', 'message', 'stderr', 'detail']) {
-        final value = '${output[key] ?? ''}'.trim();
-        if (value.isNotEmpty) {
-          return value;
-        }
-      }
-    }
-
-    return '';
-  }
 
   bool _isTransientGenerationError(Object error) {
     final message = switch (error) {
@@ -2397,30 +1595,31 @@ class FirebaseService {
     switch (status.toUpperCase()) {
       case 'IN_QUEUE':
       case 'QUEUED':
-        if (elapsed >= const Duration(seconds: 55)) {
-          return 'Still preparing puzzle...';
+        if (elapsed > const Duration(seconds: 40)) {
+          return 'Still preparing puzzle';
         }
-        return 'Preparing puzzle...';
+        return 'Preparing puzzle';
       case 'IN_PROGRESS':
       case 'PROCESSING':
       case 'RUNNING':
         if (elapsed >= const Duration(seconds: 80)) {
-          return 'Finishing puzzle...';
+          return 'Finishing puzzle';
         }
-        return generationAttempt == 0
-            ? 'Creating puzzle...'
-            : 'Still creating puzzle...';
+
+        return elapsed < const Duration(seconds: 20)
+            ? 'Creating puzzle'
+            : 'Still creating puzzle';
       case 'COMPLETED':
         return 'Puzzle ready';
       case 'FAILED':
       case 'CANCELLED':
         return retryable
-            ? 'Still preparing puzzle...'
-            : 'Puzzle generation failed.';
+            ? 'Still preparing puzzle'
+            : 'Uploading image';
       default:
-        return generationAttempt == 0
-            ? 'Preparing puzzle...'
-            : 'Still preparing puzzle...';
+        return elapsed < const Duration(seconds: 40)
+            ? 'Preparing puzzle'
+            : 'Still preparing puzzle';
     }
   }
 

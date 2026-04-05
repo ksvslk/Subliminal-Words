@@ -124,8 +124,10 @@ class Puzzle extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(4),
                                     child: levelModel.currentLevel?.isBundled ==
                                             false
-                                        ? CachedNetworkImage(
-                                            imageUrl: model.picturePath,
+                                        ? model.picturePath.isEmpty
+                                            ? const Icon(Icons.broken_image)
+                                            : CachedNetworkImage(
+                                                imageUrl: model.picturePath,
                                             placeholder: (context, url) =>
                                                 const Center(
                                               child: SizedBox.square(

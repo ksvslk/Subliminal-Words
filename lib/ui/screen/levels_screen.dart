@@ -5,6 +5,8 @@ import 'package:operation_hermes/persistence/progress_persistence.dart';
 import 'package:operation_hermes/data/pack.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:provider/provider.dart';
+import 'package:operation_hermes/controller/ads_controller.dart';
+import 'package:operation_hermes/controller/money_controller.dart';
 
 class LevelsScreen extends StatefulWidget {
   final Pack pack;
@@ -57,7 +59,11 @@ class _LevelsScreenState extends State<LevelsScreen> {
               final screenWidth = MediaQuery.of(context).size.width;
               final crossAxisCount = (screenWidth / 120).floor().clamp(3, 6);
 
-              return GridView.builder(
+              return Consumer<MoneyController?>(
+                builder: (context, moneyController, _) {
+                  final needsAd = moneyController?.hasAllAccess() != true;
+
+                  return GridView.builder(
                 padding: const EdgeInsets.all(16.0),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: crossAxisCount,
@@ -130,6 +136,25 @@ class _LevelsScreenState extends State<LevelsScreen> {
                     );
                   }
 
+                  if (isEnabled && needsAd) {
+                    cardContent = Stack(
+                      children: [
+                        Positioned.fill(child: cardContent),
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Icon(
+                            Icons.slideshow_rounded,
+                            size: 18,
+                            color: isCompleted
+                                ? colorScheme.onPrimary
+                                : colorScheme.onTertiaryContainer,
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
                   return Card(
                     elevation: 2,
                     clipBehavior: Clip.antiAlias,
@@ -150,6 +175,8 @@ class _LevelsScreenState extends State<LevelsScreen> {
                   );
                 },
               );
+            },
+          );
             },
           );
         },

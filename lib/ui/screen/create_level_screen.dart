@@ -7,7 +7,9 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:operation_hermes/controller/ads_controller.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
+import 'package:operation_hermes/controller/money_controller.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:operation_hermes/data/user_level_metadata.dart';
 import 'package:operation_hermes/data/word_letter_style.dart';
@@ -46,13 +48,13 @@ DrawingBrushType _brushFromName(
 
 double _normalizeStoredGenerationDifficulty(double? rawValue) {
   if (rawValue == null || !rawValue.isFinite) {
-    return 5.0;
+    return 5.5;
   }
 
   final value = rawValue.toDouble();
-  if (value <= 3.0) {
-    final legacyNormalized = ((value - 0.1) / (3.0 - 0.1)).clamp(0.0, 1.0);
-    return 1.0 + legacyNormalized * 9.0;
+  if (value <= 2.0) {
+    final clampedOld = value.clamp(0.1, 1.9);
+    return (10.0 - ((clampedOld - 0.1) * 5.0)).clamp(1.0, 10.0);
   }
 
   return value.clamp(1.0, 10.0);
@@ -152,7 +154,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   late final DrawingController _drawingController;
   late final DrawingController _wordDrawingController;
   late final WordOverlayController _wordOverlayController;
-  late final Future<String>? _existingPuzzlePreviewUrlFuture;
+  late Future<String>? _existingPuzzlePreviewUrlFuture;
   late final ImagePicker _imagePicker;
 
   bool _isSaving = false;
@@ -165,7 +167,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   bool _isGeneratingFaceSketch = false;
   bool _isGeneratingAfterManipulate = false;
   bool _isFaceTransformInteractionLocked = false;
-  double _generationDifficulty = 5.0;
+  double _generationDifficulty = 5.5;
   String _puzzleGenerationStatus = '';
   Uint8List? _generatedPuzzleImageBytes;
   Uint8List? _faceSourceImageBytes;
@@ -176,11 +178,14 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   int _lastSeenDrawingContentVersion = 0;
   int _lastSeenWordDrawingContentVersion = 0;
   int _lastSeenWordContentVersion = 0;
-  int _puzzleInputRevision = 0;
   int _activeGenerationToken = 0;
   String? _activePuzzleGenerationJobId;
   int _faceSketchGenerationRevision = 0;
   bool _isFaceSketchGenerationInFlight = false;
+  Uint8List? _cachedPuzzleGenerationSourceImageBytes;
+  String? _cachedPuzzleGenerationSourceKey;
+  Timer? _puzzleSourcePrerenderDebounceTimer;
+  int _puzzleSourcePrerenderToken = 0;
   String? _currentLevelId;
   late String _editorMode;
   late String _contentCategory;
@@ -188,10 +193,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   late FaceSourceTransform _faceSourceTransform;
   Timer? _faceSketchDebounceTimer;
 
+  bool _forceHasStoredPuzzleImage = false;
+
   bool get _isLocked => widget.initialLevel?.isLocked == true;
   bool get _isEditMode => widget.initialLevel != null;
   bool get _hasStoredPuzzleImage =>
-      widget.initialLevel?.hasReviewReadyPuzzleImage == true &&
+      (widget.initialLevel?.hasReviewReadyPuzzleImage == true || _forceHasStoredPuzzleImage) &&
       !_hasPuzzleInvalidatedByEdit;
   bool get _hasPuzzleImageForReview =>
       _generatedPuzzleImageBytes != null || _hasStoredPuzzleImage;
@@ -222,13 +229,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   String get _visiblePuzzleGenerationStatus =>
       _isGeneratingPuzzle ? _puzzleGenerationStatus : '';
 
-  String? get _puzzleGenerationLeaveHint {
-    if (!_isGeneratingPuzzle) {
-      return null;
-    }
-
-    return 'Keep this screen open while your puzzle is generating.';
-  }
 
   @override
   void initState() {
@@ -321,11 +321,15 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         _loadExistingWordLetters();
       });
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _schedulePuzzleSourcePrerender();
+    });
   }
 
   @override
   void dispose() {
     _faceSketchDebounceTimer?.cancel();
+    _puzzleSourcePrerenderDebounceTimer?.cancel();
     _creatorNameController.dispose();
     _answerController.dispose();
     _factController.dispose();
@@ -373,6 +377,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
     _lastSeenDrawingContentVersion = contentVersion;
     _invalidatePuzzlePreview();
+    _invalidatePuzzleGenerationSourceCache();
   }
 
   void _handleWordOverlayControllerChanged() {
@@ -388,6 +393,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
     _lastSeenWordContentVersion = contentVersion;
     _invalidatePuzzlePreview();
+    _invalidatePuzzleGenerationSourceCache();
   }
 
   void _handleWordDrawingControllerChanged() {
@@ -403,6 +409,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
     _lastSeenWordDrawingContentVersion = contentVersion;
     _invalidatePuzzlePreview();
+    _invalidatePuzzleGenerationSourceCache();
   }
 
   void _handleAnswerChanged() {
@@ -739,9 +746,15 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     }
 
     try {
-      final sourceBytes = sourceImagePath.isEmpty
-          ? null
-          : await _loadStorageBytes(sourceImagePath);
+      Uint8List? sourceBytes;
+      if (sourceImagePath.isNotEmpty) {
+        try {
+          sourceBytes = await _loadStorageBytes(sourceImagePath);
+        } catch (_) {
+          // Source image might have expired/been deleted.
+        }
+      }
+      
       final sourceSize =
           sourceBytes == null ? null : await _decodeImageSize(sourceBytes);
       final loadedTransform = FaceSourceTransform.fromJson(
@@ -761,11 +774,15 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           sketchBytes = await compressFaceSketchWebp(regeneratedSketchPng);
         } catch (_) {
           if (initialLevel.solutionPath.isNotEmpty) {
-            sketchBytes = await _loadStorageBytes(initialLevel.solutionPath);
+            try {
+              sketchBytes = await _loadStorageBytes(initialLevel.solutionPath);
+            } catch (_) {}
           }
         }
       } else if (initialLevel.solutionPath.isNotEmpty) {
-        sketchBytes = await _loadStorageBytes(initialLevel.solutionPath);
+        try {
+          sketchBytes = await _loadStorageBytes(initialLevel.solutionPath);
+        } catch (_) {}
       }
 
       if (!mounted) {
@@ -782,8 +799,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         }
       });
     } catch (_) {
-      // If older drafts are missing the original face source, the editor can
-      // still work after the player chooses a new image.
     } finally {
       if (mounted) {
         setState(() => _isLoadingFaceEditorData = false);
@@ -791,8 +806,89 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     }
   }
 
+  String? _puzzleGenerationSourceCacheKey() {
+    if (_editorMode == UserLevelEditorMode.highlight) {
+      return 'word:${_wordOverlayController.contentVersion}:${_wordDrawingController.contentVersion}';
+    }
+
+    if (_editorMode == UserLevelEditorMode.drawObject) {
+      return 'draw:${_drawingController.contentVersion}';
+    }
+
+    return null;
+  }
+
+  void _invalidatePuzzleGenerationSourceCache() {
+    _puzzleSourcePrerenderDebounceTimer?.cancel();
+    _puzzleSourcePrerenderToken += 1;
+    _cachedPuzzleGenerationSourceImageBytes = null;
+    _cachedPuzzleGenerationSourceKey = null;
+    _schedulePuzzleSourcePrerender();
+  }
+
+  void _schedulePuzzleSourcePrerender({
+    Duration delay = const Duration(milliseconds: 260),
+  }) {
+    final cacheKey = _puzzleGenerationSourceCacheKey();
+    if (cacheKey == null ||
+        !_hasSolutionStageContent ||
+        _isStageInteracting ||
+        _isGeneratingPuzzle ||
+        _isSaving ||
+        _isSubmittingForReview) {
+      return;
+    }
+
+    if (_cachedPuzzleGenerationSourceKey == cacheKey &&
+        _cachedPuzzleGenerationSourceImageBytes != null) {
+      return;
+    }
+
+    _puzzleSourcePrerenderDebounceTimer?.cancel();
+    final token = ++_puzzleSourcePrerenderToken;
+    _puzzleSourcePrerenderDebounceTimer = Timer(
+      delay,
+      () => unawaited(
+        _preparePuzzleGenerationSourceCache(
+          expectedCacheKey: cacheKey,
+          token: token,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _preparePuzzleGenerationSourceCache({
+    required String expectedCacheKey,
+    required int token,
+  }) async {
+    if (!mounted ||
+        _isStageInteracting ||
+        _isGeneratingPuzzle ||
+        _isSaving ||
+        _isSubmittingForReview) {
+      return;
+    }
+
+    if (_puzzleGenerationSourceCacheKey() != expectedCacheKey) {
+      return;
+    }
+
+    try {
+      final sourceBytes = await _buildPuzzleGenerationSourceImage();
+      if (!mounted ||
+          token != _puzzleSourcePrerenderToken ||
+          _puzzleGenerationSourceCacheKey() != expectedCacheKey) {
+        return;
+      }
+
+      _cachedPuzzleGenerationSourceImageBytes = sourceBytes;
+      _cachedPuzzleGenerationSourceKey = expectedCacheKey;
+    } catch (_) {
+      // Pre-render caching is a best-effort optimization only.
+    }
+  }
+
   void _invalidatePuzzlePreview({bool returnToSolutionStep = true}) {
-    _puzzleInputRevision += 1;
 
     if (_generatedPuzzleImageBytes == null && !_hasStoredPuzzleImage) {
       return;
@@ -876,29 +972,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     _invalidatePuzzlePreview();
   }
 
-  Future<bool> _confirmLeaveWhileGenerating() async {
-    if (!_isGeneratingPuzzle || !mounted) {
-      return true;
-    }
 
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Keep This Screen Open'),
-        content: const Text(
-          'Please stay on this screen while your puzzle is generating. Leaving the app can interrupt the generation.',
-        ),
-        actions: <Widget>[
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-
-    return false;
-  }
 
   FaceSourceTransform _sanitizedFaceTransform(FaceSourceTransform transform) {
     return sanitizeFaceTransform(transform: transform);
@@ -923,6 +997,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       if (editorDataLetters.isNotEmpty) {
         _wordOverlayController.replaceLetters(editorDataLetters);
         _lastSeenWordContentVersion = _wordOverlayController.contentVersion;
+        _schedulePuzzleSourcePrerender();
         return;
       }
 
@@ -940,6 +1015,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
       _wordOverlayController.replaceLetters(letters);
       _lastSeenWordContentVersion = _wordOverlayController.contentVersion;
+      _schedulePuzzleSourcePrerender();
     } catch (_) {
       // If the existing overlay cannot be parsed, the editor can still rebuild it.
     } finally {
@@ -1086,12 +1162,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
     setState(() {
       _isGeneratingPuzzle = true;
-      _puzzleGenerationStatus = 'Saving draft...';
+      _puzzleGenerationStatus = 'Saving';
       _activePuzzleGenerationJobId = null;
       _stagePreviewMode = _StagePreviewMode.puzzle;
     });
 
-    var puzzleGenerated = false;
     try {
       final levelId = await _persistCurrentLevel(
         firebaseService: firebaseService,
@@ -1101,13 +1176,18 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         return;
       }
 
-      final generationRevision = _puzzleInputRevision;
-      setState(() => _puzzleGenerationStatus = 'Preparing solution image...');
-      final sourceImageBytes = await _buildPuzzleGenerationSourceImage();
-      if (!mounted || _isPuzzleGenerationRequestCancelled(generationToken)) {
-        return;
+      setState(() => _puzzleGenerationStatus = 'Preparing');
+      final sourceCacheKey = _puzzleGenerationSourceCacheKey();
+      final sourceImageBytes = sourceCacheKey != null &&
+              _cachedPuzzleGenerationSourceKey == sourceCacheKey &&
+              _cachedPuzzleGenerationSourceImageBytes != null
+          ? _cachedPuzzleGenerationSourceImageBytes!
+          : await _buildPuzzleGenerationSourceImage();
+      if (sourceCacheKey != null) {
+        _cachedPuzzleGenerationSourceKey = sourceCacheKey;
+        _cachedPuzzleGenerationSourceImageBytes = sourceImageBytes;
       }
-      final puzzleBytes = await _runPuzzleGenerationWithAdaptiveCompression(
+      await _runPuzzleGenerationWithAdaptiveCompression(
         firebaseService: firebaseService,
         generationToken: generationToken,
         sourceImageBytes: sourceImageBytes,
@@ -1126,61 +1206,101 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         return;
       }
 
-      if (generationRevision != _puzzleInputRevision) {
-        setState(() {
-          _generatedPuzzleImageBytes = null;
-          _hasPuzzleInvalidatedByEdit = true;
-          _stagePreviewMode = _StagePreviewMode.solution;
-          _puzzleGenerationStatus = '';
-        });
-        _showSnack('The solution changed while the puzzle was generating. Please generate it again.');
+      if (mounted) {
+        setState(() => _puzzleGenerationStatus = 'Generating\nSafe to leave.');
+      }
+      
+      int pollCount = 0;
+      bool hasSeenActiveJob = false;
+
+      while (mounted && !_isPuzzleGenerationRequestCancelled(generationToken)) {
+        await Future<void>.delayed(const Duration(seconds: 4));
+        if (!mounted || _isPuzzleGenerationRequestCancelled(generationToken)) {
+          break;
+        }
+        pollCount++;
+
+        try {
+          final levelData = await firebaseService.getMyLevel(levelId);
+          if (levelData != null) {
+            final activeCloudJobId = levelData.pendingPuzzleGenerationJobId;
+
+            if (_activePuzzleGenerationJobId != null && activeCloudJobId == _activePuzzleGenerationJobId) {
+              hasSeenActiveJob = true;
+              
+              final backendStatus = '${levelData.pendingPuzzleGeneration?['status'] ?? ''}'.trim().toLowerCase();
+              if (backendStatus == 'error' || backendStatus == 'failed') {
+                 break;
+              }
+              if (backendStatus == 'completed' || backendStatus == 'success') {
+                 setState(() { 
+                   _forceHasStoredPuzzleImage = true;
+                   _hasPuzzleInvalidatedByEdit = false;
+                   if (levelData.hasReviewReadyPuzzleImage) {
+                     _existingPuzzlePreviewUrlFuture = firebaseService.getDownloadUrl(levelData.puzzlePath);
+                   }
+                   _puzzleGenerationStatus = 'Finished!';
+                 });
+                 break;
+              }
+              continue;
+            }
+
+            if (hasSeenActiveJob && activeCloudJobId != _activePuzzleGenerationJobId) {
+              if (activeCloudJobId != null && activeCloudJobId.isNotEmpty) {
+                // The backend autonomously spawned a retry job! Re-latch onto the new job ID.
+                _activePuzzleGenerationJobId = activeCloudJobId;
+                continue;
+              }
+
+              if (levelData.hasReviewReadyPuzzleImage) {
+                setState(() {
+                  _forceHasStoredPuzzleImage = true;
+                  _hasPuzzleInvalidatedByEdit = false;
+                  _existingPuzzlePreviewUrlFuture = firebaseService.getDownloadUrl(levelData.puzzlePath);
+                  _puzzleGenerationStatus = 'Finished!';
+                });
+              }
+              break;
+            }
+
+            if (pollCount > 12) {
+              setState(() { 
+                _forceHasStoredPuzzleImage = true;
+                if (levelData.hasReviewReadyPuzzleImage) {
+                   _hasPuzzleInvalidatedByEdit = false;
+                   _existingPuzzlePreviewUrlFuture = firebaseService.getDownloadUrl(levelData.puzzlePath);
+                }
+              });
+              break;
+            }
+          }
+        } catch (_) {
+          // Ignore network errors and continue polling
+        }
+      }
+
+      if (_forceHasStoredPuzzleImage || _hasStoredPuzzleImage || _isPuzzleGenerationRequestCancelled(generationToken)) {
         return;
       }
-
-      setState(() {
-        _generatedPuzzleImageBytes = puzzleBytes;
-        _hasPuzzleInvalidatedByEdit = false;
-        _stagePreviewMode = _StagePreviewMode.puzzle;
-        _puzzleGenerationStatus = 'Puzzle ready';
-      });
-      puzzleGenerated = true;
-
-      if (mounted) {
-        setState(() => _puzzleGenerationStatus = 'Saving puzzle...');
-      }
-      await _persistCurrentLevel(
-        firebaseService: firebaseService,
-        includeFaceSolutionAsset: false,
-        puzzleImageBytesOverride: puzzleBytes,
-      );
-      if (mounted && !_isPuzzleGenerationRequestCancelled(generationToken)) {
-        setState(() => _puzzleGenerationStatus = 'Puzzle ready');
-      }
+      throw StateError('The puzzle generation ended prematurely or failed silently on the backend.');
     } on PuzzleGenerationCancelledException {
       return;
     } catch (error) {
       if (!mounted) {
         return;
       }
-      if (error is PendingPuzzleGenerationException) {
-        setState(() {
-          _stagePreviewMode = _StagePreviewMode.puzzle;
-          _puzzleGenerationStatus = '';
-        });
-        _showSnack(
-          'Puzzle generation is still preparing. Please keep this screen open a little longer.',
-        );
-        return;
-      }
+      final friendlyMessage = _friendlyErrorMessage(
+        error,
+        context: _CreatorErrorContext.puzzleGeneration,
+      );
       setState(() {
         _stagePreviewMode = _StagePreviewMode.puzzle;
-        _puzzleGenerationStatus = '';
+        _puzzleGenerationStatus = friendlyMessage;
       });
       _showFriendlyError(
         error,
-        context: puzzleGenerated
-            ? _CreatorErrorContext.draftSave
-            : _CreatorErrorContext.puzzleGeneration,
+        context: _CreatorErrorContext.puzzleGeneration,
       );
     } finally {
       if (mounted && generationToken == _activeGenerationToken) {
@@ -1216,7 +1336,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     );
   }
 
-  Future<Uint8List> _runPuzzleGenerationWithAdaptiveCompression({
+  Future<void> _runPuzzleGenerationWithAdaptiveCompression({
     required FirebaseService firebaseService,
     required int generationToken,
     required Uint8List sourceImageBytes,
@@ -1234,8 +1354,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       if (mounted && generationToken == _activeGenerationToken) {
         setState(() {
           _puzzleGenerationStatus = i == 0
-              ? 'Preparing puzzle...'
-              : 'Preparing a lighter image...';
+              ? 'Preparing puzzle'
+              : 'Preparing a lighter image';
         });
       }
 
@@ -1253,12 +1373,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       }
 
       try {
-        return await firebaseService.generateDrawObjectPuzzle(
+        await firebaseService.startDrawObjectPuzzleGeneration(
           solutionImageBytes: solutionBytes,
           solutionFileName: '1.jpg',
           solutionMimeType: 'image/jpeg',
           prompt: prompt,
-          difficulty: _generationDifficulty,
+          difficulty: double.parse((1.8 - ((_generationDifficulty - 1.0) * (1.4 / 9.0))).toStringAsFixed(2)),
           levelId: levelId,
           shouldCancel: () => _isPuzzleGenerationRequestCancelled(generationToken),
           onJobStarted: onJobStarted,
@@ -1269,6 +1389,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
             setState(() => _puzzleGenerationStatus = status);
           },
         );
+        return;
       } catch (error) {
         lastError = error;
         if (!_shouldRetryPuzzleGenerationWithSmallerImage(error) ||
@@ -1761,6 +1882,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     }
 
     setState(() => _isStageInteracting = isInteracting);
+    if (!isInteracting) {
+      _schedulePuzzleSourcePrerender();
+    }
   }
 
   Offset _normalizePoint(Offset localPosition, Size size) {
@@ -1776,9 +1900,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     final textTheme = theme.textTheme;
     final isLevelMutationLocked = _isSaving;
     final areMutationControlsLocked = _isSaving || _isGeneratingPuzzle;
-    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
-    final isKeyboardVisible = keyboardInset > 0;
-    final bodyBottomPadding = isKeyboardVisible ? keyboardInset + 24 : 24.0;
+    const double bodyBottomPadding = 24.0;
     final canvasBackgroundColor = _canvasBackgroundColor(theme);
     final editorTheme = theme.copyWith(
       scaffoldBackgroundColor: colorScheme.surface,
@@ -1792,7 +1914,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     return Theme(
       data: editorTheme,
       child: PopScope(
-        canPop: !_isGeneratingPuzzle && !isLevelMutationLocked,
+        canPop: !isLevelMutationLocked,
         onPopInvokedWithResult: (didPop, result) async {
           if (didPop) {
             return;
@@ -1801,10 +1923,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           if (isLevelMutationLocked) {
             _showSnack('Please wait for this level to finish saving.');
             return;
-          }
-
-          if (await _confirmLeaveWhileGenerating() && context.mounted) {
-            Navigator.of(context).pop(result);
           }
         },
         child: Scaffold(
@@ -1821,27 +1939,13 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                   : 'Create ${UserLevelEditorMode.labelFor(_editorMode)} Level',
             ),
           ),
-          bottomNavigationBar: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeOutCubic,
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: SizeTransition(
-                sizeFactor: animation,
-                axisAlignment: -1,
-                child: child,
-              ),
-            ),
-            child: isKeyboardVisible
-                ? const SizedBox(key: ValueKey('keyboard-footer-gap'))
-                : MediaQuery.removeViewInsets(
-                    key: const ValueKey('editor-footer'),
-                    context: context,
-                    removeBottom: true,
-                    child: IgnorePointer(
-                      ignoring: areMutationControlsLocked,
-                      child: SafeArea(
+          bottomNavigationBar: MediaQuery.removeViewInsets(
+            key: const ValueKey('editor-footer'),
+            context: context,
+            removeBottom: true,
+            child: IgnorePointer(
+              ignoring: areMutationControlsLocked,
+              child: SafeArea(
                         maintainBottomViewPadding: true,
                         top: false,
                         child: DecoratedBox(
@@ -1908,7 +2012,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                                                     const SizedBox(width: 8),
                                                     const Flexible(
                                                       child: AutoSizeText(
-                                                        'Saving...',
+                                                        'Saving',
                                                         maxLines: 1,
                                                         minFontSize: 10,
                                                         textAlign:
@@ -1958,7 +2062,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                                                     const SizedBox(width: 8),
                                                     const Flexible(
                                                       child: AutoSizeText(
-                                                        'Submitting...',
+                                                        'Submitting',
                                                         maxLines: 1,
                                                         minFontSize: 10,
                                                         textAlign:
@@ -1985,7 +2089,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                       ),
                     ),
                   ),
-          ),
           body: SafeArea(
             top: false,
             child: AnimatedPadding(
@@ -1999,124 +2102,96 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                   children: <Widget>[
                     Expanded(
                       child: _editorMode == UserLevelEditorMode.highlight
-                              ? _WordEditorSection(
-                                  scrollController: _editorScrollController,
-                                isStageInteracting: _isStageInteracting,
-                                controller: _wordOverlayController,
-                                drawingController: _wordDrawingController,
-                                hasLettersListenable:
-                                    _wordOverlayHasContentNotifier,
-                                hasDrawingContentListenable:
-                                    _wordDrawingHasContentNotifier,
-                                solutionController: _answerController,
-                                solutionTextListenable: _answerTextNotifier,
-                                creatorNameController: _creatorNameController,
-                                promptController: _generationPromptController,
-                                promptTextListenable:
-                                    _generationPromptTextNotifier,
-                                textTheme: textTheme,
-                                colorScheme: colorScheme,
-                                canvasBackgroundColor: canvasBackgroundColor,
-                                isLocked: _isLocked,
-                                isSolutionLocked: _isSolutionEditingLocked,
-                                isLoadingInitialOverlay:
-                                    _isLoadingWordEditorData,
-                                stagePreviewMode: _stagePreviewMode,
-                                puzzleBytes: _generatedPuzzleImageBytes,
-                                existingPuzzlePreviewUrlFuture:
-                                    _existingPuzzlePreviewUrlFuture,
-                                hasStoredPuzzleImage: _hasStoredPuzzleImage,
-                                isGeneratingPuzzle: _isGeneratingPuzzle,
-                                puzzleGenerationStatus:
-                                    _visiblePuzzleGenerationStatus,
-                                puzzleGenerationLeaveHint:
-                                    _puzzleGenerationLeaveHint,
-                                generationDifficulty: _generationDifficulty,
-                                onStageInteractionChanged:
-                                    _handleStageInteractionChanged,
-                                normalizePoint: _normalizePoint,
-                                onSelectStagePreview: _selectStagePreview,
-                                onGeneratePuzzle: _generatePuzzle,
-                                onCancelPuzzle: _cancelPuzzleGeneration,
-                                onGenerationDifficultyChanged:
-                                    _updateGenerationDifficulty,
-                                onUnlockSolutionEditing:
-                                    _confirmUnlockSolutionEditing,
-                              )
+                          ? _WordEditorSection(
+                              scrollController: _editorScrollController,
+                              isStageInteracting: _isStageInteracting,
+                              controller: _wordOverlayController,
+                              drawingController: _wordDrawingController,
+                              hasLettersListenable:
+                                  _wordOverlayHasContentNotifier,
+                              hasDrawingContentListenable:
+                                  _wordDrawingHasContentNotifier,
+                              solutionController: _answerController,
+                              solutionTextListenable: _answerTextNotifier,
+                              creatorNameController: _creatorNameController,
+                              promptController: _generationPromptController,
+                              promptTextListenable:
+                                  _generationPromptTextNotifier,
+                              textTheme: textTheme,
+                              colorScheme: colorScheme,
+                              canvasBackgroundColor: canvasBackgroundColor,
+                              isLocked: _isLocked || areMutationControlsLocked,
+                              isSolutionLocked: _isSolutionEditingLocked,
+                              isLoadingInitialOverlay:
+                                  _isLoadingWordEditorData,
+                              stagePreviewMode: _stagePreviewMode,
+                              puzzleBytes: _generatedPuzzleImageBytes,
+                              existingPuzzlePreviewUrlFuture:
+                                  _existingPuzzlePreviewUrlFuture,
+                              hasStoredPuzzleImage: _hasStoredPuzzleImage,
+                              isGeneratingPuzzle: _isGeneratingPuzzle,
+                              puzzleGenerationStatus:
+                                  _visiblePuzzleGenerationStatus,
+                              generationDifficulty: _generationDifficulty,
+                              onStageInteractionChanged:
+                                  _handleStageInteractionChanged,
+                              normalizePoint: _normalizePoint,
+                              onSelectStagePreview: _selectStagePreview,
+                              onGeneratePuzzle: _generatePuzzle,
+                              onCancelPuzzle: _cancelPuzzleGeneration,
+                              onGenerationDifficultyChanged:
+                                  _updateGenerationDifficulty,
+                              onUnlockSolutionEditing:
+                                  _confirmUnlockSolutionEditing,
+                            )
                           : _editorMode == UserLevelEditorMode.photoSketch
                               ? _FaceEditorSection(
                                   scrollController: _editorScrollController,
                                   isStageInteracting: _isStageInteracting,
-                                    sourceImageBytes: _faceSourceImageBytes,
-                                    sourceImageSize: _faceSourceImageSize,
-                                    sketchImageBytes: _faceSketchImageBytes,
-                                    sourceTransform: _faceSourceTransform,
-                                    solutionController: _answerController,
-                                    solutionTextListenable:
-                                        _answerTextNotifier,
-                                    factController: _factController,
-                                    creatorNameController:
-                                        _creatorNameController,
-                                    promptController:
-                                        _generationPromptController,
-                                    promptTextListenable:
-                                        _generationPromptTextNotifier,
-                                    contentCategory: _contentCategory,
-                                    textTheme: textTheme,
-                                    colorScheme: colorScheme,
-                                    canvasBackgroundColor:
-                                        canvasBackgroundColor,
-                                    isLocked: _isLocked,
-                                    isSolutionLocked:
-                                        _isSolutionEditingLocked,
-                                    isLoadingSourceImage:
-                                        _isLoadingFaceEditorData ||
-                                            _isProcessingFaceSourceImage,
-                                    isGeneratingSketch: _isGeneratingFaceSketch,
-                                    isGeneratingTransform:
-                                        _isGeneratingAfterManipulate,
-                                    stagePreviewMode: _stagePreviewMode,
-                                    puzzleBytes: _generatedPuzzleImageBytes,
-                                    existingPuzzlePreviewUrlFuture:
-                                        _existingPuzzlePreviewUrlFuture,
-                                    hasStoredPuzzleImage: _hasStoredPuzzleImage,
-                                    isGeneratingPuzzle: _isGeneratingPuzzle,
-                                    puzzleGenerationStatus:
-                                        _visiblePuzzleGenerationStatus,
-                                    puzzleGenerationLeaveHint:
-                                        _puzzleGenerationLeaveHint,
-                                    generationDifficulty:
-                                        _generationDifficulty,
-                                    settings: _faceSketchSettings,
-                                    onPickImage: _pickFaceSourceImage,
-                                    onResetImageTransform:
-                                        _resetFaceSourceTransform,
-                                    isTransformInteractionLocked:
-                                        _isFaceTransformInteractionLocked,
-                                    onToggleTransformInteractionLock:
-                                        _toggleFaceTransformInteractionLock,
-                                    onDiscardImage: () => unawaited(
-                                      _confirmDiscardFaceSourceImage(),
-                                    ),
-                                    onSourceTransformChanged:
-                                        _updateFaceSourceTransform,
-                                    onSourceTransformEnded:
-                                        _finishFaceSourceTransform,
-                                    onStageInteractionChanged:
-                                        _handleStageInteractionChanged,
-                                    onSelectStagePreview: _selectStagePreview,
-                                    onGeneratePuzzle: _generatePuzzle,
-                                    onCancelPuzzle: _cancelPuzzleGeneration,
-                                    onGenerationDifficultyChanged:
-                                        _updateGenerationDifficulty,
-                                    onContentCategoryChanged:
-                                        _updateContentCategory,
-                                    onSettingsChanged:
-                                        _updateFaceSketchSettings,
-                                    onLiveSettingsChanged: null,
-                                    onUnlockSolutionEditing:
-                                        _confirmUnlockSolutionEditing,
-                                  )
+                                  sourceImageBytes: _faceSourceImageBytes,
+                                  sourceImageSize: _faceSourceImageSize,
+                                  sketchImageBytes: _faceSketchImageBytes,
+                                  sourceTransform: _faceSourceTransform,
+                                  solutionController: _answerController,
+                                  solutionTextListenable: _answerTextNotifier,
+                                  factController: _factController,
+                                  creatorNameController: _creatorNameController,
+                                  promptController: _generationPromptController,
+                                  promptTextListenable: _generationPromptTextNotifier,
+                                  contentCategory: _contentCategory,
+                                  textTheme: textTheme,
+                                  colorScheme: colorScheme,
+                                  canvasBackgroundColor: canvasBackgroundColor,
+                                  isLocked: _isLocked || areMutationControlsLocked,
+                                  isSolutionLocked: _isSolutionEditingLocked,
+                                  isLoadingSourceImage: _isLoadingFaceEditorData || _isProcessingFaceSourceImage,
+                                  isGeneratingSketch: _isGeneratingFaceSketch,
+                                  isGeneratingTransform: _isGeneratingAfterManipulate,
+                                  stagePreviewMode: _stagePreviewMode,
+                                  puzzleBytes: _generatedPuzzleImageBytes,
+                                  existingPuzzlePreviewUrlFuture: _existingPuzzlePreviewUrlFuture,
+                                  hasStoredPuzzleImage: _hasStoredPuzzleImage,
+                                  isGeneratingPuzzle: _isGeneratingPuzzle,
+                                  puzzleGenerationStatus: _visiblePuzzleGenerationStatus,
+                                  generationDifficulty: _generationDifficulty,
+                                  settings: _faceSketchSettings,
+                                  onPickImage: _pickFaceSourceImage,
+                                  onResetImageTransform: _resetFaceSourceTransform,
+                                  isTransformInteractionLocked: _isFaceTransformInteractionLocked,
+                                  onToggleTransformInteractionLock: _toggleFaceTransformInteractionLock,
+                                  onDiscardImage: () => unawaited(_confirmDiscardFaceSourceImage()),
+                                  onSourceTransformChanged: _updateFaceSourceTransform,
+                                  onSourceTransformEnded: _finishFaceSourceTransform,
+                                  onStageInteractionChanged: _handleStageInteractionChanged,
+                                  onSelectStagePreview: _selectStagePreview,
+                                  onGeneratePuzzle: _generatePuzzle,
+                                  onCancelPuzzle: _cancelPuzzleGeneration,
+                                  onGenerationDifficultyChanged: _updateGenerationDifficulty,
+                                  onContentCategoryChanged: _updateContentCategory,
+                                  onSettingsChanged: _updateFaceSketchSettings,
+                                  onLiveSettingsChanged: null,
+                                  onUnlockSolutionEditing: _confirmUnlockSolutionEditing,
+                                )
                               : _CanvasEditorSection(
                                   scrollController: _editorScrollController,
                                   isStageInteracting: _isStageInteracting,
@@ -2137,7 +2212,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                                     colorScheme: colorScheme,
                                     canvasBackgroundColor:
                                         canvasBackgroundColor,
-                                    isLocked: _isLocked,
+                                    isLocked: _isLocked || areMutationControlsLocked,
                                     isSolutionLocked:
                                         _isSolutionEditingLocked,
                                     stagePreviewMode: _stagePreviewMode,
@@ -2148,8 +2223,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                                     isGeneratingPuzzle: _isGeneratingPuzzle,
                                     puzzleGenerationStatus:
                                         _visiblePuzzleGenerationStatus,
-                                    puzzleGenerationLeaveHint:
-                                        _puzzleGenerationLeaveHint,
                                     generationDifficulty:
                                         _generationDifficulty,
                                     normalizePoint: _normalizePoint,
@@ -2208,7 +2281,6 @@ class _FaceEditorSection extends StatelessWidget {
   final bool hasStoredPuzzleImage;
   final bool isGeneratingPuzzle;
   final String puzzleGenerationStatus;
-  final String? puzzleGenerationLeaveHint;
   final double generationDifficulty;
   final FaceSketchSettings settings;
   final VoidCallback onPickImage;
@@ -2256,7 +2328,6 @@ class _FaceEditorSection extends StatelessWidget {
     required this.hasStoredPuzzleImage,
     required this.isGeneratingPuzzle,
     required this.puzzleGenerationStatus,
-    required this.puzzleGenerationLeaveHint,
     required this.generationDifficulty,
     required this.settings,
     required this.onPickImage,
@@ -2580,61 +2651,15 @@ class _FaceEditorSection extends StatelessWidget {
             helperText: 'Describe the scene you want the generator to create.',
           ),
           const SizedBox(height: 6),
-          Row(
-            children: <Widget>[
-              SizedBox(
-                width: 54,
-                child: Text(
-                  'Easy',
-                  style: textTheme.labelMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 3,
-                    thumbShape: const RoundSliderThumbShape(
-                      enabledThumbRadius: 8,
-                    ),
-                    overlayShape: const RoundSliderOverlayShape(
-                      overlayRadius: 14,
-                    ),
-                  ),
-                  child: Slider(
-                    value: generationDifficulty,
-                    min: 1.0,
-                    max: 10.0,
-                    divisions: 18,
-                    onChanged: isLocked || isGeneratingPuzzle
-                        ? null
-                        : onGenerationDifficultyChanged,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 54,
-                child: Text(
-                  'Hard',
-                  textAlign: TextAlign.end,
-                  style: textTheme.labelMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Align(
-            alignment: Alignment.center,
-            child: Text(
-              'Difficulty ${generationDifficulty.toStringAsFixed(1)} / 10',
-              style: textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
+          _DeferredCompactSliderTile(
+            label: 'Difficulty',
+            value: generationDifficulty,
+            min: 1.0,
+            max: 10.0,
+            divisions: 180,
+            enabled: !isLocked && !isGeneratingPuzzle,
+            valueTextBuilder: (val) => '${val.toStringAsFixed(2)} / 10',
+            onChanged: onGenerationDifficultyChanged,
           ),
           const SizedBox(height: 10),
           AnimatedBuilder(
@@ -2646,40 +2671,49 @@ class _FaceEditorSection extends StatelessWidget {
               final hasPuzzlePreview =
                   puzzleBytes != null || hasStoredPuzzleImage;
 
-              return SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: isGeneratingPuzzle
-                      ? onCancelPuzzle
-                      : onGeneratePuzzle,
-                  icon: isGeneratingPuzzle
-                      ? const Icon(Icons.stop_circle_outlined)
-                      : Icon(
-                          hasPuzzlePreview
-                              ? Icons.refresh_rounded
-                              : Icons.auto_awesome_outlined,
-                        ),
-                  label: Text(
-                    isGeneratingPuzzle
-                        ? 'Cancel Generation'
-                        : hasPuzzlePreview
-                            ? 'Regenerate Puzzle'
-                            : 'Generate Puzzle',
-                  ),
-                ),
+              return Consumer2<AdsController?, MoneyController?>(
+                builder: (context, adsController, moneyController, _) {
+                  final needsAd = moneyController?.hasAllAccess() != true &&
+                      adsController?.isAdAvailable() == true;
+
+                  return SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: isGeneratingPuzzle
+                          ? onCancelPuzzle
+                          : () {
+                              if (needsAd) {
+                                adsController!.showRewardedAd(onGeneratePuzzle);
+                              } else {
+                                onGeneratePuzzle();
+                              }
+                            },
+                      icon: isGeneratingPuzzle
+                          ? const Icon(Icons.stop_circle_outlined)
+                          : Icon(
+                              needsAd
+                                  ? Icons.slideshow_rounded
+                                  : hasPuzzlePreview
+                                      ? Icons.refresh_rounded
+                                      : Icons.auto_awesome_outlined,
+                            ),
+                      label: Text(
+                        isGeneratingPuzzle
+                            ? 'Cancel Generation'
+                            : needsAd
+                                ? (hasPuzzlePreview
+                                    ? 'Watch Ad to Regenerate'
+                                    : 'Watch Ad to Generate')
+                                : hasPuzzlePreview
+                                    ? 'Regenerate Puzzle'
+                                    : 'Generate Puzzle',
+                      ),
+                    ),
+                  );
+                },
               );
             },
           ),
-          if (puzzleGenerationLeaveHint != null) ...<Widget>[
-            const SizedBox(height: 10),
-            Text(
-              puzzleGenerationLeaveHint!,
-              style: textTheme.bodySmall?.copyWith(
-                color: colorScheme.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
           const SizedBox(height: 12),
           _ContentCategorySelector(
             label: 'Publish Category',
@@ -2754,7 +2788,6 @@ class _CanvasEditorSection extends StatelessWidget {
   final bool hasStoredPuzzleImage;
   final bool isGeneratingPuzzle;
   final String puzzleGenerationStatus;
-  final String? puzzleGenerationLeaveHint;
   final double generationDifficulty;
   final Offset Function(Offset localPosition, Size size) normalizePoint;
   final ValueChanged<bool> onStageInteractionChanged;
@@ -2786,7 +2819,6 @@ class _CanvasEditorSection extends StatelessWidget {
     required this.hasStoredPuzzleImage,
     required this.isGeneratingPuzzle,
     required this.puzzleGenerationStatus,
-    required this.puzzleGenerationLeaveHint,
     required this.generationDifficulty,
     required this.normalizePoint,
     required this.onStageInteractionChanged,
@@ -3051,61 +3083,15 @@ class _CanvasEditorSection extends StatelessWidget {
             helperText: 'Describe the scene you want the generator to create.',
           ),
           const SizedBox(height: 6),
-          Row(
-            children: <Widget>[
-              SizedBox(
-                width: 54,
-                child: Text(
-                  'Easy',
-                  style: textTheme.labelMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 3,
-                    thumbShape: const RoundSliderThumbShape(
-                      enabledThumbRadius: 8,
-                    ),
-                    overlayShape: const RoundSliderOverlayShape(
-                      overlayRadius: 14,
-                    ),
-                  ),
-                  child: Slider(
-                    value: generationDifficulty,
-                    min: 1.0,
-                    max: 10.0,
-                    divisions: 18,
-                    onChanged: isLocked || isGeneratingPuzzle
-                        ? null
-                        : onGenerationDifficultyChanged,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 54,
-                child: Text(
-                  'Hard',
-                  textAlign: TextAlign.end,
-                  style: textTheme.labelMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Align(
-            alignment: Alignment.center,
-            child: Text(
-              'Difficulty ${generationDifficulty.toStringAsFixed(1)} / 10',
-              style: textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
+          _DeferredCompactSliderTile(
+            label: 'Difficulty',
+            value: generationDifficulty,
+            min: 1.0,
+            max: 10.0,
+            divisions: 180,
+            enabled: !isLocked && !isGeneratingPuzzle,
+            valueTextBuilder: (val) => '${val.toStringAsFixed(2)} / 10',
+            onChanged: onGenerationDifficultyChanged,
           ),
           const SizedBox(height: 10),
           AnimatedBuilder(
@@ -3118,40 +3104,49 @@ class _CanvasEditorSection extends StatelessWidget {
               final hasPuzzlePreview =
                   puzzleBytes != null || hasStoredPuzzleImage;
 
-              return SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: isGeneratingPuzzle
-                      ? onCancelPuzzle
-                      : onGeneratePuzzle,
-                  icon: isGeneratingPuzzle
-                      ? const Icon(Icons.stop_circle_outlined)
-                      : Icon(
-                          hasPuzzlePreview
-                              ? Icons.refresh_rounded
-                              : Icons.auto_awesome_outlined,
-                        ),
-                  label: Text(
-                    isGeneratingPuzzle
-                        ? 'Cancel Generation'
-                        : hasPuzzlePreview
-                            ? 'Regenerate Puzzle'
-                            : 'Generate Puzzle',
-                  ),
-                ),
+              return Consumer2<AdsController?, MoneyController?>(
+                builder: (context, adsController, moneyController, _) {
+                  final needsAd = moneyController?.hasAllAccess() != true &&
+                      adsController?.isAdAvailable() == true;
+
+                  return SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: isGeneratingPuzzle
+                          ? onCancelPuzzle
+                          : () {
+                              if (needsAd) {
+                                adsController!.showRewardedAd(onGeneratePuzzle);
+                              } else {
+                                onGeneratePuzzle();
+                              }
+                            },
+                      icon: isGeneratingPuzzle
+                          ? const Icon(Icons.stop_circle_outlined)
+                          : Icon(
+                              needsAd
+                                  ? Icons.slideshow_rounded
+                                  : hasPuzzlePreview
+                                      ? Icons.refresh_rounded
+                                      : Icons.auto_awesome_outlined,
+                            ),
+                      label: Text(
+                        isGeneratingPuzzle
+                            ? 'Cancel Generation'
+                            : needsAd
+                                ? (hasPuzzlePreview
+                                    ? 'Watch Ad to Regenerate'
+                                    : 'Watch Ad to Generate')
+                                : hasPuzzlePreview
+                                    ? 'Regenerate Puzzle'
+                                    : 'Generate Puzzle',
+                      ),
+                    ),
+                  );
+                },
               );
             },
           ),
-          if (puzzleGenerationLeaveHint != null) ...<Widget>[
-            const SizedBox(height: 10),
-            Text(
-              puzzleGenerationLeaveHint!,
-              style: textTheme.bodySmall?.copyWith(
-                color: colorScheme.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
           const SizedBox(height: 12),
           _ModalTextEditLauncher(
             controller: factController,
@@ -3683,71 +3678,52 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                               widget.isGeneratingTransform ||
                               widget.isGeneratingSketch) &&
                           !showUploadTarget)
-                        Positioned(
-                          top: 14,
-                          left: 14,
-                          right: 14,
-                          child: IgnorePointer(
-                            child: Align(
-                              alignment: Alignment.topCenter,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .inverseSurface
-                                      .withValues(alpha: 0.94),
-                                  borderRadius: BorderRadius.circular(999),
-                                  border: Border.all(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .outline
-                                        .withValues(alpha: 0.95),
-                                  ),
-                                  boxShadow: <BoxShadow>[
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.18),
-                                      blurRadius: 14,
-                                      offset: const Offset(0, 6),
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.65),
+                            ),
+                            child: Center(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(28),
+                                child: BackdropFilter(
+                                  filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                                  child: Container(
+                                    width: 180,
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.65),
+                                      borderRadius: BorderRadius.circular(28),
+                                      border: Border.all(
+                                        color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                        width: 1.5,
+                                      ),
                                     ),
-                                  ],
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: <Widget>[
-                                      SizedBox.square(
-                                        dimension: 16,
-                                        child:
-                                            CircularProgressIndicator.adaptive(
-                                          strokeWidth: 2.2,
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                            Theme.of(context)
-                                                .colorScheme
-                                                .onInverseSurface,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: <Widget>[
+                                        SizedBox(
+                                          width: 44,
+                                          height: 44,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 4,
+                                            color: Theme.of(context).colorScheme.primary,
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        widget.isLoading
-                                            ? 'Loading face...'
-                                            : 'Updating sketch...',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelMedium
-                                            ?.copyWith(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onInverseSurface,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 20),
+                                        Text(
+                                          widget.isLoading
+                                              ? 'Loading face'
+                                              : 'Updating sketch',
+                                          textAlign: TextAlign.center,
+                                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                                fontWeight: FontWeight.w800,
+                                                color: Theme.of(context).colorScheme.onSurface,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -3901,7 +3877,6 @@ class _PuzzleStage extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasLocalImage = puzzleBytes != null;
     final showStoredImage = !hasLocalImage && hasStoredPuzzleImage;
-    final progressText = statusText.isNotEmpty ? statusText : 'Generating...';
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -3975,12 +3950,77 @@ class _PuzzleStage extends StatelessWidget {
                   },
                 ),
               if (isGeneratingPuzzle)
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.42),
-                  ),
-                  child: Center(
-                    child: _StageStatusLabel(text: progressText),
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.65),
+                    ),
+                    child: Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(28),
+                        child: BackdropFilter(
+                          filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                          child: Container(
+                            width: 180,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.65),
+                              borderRadius: BorderRadius.circular(28),
+                              border: Border.all(
+                                color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: <Widget>[
+                                SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 4,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                Text(
+                                  statusText.isNotEmpty ? statusText.split('\n').first : 'Generating',
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    color: Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                ),
+                                if (!statusText.contains('Safe')) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Do not close.',
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                ] else if (statusText.contains('\n')) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    statusText.split('\n').last,
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                ]
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -4035,53 +4075,6 @@ class _StagePlaceholder extends StatelessWidget {
               ),
             ],
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StageStatusLabel extends StatelessWidget {
-  final String text;
-
-  const _StageStatusLabel({
-    required this.text,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: colorScheme.inverseSurface.withValues(alpha: 0.96),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: colorScheme.outline.withValues(alpha: 0.92),
-            width: 1.2,
-          ),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.24),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Text(
-            text,
-            textAlign: TextAlign.center,
-            style: textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onInverseSurface,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.1,
-            ),
-          ),
         ),
       ),
     );
@@ -4477,7 +4470,6 @@ class _WordEditorSection extends StatelessWidget {
   final bool hasStoredPuzzleImage;
   final bool isGeneratingPuzzle;
   final String puzzleGenerationStatus;
-  final String? puzzleGenerationLeaveHint;
   final double generationDifficulty;
   final Offset Function(Offset localPosition, Size size) normalizePoint;
   final ValueChanged<bool> onStageInteractionChanged;
@@ -4511,7 +4503,6 @@ class _WordEditorSection extends StatelessWidget {
     required this.hasStoredPuzzleImage,
     required this.isGeneratingPuzzle,
     required this.puzzleGenerationStatus,
-    required this.puzzleGenerationLeaveHint,
     required this.generationDifficulty,
     required this.normalizePoint,
     required this.onStageInteractionChanged,
@@ -4843,53 +4834,15 @@ class _WordEditorSection extends StatelessWidget {
             helperText: 'Describe the scene you want the generator to create.',
           ),
           const SizedBox(height: 6),
-          Row(
-            children: <Widget>[
-              SizedBox(
-                width: 54,
-                child: Text(
-                  'Easy',
-                  style: textTheme.labelMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: _EditorSlider(
-                  value: generationDifficulty,
-                  min: 1.0,
-                  max: 10.0,
-                  divisions: 18,
-                  onChanged: isLocked || isGeneratingPuzzle
-                      ? null
-                      : onGenerationDifficultyChanged,
-                ),
-              ),
-              SizedBox(
-                width: 52,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    'Hard',
-                    textAlign: TextAlign.end,
-                    style: textTheme.labelMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Align(
-            alignment: Alignment.center,
-            child: Text(
-              'Difficulty ${generationDifficulty.toStringAsFixed(1)} / 10',
-              style: textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
+          _DeferredCompactSliderTile(
+            label: 'Control Weight',
+            value: generationDifficulty,
+            min: 1.0,
+            max: 10.0,
+            divisions: 180,
+            enabled: !isLocked && !isGeneratingPuzzle,
+            valueTextBuilder: (val) => val.toStringAsFixed(2),
+            onChanged: onGenerationDifficultyChanged,
           ),
           const SizedBox(height: 12),
           AnimatedBuilder(
@@ -4902,40 +4855,49 @@ class _WordEditorSection extends StatelessWidget {
               final hasPuzzlePreview =
                   puzzleBytes != null || hasStoredPuzzleImage;
 
-              return SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: isGeneratingPuzzle
-                      ? onCancelPuzzle
-                      : onGeneratePuzzle,
-                  icon: isGeneratingPuzzle
-                      ? const Icon(Icons.stop_circle_outlined)
-                      : Icon(
-                          hasPuzzlePreview
-                              ? Icons.refresh_rounded
-                              : Icons.auto_awesome_outlined,
-                        ),
-                  label: Text(
-                    isGeneratingPuzzle
-                        ? 'Cancel Generation'
-                        : hasPuzzlePreview
-                            ? 'Regenerate Puzzle'
-                            : 'Generate Puzzle',
-                  ),
-                ),
+              return Consumer2<AdsController?, MoneyController?>(
+                builder: (context, adsController, moneyController, _) {
+                  final needsAd = moneyController?.hasAllAccess() != true &&
+                      adsController?.isAdAvailable() == true;
+
+                  return SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: isGeneratingPuzzle
+                          ? onCancelPuzzle
+                          : () {
+                              if (needsAd) {
+                                adsController!.showRewardedAd(onGeneratePuzzle);
+                              } else {
+                                onGeneratePuzzle();
+                              }
+                            },
+                      icon: isGeneratingPuzzle
+                          ? const Icon(Icons.stop_circle_outlined)
+                          : Icon(
+                              needsAd
+                                  ? Icons.slideshow_rounded
+                                  : hasPuzzlePreview
+                                      ? Icons.refresh_rounded
+                                      : Icons.auto_awesome_outlined,
+                            ),
+                      label: Text(
+                        isGeneratingPuzzle
+                            ? 'Cancel Generation'
+                            : needsAd
+                                ? (hasPuzzlePreview
+                                    ? 'Watch Ad to Regenerate'
+                                    : 'Watch Ad to Generate')
+                                : hasPuzzlePreview
+                                    ? 'Regenerate Puzzle'
+                                    : 'Generate Puzzle',
+                      ),
+                    ),
+                  );
+                },
               );
             },
           ),
-          if (puzzleGenerationLeaveHint != null) ...<Widget>[
-            const SizedBox(height: 10),
-            Text(
-              puzzleGenerationLeaveHint!,
-              style: textTheme.bodySmall?.copyWith(
-                color: colorScheme.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
           const SizedBox(height: 12),
           _ModalTextEditLauncher(
             controller: creatorNameController,

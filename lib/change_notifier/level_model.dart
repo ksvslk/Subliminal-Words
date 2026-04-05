@@ -27,6 +27,8 @@ import 'package:operation_hermes/persistence/level_persistence.dart';
 import 'package:operation_hermes/persistence/progress_persistence.dart';
 import 'package:operation_hermes/persistence/settings_persistence.dart';
 import 'package:operation_hermes/data/sw_level.dart';
+import 'package:operation_hermes/ui/app_scaffold_messenger.dart';
+import 'package:operation_hermes/ui/screen/create_level_screen.dart';
 
 class LevelModel with ChangeNotifier {
   final LevelPersistence persistence;
@@ -340,28 +342,33 @@ class LevelModel with ChangeNotifier {
     }
     _initialTooltipDismissed = false;
     manipulationEnabled = false;
-    await pictureModel.initializePicture(level: level);
-    fieldModel.initializeLevel(level.name);
-    final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
-    setLettersCanBeRemoved(canLettersBeRemovedMore);
-    await minLoadingTime;
-    currentLevel = level;
-    await settingsPersistence.saveLastPackId(level.packId);
-    levelCompleted = false;
-    networkRequestActive = false;
-    lettersAnimationFadeOutDuration = 1750;
-    notifyListeners();
-    final adsDisplayLevelLimit =
-        FirebaseRemoteConfig.instance.getInt(C.adsDisplayLevelLimit);
-    await Future.delayed(const Duration(milliseconds: 50));
-    isLevelReady = true;
 
-    _levelStartTime = DateTime.now();
-    await trackLevelBegin(level.nr, level.packId);
+    try {
+      await pictureModel.initializePicture(level: level);
+      fieldModel.initializeLevel(level.name);
+      final canLettersBeRemovedMore = fieldModel.isRemoveLettersAvailable();
+      setLettersCanBeRemoved(canLettersBeRemovedMore);
+      await minLoadingTime;
+      currentLevel = level;
+      await settingsPersistence.saveLastPackId(level.packId);
+      levelCompleted = false;
+      lettersAnimationFadeOutDuration = 1750;
+      final adsDisplayLevelLimit =
+          FirebaseRemoteConfig.instance.getInt(C.adsDisplayLevelLimit);
+      await Future.delayed(const Duration(milliseconds: 50));
+      isLevelReady = true;
 
-    notifyListeners();
-    if (levelNr >= adsDisplayLevelLimit) {
-      showAds(levelNr);
+      _levelStartTime = DateTime.now();
+      await trackLevelBegin(level.nr, level.packId);
+
+      if (levelNr >= adsDisplayLevelLimit) {
+        showAds(levelNr);
+      }
+    } catch (e) {
+      _log.severe('Error while initializing regular level payload', e);
+    } finally {
+      networkRequestActive = false;
+      notifyListeners();
     }
   }
 
@@ -551,6 +558,17 @@ class LevelModel with ChangeNotifier {
         return;
       }
 
+      if (message.data['notificationType'] == 'puzzle_generation_completed') {
+        showAppSnackBar('✅ Puzzle successfully generated!');
+        return;
+      }
+
+      if (message.data['notificationType'] == 'puzzle_generation_failed') {
+        final errorMsg = message.data['errorMessage']?.toString() ?? '';
+        showAppSnackBar(errorMsg.isNotEmpty ? '❌ Generation Failed: $errorMsg' : '❌ Generation Failed');
+        return;
+      }
+
       try {
         final packName = message.data['packId']
             .toString()
@@ -595,7 +613,32 @@ class LevelModel with ChangeNotifier {
     }
   }
 
-  void _handleNotificationTap(RemoteMessage message) {
+  void _handleNotificationTap(RemoteMessage message) async {
+    if (message.data['notificationType'] == 'puzzle_generation_completed') {
+      final draftLevelId = (message.data['draftLevelId']?.toString() ?? '').trim();
+      if (draftLevelId.isNotEmpty) {
+        try {
+          final fetchedLevel = await firebaseService.getMyLevel(draftLevelId);
+          if (fetchedLevel != null) {
+            rootNavigatorKey.currentState?.push(
+              MaterialPageRoute(builder: (_) => CreateLevelScreen(initialLevel: fetchedLevel)),
+            );
+          }
+        } catch (e, st) {
+          _log.warning('Could not load completed puzzle draft: $draftLevelId', e, st);
+        }
+      }
+      return;
+    }
+
+    if (message.data['notificationType'] == 'puzzle_generation_failed') {
+      final errorMsg = (message.data['errorMessage']?.toString() ?? '').trim();
+      showMessageFromMascot(
+        errorMsg.isNotEmpty ? 'Puzzle Generation Failed: $errorMsg' : 'Puzzle Generation Failed. Please try again.',
+      );
+      return;
+    }
+
     if (message.data['notificationType'] == 'user_submission_rejected') {
       final levelName = (message.data['levelName']?.toString() ?? '').trim();
       showMessageFromMascot(
@@ -640,7 +683,7 @@ class LevelModel with ChangeNotifier {
       _pendingLevelNumber = null;
 
       final SWLevel? levelToLoad =
-          await firebaseService.getLevel(packId, levelNr);
+          await firebaseService.getLevel(packId, levelNr, forceServer: true);
 
       if (levelToLoad != null && levelToLoad.isEnabled) {
         await loadLevelFromSelection(levelToLoad);

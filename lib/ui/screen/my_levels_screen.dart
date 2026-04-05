@@ -1,7 +1,9 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:operation_hermes/change_notifier/level_model.dart';
+import 'package:operation_hermes/controller/ads_controller.dart';
 import 'package:operation_hermes/controller/firebase_service.dart';
+import 'package:operation_hermes/controller/money_controller.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:operation_hermes/data/user_level_metadata.dart';
 import 'package:operation_hermes/ui/app_scaffold_messenger.dart';
@@ -161,7 +163,26 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
   }
 
   Future<void> _playLevel(BuildContext context, SWLevel level) async {
-    await context.read<LevelModel>().loadLevelFromSelection(level);
+    SWLevel levelToPlay = level;
+    if (level.submissionStatus == UserLevelSubmissionStatus.approved &&
+        level.submissionId != null &&
+        level.submissionId!.contains('__')) {
+      final parts = level.submissionId!.split('__');
+      if (parts.length >= 2) {
+        final packId = parts[0];
+        final levelNr = int.tryParse(parts[1]) ?? 0;
+        final liveLevel = await context.read<FirebaseService>().getLevel(packId, levelNr);
+        if (liveLevel != null && liveLevel.id.isNotEmpty) {
+          levelToPlay = liveLevel;
+        }
+      }
+    }
+
+    if (!context.mounted) {
+      return;
+    }
+
+    await context.read<LevelModel>().loadLevelFromSelection(levelToPlay);
     if (context.mounted) {
       Navigator.of(context).popUntil((route) => route.isFirst);
     }
@@ -238,6 +259,10 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
+    final adsController = context.watch<AdsController?>();
+    final moneyController = context.watch<MoneyController?>();
+    final needsAd = moneyController?.hasAllAccess() != true;
+
     return Scaffold(
       appBar: AppBar(
         title: const AutoSizeText(
@@ -275,7 +300,7 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Loading your levels...',
+                        'Loading your levels',
                         textAlign: TextAlign.center,
                         style: textTheme.titleMedium?.copyWith(
                           color: colorScheme.onSurface,
@@ -386,25 +411,56 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
               final hasPendingPuzzleGeneration =
                   level.hasPendingPuzzleGeneration;
               final canSubmitForReview = hasPuzzleImage &&
+                  level.hasRequiredFieldsForSubmission &&
                   !hasPendingPuzzleGeneration &&
                   !level.isLocked &&
                   !needsFaceSafetyResave &&
                   level.submissionStatus !=
                       UserLevelSubmissionStatus.pendingReview;
 
+              final isApproved = level.submissionStatus == UserLevelSubmissionStatus.approved;
+              final isPending = level.submissionStatus == UserLevelSubmissionStatus.pendingReview;
+              final isRejected = level.submissionStatus == UserLevelSubmissionStatus.rejected;
+              
+              final badgeBgColor = isApproved ? Colors.green.withValues(alpha: 0.18) :
+                                   isPending ? Colors.orange.withValues(alpha: 0.18) :
+                                   isRejected ? colorScheme.errorContainer :
+                                   colorScheme.secondaryContainer;
+              final badgeFgColor = isApproved ? Colors.green.shade700 :
+                                   isPending ? Colors.orange.shade800 :
+                                   isRejected ? colorScheme.onErrorContainer :
+                                   colorScheme.onSecondaryContainer;
+              
+              final canEdit = !level.isLocked && !hasPendingPuzzleGeneration && !isLevelBusy;
+
               return Card(
                 elevation: 0,
                 color: colorScheme.surfaceContainerHigh,
                 surfaceTintColor: Colors.transparent,
+                clipBehavior: Clip.antiAlias,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
                   side: BorderSide(color: colorScheme.outlineVariant),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
+                child: InkWell(
+                  onTap: canEdit
+                      ? () => _runLevelAction(
+                            level.documentId,
+                            _LevelCardAction.edit,
+                            () => _openEditor(context, level: level),
+                          )
+                      : (hasPuzzleImage && !isLevelBusy
+                          ? () => _runLevelAction(
+                                level.documentId,
+                                _LevelCardAction.play,
+                                () => _playLevel(context, level),
+                              )
+                          : null),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
@@ -426,13 +482,13 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: colorScheme.secondaryContainer,
+                              color: badgeBgColor,
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
                               statusLabel,
                               style: textTheme.labelMedium?.copyWith(
-                                color: colorScheme.onSecondaryContainer,
+                                color: badgeFgColor,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -459,8 +515,8 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                         const SizedBox(height: 8),
                         Text(
                           hasPendingPuzzleGeneration
-                              ? 'Puzzle generation is still running. Open this draft to resume or check it again.'
-                              : 'Add the real puzzle image before playing or submitting.',
+                              ? 'Puzzle generation running'
+                              : 'Generate a puzzle first',
                           style: textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),
@@ -498,7 +554,7 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                               const SizedBox(width: 8),
                               Flexible(
                                 child: Text(
-                                  'Puzzle generation is still running',
+                                  'Puzzle generation running',
                                   style: textTheme.labelLarge?.copyWith(
                                     color: colorScheme.onTertiaryContainer,
                                     fontWeight: FontWeight.w700,
@@ -558,7 +614,9 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                         children: <Widget>[
                           _LevelActionIconButton(
                             tooltip: 'Play',
-                            icon: Icons.play_arrow_outlined,
+                            icon: needsAd
+                                ? Icons.slideshow_rounded
+                                : Icons.play_arrow_outlined,
                             enabled: hasPuzzleImage && !isLevelBusy,
                             isLoading: _isActionBusy(
                               level.documentId,
@@ -582,7 +640,7 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                           _LevelActionIconButton(
                             tooltip: 'Edit',
                             icon: Icons.edit_outlined,
-                            enabled: !level.isLocked && !isLevelBusy,
+                            enabled: !level.isLocked && !hasPendingPuzzleGeneration && !isLevelBusy,
                             isLoading: _isActionBusy(
                               level.documentId,
                               _LevelCardAction.edit,
@@ -594,9 +652,11 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                             ),
                             onUnavailable: () => _showActionBlocked(
                               context,
-                              !level.isLocked
-                                  ? 'Please wait for the current action to finish.'
-                                  : 'Submitted levels are locked and can no longer be edited.',
+                              level.isLocked
+                                  ? 'Submitted levels are locked and can no longer be edited.'
+                                  : hasPendingPuzzleGeneration
+                                      ? 'Wait for puzzle generation to finish before editing.'
+                                      : 'Please wait for the current action to finish.',
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -617,8 +677,10 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                               context,
                               isLevelBusy
                                   ? 'Please wait for the current action to finish.'
-                                  : !hasPuzzleImage
-                                      ? 'Generate a puzzle first before submitting for review.'
+                                  : !level.hasRequiredFieldsForSubmission
+                                      ? 'Please complete all required fields (Creator, Hint, Solution, Puzzle) before submitting.'
+                                      : !hasPuzzleImage
+                                          ? 'Generate a puzzle first before submitting for review.'
                                       : hasPendingPuzzleGeneration
                                           ? 'Wait for puzzle generation to finish before submitting for review.'
                                       : needsFaceSafetyResave
@@ -657,6 +719,7 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
                       ),
                     ],
                   ),
+                ),
                 ),
               );
             },

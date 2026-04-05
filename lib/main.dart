@@ -97,7 +97,7 @@ Future<void> main() async {
     _log.severe('Firebase App Check activation failed.', e);
   }
 
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   await initPurchases();
   await setUpRemoteConfig();
@@ -233,6 +233,7 @@ class MyApp extends StatelessWidget {
             ]);
 
             return MaterialApp(
+                navigatorKey: rootNavigatorKey,
                 title: 'Subliminal Words',
                 debugShowCheckedModeBanner: false,
                 scaffoldMessengerKey: rootScaffoldMessengerKey,
