@@ -61,9 +61,8 @@ double _normalizeStoredGenerationDifficulty(double? rawValue) {
 }
 
 DrawingController _buildDrawingControllerFromEditorData(
-  Map<dynamic, dynamic>? rawEditorData,
-  {DrawingBrushType defaultBrush = DrawingBrushType.none}
-) {
+    Map<dynamic, dynamic>? rawEditorData,
+    {DrawingBrushType defaultBrush = DrawingBrushType.none}) {
   final editorData = rawEditorData == null
       ? const <String, dynamic>{}
       : Map<String, dynamic>.from(rawEditorData);
@@ -198,19 +197,18 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   bool get _isLocked => widget.initialLevel?.isLocked == true;
   bool get _isEditMode => widget.initialLevel != null;
   bool get _hasStoredPuzzleImage =>
-      (widget.initialLevel?.hasReviewReadyPuzzleImage == true || _forceHasStoredPuzzleImage) &&
+      (widget.initialLevel?.hasReviewReadyPuzzleImage == true ||
+          _forceHasStoredPuzzleImage) &&
       !_hasPuzzleInvalidatedByEdit;
   bool get _hasPuzzleImageForReview =>
       _generatedPuzzleImageBytes != null || _hasStoredPuzzleImage;
-  bool get _isSolutionEditingLocked =>
-      !_isLocked && _hasPuzzleImageForReview;
-  bool get _hasDraftStageContent =>
-      _editorMode == UserLevelEditorMode.highlight
-          ? _wordOverlayController.hasLetters ||
-              _wordDrawingController.hasCommittedStrokes
-          : _editorMode == UserLevelEditorMode.photoSketch
-              ? _faceSourceImageBytes != null
-              : _drawingController.hasCommittedStrokes;
+  bool get _isSolutionEditingLocked => !_isLocked && _hasPuzzleImageForReview;
+  bool get _hasDraftStageContent => _editorMode == UserLevelEditorMode.highlight
+      ? _wordOverlayController.hasLetters ||
+          _wordDrawingController.hasCommittedStrokes
+      : _editorMode == UserLevelEditorMode.photoSketch
+          ? _faceSourceImageBytes != null
+          : _drawingController.hasCommittedStrokes;
   bool get _hasSolutionText =>
       _answerController.text.trim().length >= _minSolutionLength;
   bool get _hasPuzzlePrompt =>
@@ -228,7 +226,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   bool get _canAccessPuzzleStep => _isLocked || _isSolutionStepComplete;
   String get _visiblePuzzleGenerationStatus =>
       _isGeneratingPuzzle ? _puzzleGenerationStatus : '';
-
 
   @override
   void initState() {
@@ -575,7 +572,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
     final shouldDiscard = await showDialog<bool>(
           context: context,
-        builder: (context) => AlertDialog(
+          builder: (context) => AlertDialog(
             title: const Text('Discard photo?'),
             content: const Text(
               'This will remove the current photo, sketch, and framing so you can start again.',
@@ -683,7 +680,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       final sketchBytes = await compressFaceSketchWebp(sketchPngBytes);
       final hasNewerRequest =
           requestedRevision != _faceSketchGenerationRevision ||
-          _faceSourceImageBytes == null;
+              _faceSourceImageBytes == null;
       if (mounted && !hasNewerRequest) {
         setState(() {
           _faceSketchImageBytes = sketchBytes;
@@ -694,7 +691,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     } catch (error) {
       final hasNewerRequest =
           requestedRevision != _faceSketchGenerationRevision ||
-          _faceSourceImageBytes == null;
+              _faceSourceImageBytes == null;
       if (mounted && !hasNewerRequest) {
         setState(() {
           _isGeneratingFaceSketch = false;
@@ -757,7 +754,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           // Source image might have expired/been deleted.
         }
       }
-      
+
       final sourceSize =
           sourceBytes == null ? null : await _decodeImageSize(sourceBytes);
       final loadedTransform = FaceSourceTransform.fromJson(
@@ -892,7 +889,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   }
 
   void _invalidatePuzzlePreview({bool returnToSolutionStep = true}) {
-
     if (_generatedPuzzleImageBytes == null && !_hasStoredPuzzleImage) {
       return;
     }
@@ -974,8 +970,6 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
 
     _invalidatePuzzlePreview();
   }
-
-
 
   FaceSourceTransform _sanitizedFaceTransform(FaceSourceTransform transform) {
     return sanitizeFaceTransform(transform: transform);
@@ -1142,8 +1136,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       return;
     }
 
-    if (!skipExistingPuzzleConfirmation &&
-        !await _confirmRegeneratePuzzle()) {
+    if (!skipExistingPuzzleConfirmation && !await _confirmRegeneratePuzzle()) {
       return;
     }
 
@@ -1212,7 +1205,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       if (mounted) {
         setState(() => _puzzleGenerationStatus = 'Generating\nSafe to leave.');
       }
-      
+
       int pollCount = 0;
       bool hasSeenActiveJob = false;
 
@@ -1228,28 +1221,34 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           if (levelData != null) {
             final activeCloudJobId = levelData.pendingPuzzleGenerationJobId;
 
-            if (_activePuzzleGenerationJobId != null && activeCloudJobId == _activePuzzleGenerationJobId) {
+            if (_activePuzzleGenerationJobId != null &&
+                activeCloudJobId == _activePuzzleGenerationJobId) {
               hasSeenActiveJob = true;
-              
-              final backendStatus = '${levelData.pendingPuzzleGeneration?['status'] ?? ''}'.trim().toLowerCase();
+
+              final backendStatus =
+                  '${levelData.pendingPuzzleGeneration?['status'] ?? ''}'
+                      .trim()
+                      .toLowerCase();
               if (backendStatus == 'error' || backendStatus == 'failed') {
-                 break;
+                break;
               }
               if (backendStatus == 'completed' || backendStatus == 'success') {
-                 setState(() { 
-                   _forceHasStoredPuzzleImage = true;
-                   _hasPuzzleInvalidatedByEdit = false;
-                   if (levelData.hasReviewReadyPuzzleImage) {
-                     _existingPuzzlePreviewUrlFuture = firebaseService.getDownloadUrl(levelData.puzzlePath);
-                   }
-                   _puzzleGenerationStatus = 'Finished!';
-                 });
-                 break;
+                setState(() {
+                  _forceHasStoredPuzzleImage = true;
+                  _hasPuzzleInvalidatedByEdit = false;
+                  if (levelData.hasReviewReadyPuzzleImage) {
+                    _existingPuzzlePreviewUrlFuture =
+                        firebaseService.getDownloadUrl(levelData.puzzlePath);
+                  }
+                  _puzzleGenerationStatus = 'Finished!';
+                });
+                break;
               }
               continue;
             }
 
-            if (hasSeenActiveJob && activeCloudJobId != _activePuzzleGenerationJobId) {
+            if (hasSeenActiveJob &&
+                activeCloudJobId != _activePuzzleGenerationJobId) {
               if (activeCloudJobId != null && activeCloudJobId.isNotEmpty) {
                 // The backend autonomously spawned a retry job! Re-latch onto the new job ID.
                 _activePuzzleGenerationJobId = activeCloudJobId;
@@ -1260,7 +1259,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                 setState(() {
                   _forceHasStoredPuzzleImage = true;
                   _hasPuzzleInvalidatedByEdit = false;
-                  _existingPuzzlePreviewUrlFuture = firebaseService.getDownloadUrl(levelData.puzzlePath);
+                  _existingPuzzlePreviewUrlFuture =
+                      firebaseService.getDownloadUrl(levelData.puzzlePath);
                   _puzzleGenerationStatus = 'Finished!';
                 });
               }
@@ -1268,11 +1268,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
             }
 
             if (pollCount > 12) {
-              setState(() { 
+              setState(() {
                 _forceHasStoredPuzzleImage = true;
                 if (levelData.hasReviewReadyPuzzleImage) {
-                   _hasPuzzleInvalidatedByEdit = false;
-                   _existingPuzzlePreviewUrlFuture = firebaseService.getDownloadUrl(levelData.puzzlePath);
+                  _hasPuzzleInvalidatedByEdit = false;
+                  _existingPuzzlePreviewUrlFuture =
+                      firebaseService.getDownloadUrl(levelData.puzzlePath);
                 }
               });
               break;
@@ -1283,10 +1284,13 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         }
       }
 
-      if (_forceHasStoredPuzzleImage || _hasStoredPuzzleImage || _isPuzzleGenerationRequestCancelled(generationToken)) {
+      if (_forceHasStoredPuzzleImage ||
+          _hasStoredPuzzleImage ||
+          _isPuzzleGenerationRequestCancelled(generationToken)) {
         return;
       }
-      throw StateError('The puzzle generation ended prematurely or failed silently on the backend.');
+      throw StateError(
+          'The puzzle generation ended prematurely or failed silently on the backend.');
     } on PuzzleGenerationCancelledException {
       return;
     } catch (error) {
@@ -1356,9 +1360,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
       }
       if (mounted && generationToken == _activeGenerationToken) {
         setState(() {
-          _puzzleGenerationStatus = i == 0
-              ? 'Preparing puzzle'
-              : 'Preparing a lighter image';
+          _puzzleGenerationStatus =
+              i == 0 ? 'Preparing puzzle' : 'Preparing a lighter image';
         });
       }
 
@@ -1381,9 +1384,12 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
           solutionFileName: '1.jpg',
           solutionMimeType: 'image/jpeg',
           prompt: prompt,
-          difficulty: double.parse((1.8 - ((_generationDifficulty - 1.0) * (1.4 / 9.0))).toStringAsFixed(2)),
+          difficulty: double.parse(
+              (1.8 - ((_generationDifficulty - 1.0) * (1.4 / 9.0)))
+                  .toStringAsFixed(2)),
           levelId: levelId,
-          shouldCancel: () => _isPuzzleGenerationRequestCancelled(generationToken),
+          shouldCancel: () =>
+              _isPuzzleGenerationRequestCancelled(generationToken),
           onJobStarted: onJobStarted,
           onStatusChanged: (status) {
             if (!mounted || generationToken != _activeGenerationToken) {
@@ -1556,7 +1562,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     Uint8List? puzzleImageBytesOverride,
   }) async {
     late final String levelId;
-    final puzzleImageBytes = puzzleImageBytesOverride ?? _generatedPuzzleImageBytes;
+    final puzzleImageBytes =
+        puzzleImageBytesOverride ?? _generatedPuzzleImageBytes;
     final allowReuseExistingPuzzle =
         puzzleImageBytes == null && !_hasPuzzleInvalidatedByEdit;
 
@@ -1748,8 +1755,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         message.contains('unauth') ||
         message.contains('permission') ||
         message.contains('forbidden');
-    final isTooLarge = message.contains('too large') ||
-        message.contains('(413)');
+    final isTooLarge =
+        message.contains('too large') || message.contains('(413)');
     final isUnsupportedUpload = message.contains('only jpg, png, or webp') ||
         message.contains('unsupported upload kind') ||
         message.contains('unsupported image');
@@ -1757,10 +1764,11 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         message.contains('adult') ||
         message.contains('racy') ||
         message.contains('violence');
-    final isUnreadableImage = message.contains('could not read that face photo') ||
-        message.contains('could not read that photo') ||
-        message.contains('invalid source image') ||
-        message.contains('valid solution image');
+    final isUnreadableImage =
+        message.contains('could not read that face photo') ||
+            message.contains('could not read that photo') ||
+            message.contains('invalid source image') ||
+            message.contains('valid solution image');
 
     switch (context) {
       case _CreatorErrorContext.facePhotoPick:
@@ -1791,7 +1799,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
         if (message.contains('another puzzle generation is already running')) {
           return 'Wait for your current puzzle generation to finish first.';
         }
-        if (message.contains('please wait a moment before starting another puzzle')) {
+        if (message
+            .contains('please wait a moment before starting another puzzle')) {
           return 'Please wait a moment before starting another puzzle.';
         }
         if (isWarmupDelay) {
@@ -1949,149 +1958,140 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
             child: IgnorePointer(
               ignoring: areMutationControlsLocked,
               child: SafeArea(
-                        maintainBottomViewPadding: true,
-                        top: false,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: colorScheme.surface,
-                            border: Border(
-                              top: BorderSide(color: colorScheme.outlineVariant),
-                            ),
+                maintainBottomViewPadding: true,
+                top: false,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface,
+                    border: Border(
+                      top: BorderSide(color: colorScheme.outlineVariant),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge(<Listenable>[
+                        _creatorNameTextNotifier,
+                        _answerTextNotifier,
+                        _factTextNotifier,
+                        _generationPromptTextNotifier,
+                        _drawingHasContentNotifier,
+                        _wordDrawingHasContentNotifier,
+                        _wordOverlayHasContentNotifier,
+                      ]),
+                      builder: (context, _) => Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          _EditorStepProgress(
+                            textTheme: textTheme,
+                            colorScheme: colorScheme,
+                            activeStep: _stagePreviewMode,
+                            solutionProgress: _solutionStepProgress,
+                            puzzleProgress: _puzzleStepProgress,
+                            canAccessPuzzleStep: _canAccessPuzzleStep,
+                            stepsEnabled: !_isGeneratingPuzzle,
+                            onStepSelected: _selectStagePreview,
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                            child: AnimatedBuilder(
-                              animation: Listenable.merge(<Listenable>[
-                                _creatorNameTextNotifier,
-                                _answerTextNotifier,
-                                _factTextNotifier,
-                                _generationPromptTextNotifier,
-                                _drawingHasContentNotifier,
-                                _wordDrawingHasContentNotifier,
-                                _wordOverlayHasContentNotifier,
-                              ]),
-                              builder: (context, _) => Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: <Widget>[
-                                  _EditorStepProgress(
-                                    textTheme: textTheme,
-                                    colorScheme: colorScheme,
-                                    activeStep: _stagePreviewMode,
-                                    solutionProgress: _solutionStepProgress,
-                                    puzzleProgress: _puzzleStepProgress,
-                                    canAccessPuzzleStep: _canAccessPuzzleStep,
-                                    stepsEnabled: !_isGeneratingPuzzle,
-                                    onStepSelected: _selectStagePreview,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: <Widget>[
-                                      Expanded(
-                                        child: OutlinedButton(
-                                          onPressed: areMutationControlsLocked
-                                              ? null
-                                              : () =>
-                                                  _save(submitAfterSave: false),
-                                          child: _isSaving &&
-                                                  !_isSubmittingForReview
-                                              ? Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  children: <Widget>[
-                                                    SizedBox.square(
-                                                      dimension: 16,
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                        strokeWidth: 2.2,
-                                                        valueColor:
-                                                            AlwaysStoppedAnimation<
-                                                              Color
-                                                            >(
-                                                          colorScheme.primary,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    const Flexible(
-                                                      child: AutoSizeText(
-                                                        'Saving',
-                                                        maxLines: 1,
-                                                        minFontSize: 10,
-                                                        textAlign:
-                                                            TextAlign.center,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                )
-                                              : const AutoSizeText(
-                                                  'Save Draft',
-                                                  maxLines: 1,
-                                                  minFontSize: 10,
-                                                  textAlign: TextAlign.center,
+                          const SizedBox(height: 12),
+                          Row(
+                            children: <Widget>[
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: areMutationControlsLocked
+                                      ? null
+                                      : () => _save(submitAfterSave: false),
+                                  child: _isSaving && !_isSubmittingForReview
+                                      ? Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: <Widget>[
+                                            SizedBox.square(
+                                              dimension: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2.2,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                        Color>(
+                                                  colorScheme.primary,
                                                 ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            const Flexible(
+                                              child: AutoSizeText(
+                                                'Saving',
+                                                maxLines: 1,
+                                                minFontSize: 10,
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : const AutoSizeText(
+                                          'Save Draft',
+                                          maxLines: 1,
+                                          minFontSize: 10,
+                                          textAlign: TextAlign.center,
                                         ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: FilledButton(
-                                          onPressed: areMutationControlsLocked
-                                              ? null
-                                              : () =>
-                                                  _save(submitAfterSave: true),
-                                          child: _isSubmittingForReview
-                                              ? Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  children: <Widget>[
-                                                    SizedBox.square(
-                                                      dimension: 16,
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                        strokeWidth: 2.4,
-                                                        backgroundColor:
-                                                            colorScheme.onPrimary
-                                                                .withValues(
-                                                                  alpha: 0.22,
-                                                                ),
-                                                        valueColor:
-                                                            AlwaysStoppedAnimation<
-                                                              Color
-                                                            >(
-                                                          colorScheme.onPrimary,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    const Flexible(
-                                                      child: AutoSizeText(
-                                                        'Submitting',
-                                                        maxLines: 1,
-                                                        minFontSize: 10,
-                                                        textAlign:
-                                                            TextAlign.center,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                )
-                                              : const AutoSizeText(
-                                                  'Submit for Review',
-                                                  maxLines: 1,
-                                                  minFontSize: 10,
-                                                  textAlign: TextAlign.center,
-                                                ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: FilledButton(
+                                  onPressed: areMutationControlsLocked
+                                      ? null
+                                      : () => _save(submitAfterSave: true),
+                                  child: _isSubmittingForReview
+                                      ? Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: <Widget>[
+                                            SizedBox.square(
+                                              dimension: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2.4,
+                                                backgroundColor: colorScheme
+                                                    .onPrimary
+                                                    .withValues(
+                                                  alpha: 0.22,
+                                                ),
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                        Color>(
+                                                  colorScheme.onPrimary,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            const Flexible(
+                                              child: AutoSizeText(
+                                                'Submitting',
+                                                maxLines: 1,
+                                                minFontSize: 10,
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : const AutoSizeText(
+                                          'Submit for Review',
+                                          maxLines: 1,
+                                          minFontSize: 10,
+                                          textAlign: TextAlign.center,
+                                        ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
+                ),
+              ),
+            ),
+          ),
           body: SafeArea(
             top: false,
             child: AnimatedPadding(
@@ -2125,8 +2125,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                               canvasBackgroundColor: canvasBackgroundColor,
                               isLocked: _isLocked || areMutationControlsLocked,
                               isSolutionLocked: _isSolutionEditingLocked,
-                              isLoadingInitialOverlay:
-                                  _isLoadingWordEditorData,
+                              isLoadingInitialOverlay: _isLoadingWordEditorData,
                               stagePreviewMode: _stagePreviewMode,
                               puzzleBytes: _generatedPuzzleImageBytes,
                               existingPuzzlePreviewUrlFuture:
@@ -2160,86 +2159,97 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
                                   factController: _factController,
                                   creatorNameController: _creatorNameController,
                                   promptController: _generationPromptController,
-                                  promptTextListenable: _generationPromptTextNotifier,
+                                  promptTextListenable:
+                                      _generationPromptTextNotifier,
                                   contentCategory: _contentCategory,
                                   textTheme: textTheme,
                                   colorScheme: colorScheme,
                                   canvasBackgroundColor: canvasBackgroundColor,
-                                  isLocked: _isLocked || areMutationControlsLocked,
+                                  isLocked:
+                                      _isLocked || areMutationControlsLocked,
                                   isSolutionLocked: _isSolutionEditingLocked,
-                                  isLoadingSourceImage: _isLoadingFaceEditorData || _isProcessingFaceSourceImage,
+                                  isLoadingSourceImage:
+                                      _isLoadingFaceEditorData ||
+                                          _isProcessingFaceSourceImage,
                                   isGeneratingSketch: _isGeneratingFaceSketch,
-                                  isGeneratingTransform: _isGeneratingAfterManipulate,
+                                  isGeneratingTransform:
+                                      _isGeneratingAfterManipulate,
                                   stagePreviewMode: _stagePreviewMode,
                                   puzzleBytes: _generatedPuzzleImageBytes,
-                                  existingPuzzlePreviewUrlFuture: _existingPuzzlePreviewUrlFuture,
+                                  existingPuzzlePreviewUrlFuture:
+                                      _existingPuzzlePreviewUrlFuture,
                                   hasStoredPuzzleImage: _hasStoredPuzzleImage,
                                   isGeneratingPuzzle: _isGeneratingPuzzle,
-                                  puzzleGenerationStatus: _visiblePuzzleGenerationStatus,
+                                  puzzleGenerationStatus:
+                                      _visiblePuzzleGenerationStatus,
                                   generationDifficulty: _generationDifficulty,
                                   settings: _faceSketchSettings,
                                   onPickImage: _pickFaceSourceImage,
-                                  onResetImageTransform: _resetFaceSourceTransform,
-                                  isTransformInteractionLocked: _isFaceTransformInteractionLocked,
-                                  onToggleTransformInteractionLock: _toggleFaceTransformInteractionLock,
-                                  onDiscardImage: () => unawaited(_confirmDiscardFaceSourceImage()),
-                                  onSourceTransformChanged: _updateFaceSourceTransform,
-                                  onSourceTransformEnded: _finishFaceSourceTransform,
-                                  onStageInteractionChanged: _handleStageInteractionChanged,
+                                  onResetImageTransform:
+                                      _resetFaceSourceTransform,
+                                  isTransformInteractionLocked:
+                                      _isFaceTransformInteractionLocked,
+                                  onToggleTransformInteractionLock:
+                                      _toggleFaceTransformInteractionLock,
+                                  onDiscardImage: () => unawaited(
+                                      _confirmDiscardFaceSourceImage()),
+                                  onSourceTransformChanged:
+                                      _updateFaceSourceTransform,
+                                  onSourceTransformEnded:
+                                      _finishFaceSourceTransform,
+                                  onStageInteractionChanged:
+                                      _handleStageInteractionChanged,
                                   onSelectStagePreview: _selectStagePreview,
                                   onGeneratePuzzle: _generatePuzzle,
                                   onCancelPuzzle: _cancelPuzzleGeneration,
-                                  onGenerationDifficultyChanged: _updateGenerationDifficulty,
-                                  onContentCategoryChanged: _updateContentCategory,
+                                  onGenerationDifficultyChanged:
+                                      _updateGenerationDifficulty,
+                                  onContentCategoryChanged:
+                                      _updateContentCategory,
                                   onSettingsChanged: _updateFaceSketchSettings,
                                   onLiveSettingsChanged: null,
-                                  onUnlockSolutionEditing: _confirmUnlockSolutionEditing,
+                                  onUnlockSolutionEditing:
+                                      _confirmUnlockSolutionEditing,
                                 )
                               : _CanvasEditorSection(
                                   scrollController: _editorScrollController,
                                   isStageInteracting: _isStageInteracting,
-                                    controller: _drawingController,
-                                    hasDrawingContentListenable:
-                                        _drawingHasContentNotifier,
-                                    solutionController: _answerController,
-                                    solutionTextListenable:
-                                        _answerTextNotifier,
-                                    factController: _factController,
-                                    creatorNameController:
-                                        _creatorNameController,
-                                    promptController:
-                                        _generationPromptController,
-                                    promptTextListenable:
-                                        _generationPromptTextNotifier,
-                                    textTheme: textTheme,
-                                    colorScheme: colorScheme,
-                                    canvasBackgroundColor:
-                                        canvasBackgroundColor,
-                                    isLocked: _isLocked || areMutationControlsLocked,
-                                    isSolutionLocked:
-                                        _isSolutionEditingLocked,
-                                    stagePreviewMode: _stagePreviewMode,
-                                    puzzleBytes: _generatedPuzzleImageBytes,
-                                    existingPuzzlePreviewUrlFuture:
-                                        _existingPuzzlePreviewUrlFuture,
-                                    hasStoredPuzzleImage: _hasStoredPuzzleImage,
-                                    isGeneratingPuzzle: _isGeneratingPuzzle,
-                                    puzzleGenerationStatus:
-                                        _visiblePuzzleGenerationStatus,
-                                    generationDifficulty:
-                                        _generationDifficulty,
-                                    normalizePoint: _normalizePoint,
-                                    onStageInteractionChanged:
-                                        _handleStageInteractionChanged,
-                                    onSelectStagePreview:
-                                        _selectStagePreview,
-                                    onGeneratePuzzle: _generatePuzzle,
-                                    onCancelPuzzle: _cancelPuzzleGeneration,
-                                    onGenerationDifficultyChanged:
-                                        _updateGenerationDifficulty,
-                                    onUnlockSolutionEditing:
-                                        _confirmUnlockSolutionEditing,
-                                  ),
+                                  controller: _drawingController,
+                                  hasDrawingContentListenable:
+                                      _drawingHasContentNotifier,
+                                  solutionController: _answerController,
+                                  solutionTextListenable: _answerTextNotifier,
+                                  factController: _factController,
+                                  creatorNameController: _creatorNameController,
+                                  promptController: _generationPromptController,
+                                  promptTextListenable:
+                                      _generationPromptTextNotifier,
+                                  textTheme: textTheme,
+                                  colorScheme: colorScheme,
+                                  canvasBackgroundColor: canvasBackgroundColor,
+                                  isLocked:
+                                      _isLocked || areMutationControlsLocked,
+                                  isSolutionLocked: _isSolutionEditingLocked,
+                                  stagePreviewMode: _stagePreviewMode,
+                                  puzzleBytes: _generatedPuzzleImageBytes,
+                                  existingPuzzlePreviewUrlFuture:
+                                      _existingPuzzlePreviewUrlFuture,
+                                  hasStoredPuzzleImage: _hasStoredPuzzleImage,
+                                  isGeneratingPuzzle: _isGeneratingPuzzle,
+                                  puzzleGenerationStatus:
+                                      _visiblePuzzleGenerationStatus,
+                                  generationDifficulty: _generationDifficulty,
+                                  normalizePoint: _normalizePoint,
+                                  onStageInteractionChanged:
+                                      _handleStageInteractionChanged,
+                                  onSelectStagePreview: _selectStagePreview,
+                                  onGeneratePuzzle: _generatePuzzle,
+                                  onCancelPuzzle: _cancelPuzzleGeneration,
+                                  onGenerationDifficultyChanged:
+                                      _updateGenerationDifficulty,
+                                  onUnlockSolutionEditing:
+                                      _confirmUnlockSolutionEditing,
+                                ),
                     ),
                     if (_isLocked) ...<Widget>[
                       const SizedBox(height: 16),
@@ -3009,10 +3019,10 @@ class _CanvasEditorSection extends StatelessWidget {
                                 min: 0.2,
                                 max: 1.0,
                                 divisions: 8,
-                                onChanged: canAdjustOpacity &&
-                                        !solutionControlsLocked
-                                    ? controller.setOpacity
-                                    : null,
+                                onChanged:
+                                    canAdjustOpacity && !solutionControlsLocked
+                                        ? controller.setOpacity
+                                        : null,
                               ),
                             ),
                           ),
@@ -3042,10 +3052,10 @@ class _CanvasEditorSection extends StatelessWidget {
                                 min: 0.006,
                                 max: 0.08,
                                 divisions: 18,
-                                onChanged: solutionControlsLocked ||
-                                        !canAdjustSize
-                                    ? null
-                                    : controller.setBrushWidth,
+                                onChanged:
+                                    solutionControlsLocked || !canAdjustSize
+                                        ? null
+                                        : controller.setBrushWidth,
                               ),
                             ),
                           ),
@@ -3474,9 +3484,10 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
     _displayTransform = startTransform;
     _gestureStartTransform = startTransform;
     final sourceSize = widget.sourceImageSize ?? const Size(1024, 1024);
-    final anchorPoint = _activePointers <= 1 && _primaryPointerDownPosition != null
-        ? _primaryPointerDownPosition!
-        : details.localFocalPoint;
+    final anchorPoint =
+        _activePointers <= 1 && _primaryPointerDownPosition != null
+            ? _primaryPointerDownPosition!
+            : details.localFocalPoint;
     _gestureStartLocalImagePoint = _imageLocalPointForStagePoint(
       anchorPoint,
       startTransform,
@@ -3592,7 +3603,8 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
               final showProcessedSketch = widget.sketchImageBytes != null &&
                   !_isInteracting &&
                   !widget.isGeneratingTransform;
-              final sourceSize = widget.sourceImageSize ?? const Size(1024, 1024);
+              final sourceSize =
+                  widget.sourceImageSize ?? const Size(1024, 1024);
               final clampedDisplayTransform = _sanitizeDisplayTransform(
                 _displayTransform,
               );
@@ -3690,39 +3702,55 @@ class _FaceSolutionStageState extends State<_FaceSolutionStage> {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(28),
                                 child: BackdropFilter(
-                                  filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                                  filter: ui.ImageFilter.blur(
+                                      sigmaX: 20, sigmaY: 20),
                                   child: Container(
                                     width: 180,
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 28),
                                     decoration: BoxDecoration(
-                                      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.65),
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .surface
+                                          .withValues(alpha: 0.65),
                                       borderRadius: BorderRadius.circular(28),
                                       border: Border.all(
-                                        color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .outlineVariant
+                                            .withValues(alpha: 0.4),
                                         width: 1.5,
                                       ),
                                     ),
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: <Widget>[
                                         SizedBox(
                                           width: 44,
                                           height: 44,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 4,
-                                            color: Theme.of(context).colorScheme.primary,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primary,
                                           ),
                                         ),
                                         const SizedBox(height: 20),
                                         Text(
                                           widget.isLoading
-                                              ? 'Loading face'
+                                              ? 'Loading sketch'
                                               : 'Updating sketch',
                                           textAlign: TextAlign.center,
-                                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleSmall
+                                              ?.copyWith(
                                                 fontWeight: FontWeight.w800,
-                                                color: Theme.of(context).colorScheme.onSurface,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurface,
                                               ),
                                         ),
                                       ],
@@ -3965,12 +3993,19 @@ class _PuzzleStage extends StatelessWidget {
                           filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                           child: Container(
                             width: 180,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 28),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.65),
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surface
+                                  .withValues(alpha: 0.65),
                               borderRadius: BorderRadius.circular(28),
                               border: Border.all(
-                                color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant
+                                    .withValues(alpha: 0.4),
                                 width: 1.5,
                               ),
                             ),
@@ -3983,39 +4018,57 @@ class _PuzzleStage extends StatelessWidget {
                                   height: 44,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 4,
-                                    color: Theme.of(context).colorScheme.primary,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
                                   ),
                                 ),
                                 const SizedBox(height: 20),
                                 Text(
-                                  statusText.isNotEmpty ? statusText.split('\n').first : 'Generating',
+                                  statusText.isNotEmpty
+                                      ? statusText.split('\n').first
+                                      : 'Generating',
                                   textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                    color: Theme.of(context).colorScheme.onSurface,
-                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                      ),
                                 ),
                                 if (!statusText.contains('Safe')) ...[
                                   const SizedBox(height: 8),
                                   Text(
                                     'Do not close.',
                                     textAlign: TextAlign.center,
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w600,
-                                      height: 1.3,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1.3,
+                                        ),
                                   ),
                                 ] else if (statusText.contains('\n')) ...[
                                   const SizedBox(height: 8),
                                   Text(
                                     statusText.split('\n').last,
                                     textAlign: TextAlign.center,
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                                      fontWeight: FontWeight.w600,
-                                      height: 1.3,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onPrimaryContainer,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1.3,
+                                        ),
                                   ),
                                 ]
                               ],
@@ -4127,9 +4180,8 @@ class _ContentCategorySelector extends StatelessWidget {
               .toList(growable: false),
           selected: <String>{value},
           showSelectedIcon: false,
-          onSelectionChanged: enabled
-              ? (selection) => onChanged(selection.first)
-              : null,
+          onSelectionChanged:
+              enabled ? (selection) => onChanged(selection.first) : null,
         ),
       ],
     );
@@ -4730,10 +4782,10 @@ class _WordEditorSection extends StatelessWidget {
                                 min: 0.2,
                                 max: 1.0,
                                 divisions: 8,
-                                onChanged: canAdjustOpacity &&
-                                        !solutionControlsLocked
-                                    ? drawingController.setOpacity
-                                    : null,
+                                onChanged:
+                                    canAdjustOpacity && !solutionControlsLocked
+                                        ? drawingController.setOpacity
+                                        : null,
                               ),
                             ),
                           ),
@@ -4763,10 +4815,10 @@ class _WordEditorSection extends StatelessWidget {
                                 min: 0.006,
                                 max: 0.08,
                                 divisions: 18,
-                                onChanged: solutionControlsLocked ||
-                                        !canAdjustSize
-                                    ? null
-                                    : drawingController.setBrushWidth,
+                                onChanged:
+                                    solutionControlsLocked || !canAdjustSize
+                                        ? null
+                                        : drawingController.setBrushWidth,
                               ),
                             ),
                           ),
@@ -4793,7 +4845,8 @@ class _WordEditorSection extends StatelessWidget {
                 _CreateLevelScreenState._maxSolutionLength,
               ),
             ],
-            helperText: 'Type the word and the letters will update when you save.',
+            helperText:
+                'Type the word and the letters will update when you save.',
           ),
           const SizedBox(height: 12),
           Text(
@@ -5692,15 +5745,15 @@ class _ModalTextEditPageState extends State<_ModalTextEditPage> {
                 inputFormatters: widget.inputFormatters,
                 autocorrect: widget.autocorrect,
                 enableSuggestions: widget.enableSuggestions,
-                textInputAction:
-                    widget.maxLines > 1 ? TextInputAction.newline : TextInputAction.done,
+                textInputAction: widget.maxLines > 1
+                    ? TextInputAction.newline
+                    : TextInputAction.done,
                 decoration: InputDecoration(
                   labelText: widget.label,
                   border: const OutlineInputBorder(),
                 ),
-                onSubmitted: widget.maxLines > 1
-                    ? null
-                    : (_) => _commitAndClose(),
+                onSubmitted:
+                    widget.maxLines > 1 ? null : (_) => _commitAndClose(),
               ),
               const SizedBox(height: 16),
               FilledButton(
