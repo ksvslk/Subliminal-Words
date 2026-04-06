@@ -8,6 +8,7 @@ import 'package:operation_hermes/data/pack.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:operation_hermes/ui/widgets/delayed_display.dart';
 import 'levels_screen.dart';
 
 class PacksScreen extends StatelessWidget {
@@ -44,7 +45,10 @@ class PacksScreen extends StatelessWidget {
             itemCount: packs.length,
             itemBuilder: (context, index) {
               final pack = packs[index];
-              return _PackListItem(pack: pack);
+              return DelayedDisplay(
+                delay: Duration(milliseconds: index < 15 ? index * 80 : 0),
+                child: _PackListItem(pack: pack),
+              );
             },
           );
         },

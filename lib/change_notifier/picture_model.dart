@@ -194,10 +194,12 @@ class PictureModel with ChangeNotifier {
     List<int> candidateIndices = highlightLetters
         .asMap()
         .entries
-        .where((entry) =>
-            entry.value.hintGiven == false &&
-            entry.value.show == false &&
-            availableLetters.contains(entry.value.letter.toUpperCase()))
+        .where((entry) {
+          String rawLetter = entry.value.letter.toUpperCase().replaceAll(RegExp(r'\d'), '');
+          return entry.value.hintGiven == false &&
+                 entry.value.show == false &&
+                 availableLetters.contains(rawLetter);
+        })
         .map((entry) => entry.key)
         .toList();
 
@@ -212,13 +214,9 @@ class PictureModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void hideLetter(String letter) {
-    int index = highlightLetters.indexWhere(
-        (item) => item.letter.toUpperCase() == letter.toUpperCase());
-    if (index != -1) {
-      highlightLetters[index].show = false;
-      notifyListeners();
-    }
+  void hideLetter(SvgLetter letterInstance) {
+    letterInstance.show = false;
+    notifyListeners();
   }
 
   List<SvgLetter> _parseSvg(String svgString) {

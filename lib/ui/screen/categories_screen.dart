@@ -7,6 +7,7 @@ import 'package:operation_hermes/data/pack.dart';
 import 'package:operation_hermes/data/sw_level.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:operation_hermes/ui/widgets/delayed_display.dart';
 import 'my_levels_screen.dart';
 import 'packs_screen.dart';
 
@@ -25,14 +26,19 @@ class CategoriesScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         itemCount: itemCount,
         itemBuilder: (context, index) {
+          Widget listItem;
           if (index == 0) {
-            return const _MyLevelsListItem();
+            listItem = const _MyLevelsListItem();
+          } else if (showPlaceholders) {
+            listItem = const _CategoryListItem();
+          } else {
+            final category = categories[index - 1];
+            listItem = _CategoryListItem(category: category);
           }
-          if (showPlaceholders) {
-            return const _CategoryListItem();
-          }
-          final category = categories[index - 1];
-          return _CategoryListItem(category: category);
+          return DelayedDisplay(
+            delay: Duration(milliseconds: index < 15 ? index * 80 : 0),
+            child: listItem,
+          );
         },
       ),
     );

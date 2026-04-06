@@ -7,6 +7,7 @@ import 'package:operation_hermes/data/sw_level.dart';
 import 'package:provider/provider.dart';
 import 'package:operation_hermes/controller/ads_controller.dart';
 import 'package:operation_hermes/controller/money_controller.dart';
+import 'package:operation_hermes/ui/widgets/delayed_display.dart';
 
 class LevelsScreen extends StatefulWidget {
   final Pack pack;
@@ -155,30 +156,33 @@ class _LevelsScreenState extends State<LevelsScreen> {
                     );
                   }
 
-                  return Card(
-                    elevation: 2,
-                    clipBehavior: Clip.antiAlias,
-                    child: AbsorbPointer(
-                      absorbing: !isEnabled,
-                      child: InkWell(
-                          onTap: () async {
-                            await Future.delayed(
-                                const Duration(milliseconds: 100));
-                            if (!context.mounted) return;
-
-                            levelModel.loadLevelFromSelection(level);
-                            Navigator.of(context)
-                                .popUntil((route) => route.isFirst);
-                          },
-                          child: cardContent),
+                  return DelayedDisplay(
+                    delay: Duration(milliseconds: index < 25 ? index * 30 : 0),
+                    child: Card(
+                      elevation: 2,
+                      clipBehavior: Clip.antiAlias,
+                      child: AbsorbPointer(
+                        absorbing: !isEnabled,
+                        child: InkWell(
+                            onTap: () async {
+                              await Future.delayed(
+                                  const Duration(milliseconds: 100));
+                              if (!context.mounted) return;
+  
+                              levelModel.loadLevelFromSelection(level);
+                              Navigator.of(context)
+                                  .popUntil((route) => route.isFirst);
+                            },
+                            child: cardContent),
+                      ),
                     ),
                   );
                 },
               );
             },
           );
-            },
-          );
+        },
+      );
         },
       ),
     );

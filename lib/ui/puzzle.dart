@@ -186,7 +186,7 @@ class Puzzle extends StatelessWidget {
                                       onEnd: () {
                                         if (svgLetter.show &&
                                             !levelModel.levelCompleted) {
-                                          model.hideLetter(svgLetter.letter);
+                                          model.hideLetter(svgLetter);
                                         }
                                       },
                                       child: CustomPaint(
