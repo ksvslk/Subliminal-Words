@@ -47,6 +47,10 @@ class MoneyController extends ChangeNotifier {
     return _customerInfo?.entitlements.all[entitlementId]?.isActive == true;
   }
 
+  bool hasLifetimeAccess() {
+    return _customerInfo?.entitlements.all[C.entitlementLifetimeUnlockId]?.isActive == true;
+  }
+
   bool hasAllAccess() {
     if (_customerInfo?.entitlements.all[C.entitlementPropassId]?.isActive ==
             true ||

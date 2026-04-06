@@ -13,7 +13,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 import 'package:image/image.dart' as img;
 
-
 Future<String> addWatermark(String originalPath) async {
   final originalFile = File(originalPath);
   final originalImage = img.decodeImage(await originalFile.readAsBytes());
@@ -46,12 +45,8 @@ Future<String> addWatermark(String originalPath) async {
   return newPath;
 }
 
-Future<ShareResult?> shareAndAskHelp(
-    Uint8List? imageBytes,
-    RenderBox? box,
-    {String watermarkAssetPath =
-        'assets/other/watermark.png'}
-    ) async {
+Future<ShareResult?> shareAndAskHelp(Uint8List? imageBytes, RenderBox? box,
+    {String watermarkAssetPath = 'assets/other/watermark.png'}) async {
   try {
     if (imageBytes == null || imageBytes.isEmpty) {
       throw Exception('Image bytes are null or empty. Cannot share.');
@@ -83,18 +78,15 @@ Future<ShareResult?> shareAndAskHelp(
 
     final List<int> newBytes = img.encodeJpg(originalImage, quality: 90);
 
-    final store = Platform.isAndroid
-      ? 'GooglePlay'
-      : 'AppStore';
+    final store = Platform.isAndroid ? 'GooglePlay' : 'AppStore';
 
     final tempDir = await getTemporaryDirectory();
-    final file = await File('${tempDir.path}/Subliminal_Words_$store.jpg').create();
+    final file =
+        await File('${tempDir.path}/Subliminal_Words_$store.jpg').create();
     file.writeAsBytesSync(newBytes);
 
-    final params = ShareParams(
-      files:[XFile(file.path)],
-      text: 'Can you see it?'
-    );
+    final params =
+        ShareParams(files: [XFile(file.path)], text: 'Can you see it?');
     final result = await SharePlus.instance.share(params);
 
     try {
@@ -130,8 +122,7 @@ class _TopBarState extends State<TopBar> {
               builder: (currentContext, constraints) {
                 if (_isSharing) {
                   return const Padding(
-                    padding: EdgeInsets.all(
-                        12.0),
+                    padding: EdgeInsets.all(12.0),
                     child: SizedBox(
                       width: 24,
                       height: 24,
@@ -204,29 +195,73 @@ class _TopBarState extends State<TopBar> {
         ),
         Consumer<MoneyController>(builder: (context, iapController, _) {
           return Expanded(
-            flex: iapController.hasAllAccess() == true ? 2 : 3,
-            child: iapController.hasAllAccess() == true
-            ? OutlinedButton.icon(
-                    onPressed: () {
-                      RevenueCatUI.presentPaywall(displayCloseButton: true);
-                    },
-                    icon: Icon(Icons.sunny),
-                    label: AutoSizeText(
-                      'Pro',
-                      stepGranularity: 1,
-                      minFontSize: 6.0,
-                      wrapWords: false,
-                    ),
-                    iconAlignment: IconAlignment.start,
-                  )
-                : IconButton.filled(
-                    onPressed: () {
-                      RevenueCatUI.presentPaywall(displayCloseButton: true);
-                    },
-                    icon: Icon(Icons.monetization_on_sharp),
-                  )
-                
-          );
+              flex: iapController.hasAllAccess() == true ? 2 : 3,
+              child: iapController.hasAllAccess() == true
+                  ? OutlinedButton.icon(
+                      onPressed: () async {
+                        if (iapController.hasLifetimeAccess()) {
+                          showDialog(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return AlertDialog(
+                                title: const Text('Lifetime ✨'),
+                                content: const Text(
+                                    'You have permanently unlocked the Lifetime Edition! Every feature is yours forever, and all ads are permanently disabled.\n\nThank you for your incredible support!'),
+                                actions: <Widget>[
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.of(context).pop(),
+                                    child: const Text('Awesome!'),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                          return; // Halt paywall access completely for Lifetime
+                        }
+
+                        final bool? shouldShow = await showDialog<bool>(
+                          context: context,
+                          builder: (BuildContext context) {
+                            return AlertDialog(
+                              title: const Text('Pro Active ✨'),
+                              content: const Text(
+                                  'You already have active premium access protecting you from ads!\n\nWould you still like to view the store options?'),
+                              actions: <Widget>[
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(false),
+                                  child: const Text('Close'),
+                                ),
+                                FilledButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(true),
+                                  child: const Text('View Options'),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+
+                        if (shouldShow == true) {
+                          RevenueCatUI.presentPaywall(displayCloseButton: true);
+                        }
+                      },
+                      icon: Icon(Icons.sunny),
+                      label: AutoSizeText(
+                        'Pro',
+                        stepGranularity: 1,
+                        minFontSize: 6.0,
+                        wrapWords: false,
+                      ),
+                      iconAlignment: IconAlignment.start,
+                    )
+                  : IconButton.filled(
+                      onPressed: () {
+                        RevenueCatUI.presentPaywall(displayCloseButton: true);
+                      },
+                      icon: Icon(Icons.monetization_on_sharp),
+                    ));
         }),
         Consumer<LevelModel>(builder: (context, levelModel, _) {
           final packName =
