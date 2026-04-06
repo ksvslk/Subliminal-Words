@@ -129,6 +129,7 @@ Future<Uint8List> compressStoredPuzzleWebp(
     sourceBytes,
     targetBytes: kStoredPuzzleTargetBytes,
     dimension: kStoredPuzzleDimension,
+    allowDownscaling: false,
   );
   if (candidate.isEmpty) {
     throw StateError('Could not compress the $failureLabel.');
@@ -210,18 +211,22 @@ Future<Uint8List> _compressWebpNearTarget(
   required int targetBytes,
   required int dimension,
   bool requireUnderBudget = false,
+  bool allowDownscaling = true,
 }) async {
   const qualities = <int>[70, 64, 58, 52, 44, 36, 30, 24, 18, 14, 10, 8];
-  final dimensions = <int>[];
-  var nextDimension = dimension;
-  while (nextDimension >= 256) {
-    if (!dimensions.contains(nextDimension)) {
-      dimensions.add(nextDimension);
+  final dimensions = <int>[dimension];
+  
+  if (allowDownscaling) {
+    var nextDimension = (dimension * 0.84).round();
+    while (nextDimension >= 256) {
+      if (!dimensions.contains(nextDimension)) {
+        dimensions.add(nextDimension);
+      }
+      if (nextDimension <= 320) {
+        break;
+      }
+      nextDimension = (nextDimension * 0.84).round();
     }
-    if (nextDimension <= 320) {
-      break;
-    }
-    nextDimension = (nextDimension * 0.84).round();
   }
   Uint8List? bestUnderBudget;
   var smallestUnderDelta = 1 << 30;
