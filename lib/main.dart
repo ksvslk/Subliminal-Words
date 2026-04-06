@@ -66,19 +66,24 @@ Future<void> setUpRemoteConfig() async {
 }
 
 Future<void> main() async {
-  Logger.root.onRecord.listen((record) {
-    if (record.level >= Level.INFO) {
-      dev.log(
-        record.message,
-        time: record.time,
-        level: record.level.value,
-        name: record.loggerName,
-        zone: record.zone,
-        error: record.error,
-        stackTrace: record.stackTrace,
-      );
-    }
-  });
+  if (kDebugMode) {
+    Logger.root.level = Level.ALL;
+    Logger.root.onRecord.listen((record) {
+      if (record.level >= Level.INFO) {
+        dev.log(
+          record.message,
+          time: record.time,
+          level: record.level.value,
+          name: record.loggerName,
+          zone: record.zone,
+          error: record.error,
+          stackTrace: record.stackTrace,
+        );
+      }
+    });
+  } else {
+    Logger.root.level = Level.WARNING;
+  }
   Provider.debugCheckInvalidValueType = null;
   WidgetsFlutterBinding.ensureInitialized();
 
