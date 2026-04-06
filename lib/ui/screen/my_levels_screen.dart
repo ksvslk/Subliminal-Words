@@ -163,26 +163,11 @@ class _MyLevelsScreenState extends State<MyLevelsScreen> {
   }
 
   Future<void> _playLevel(BuildContext context, SWLevel level) async {
-    SWLevel levelToPlay = level;
-    if (level.submissionStatus == UserLevelSubmissionStatus.approved &&
-        level.submissionId != null &&
-        level.submissionId!.contains('__')) {
-      final parts = level.submissionId!.split('__');
-      if (parts.length >= 2) {
-        final packId = parts[0];
-        final levelNr = int.tryParse(parts[1]) ?? 0;
-        final liveLevel = await context.read<FirebaseService>().getLevel(packId, levelNr);
-        if (liveLevel != null && liveLevel.id.isNotEmpty) {
-          levelToPlay = liveLevel;
-        }
-      }
-    }
-
     if (!context.mounted) {
       return;
     }
 
-    await context.read<LevelModel>().loadLevelFromSelection(levelToPlay);
+    await context.read<LevelModel>().loadLevelFromSelection(level);
     if (context.mounted) {
       Navigator.of(context).popUntil((route) => route.isFirst);
     }

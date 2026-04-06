@@ -472,6 +472,23 @@ class FirebaseService {
     return null;
   }
 
+  Future<SWLevel?> getLevelByPath(String path, {bool forceServer = false}) async {
+    try {
+      final doc = await _db
+          .doc(path)
+          .get(forceServer ? const GetOptions(source: Source.server) : null);
+
+      if (doc.exists && doc.data() != null) {
+        final parts = path.split('/');
+        final packId = parts.length > 1 ? parts[1] : '';
+        return SWLevel.fromFirestore(doc.id, packId, doc.data()!);
+      }
+    } catch (e) {
+      _log.warning("[FirebaseService] Failed to get live level by path $path: $e");
+    }
+    return null;
+  }
+
   Future<Pack?> getPack(String packId) async {
     try {
       final doc = await _db.collection('packs').doc(packId).get();
@@ -1192,8 +1209,23 @@ class FirebaseService {
 
     final storageBase = 'user-levels/$uid/${docRef.id}';
     final solutionRef = _storage.ref('$storageBase/solution.svg');
+    
+    String finalSolutionSvg = solutionSvg;
+    if (editorData.containsKey('wordLetters')) {
+      try {
+        final callable = _functions.httpsCallable('formatWordLevelSvg');
+        final res = await callable.call(<String, dynamic>{'letters': editorData['wordLetters']});
+        final svgString = res.data['svg'] as String?;
+        if (svgString != null && svgString.trim().isNotEmpty) {
+          finalSolutionSvg = svgString;
+        }
+      } catch (e, st) {
+        _log.warning('Failed to safely format word level SVG: $e, $st');
+      }
+    }
+
     await solutionRef.putString(
-      solutionSvg,
+      finalSolutionSvg,
       format: PutStringFormat.raw,
       metadata: SettableMetadata(
         contentType: 'image/svg+xml',

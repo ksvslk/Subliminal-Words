@@ -10,6 +10,8 @@ import 'package:operation_hermes/ui/puzzle.dart';
 import 'package:operation_hermes/menu/top_bar.dart';
 import 'package:operation_hermes/ui/random_tutorial_overlay.dart';
 import 'package:provider/provider.dart';
+import 'package:app_links/app_links.dart';
+import 'dart:async';
 
 class GameFieldScreen extends StatefulWidget {
   const GameFieldScreen({super.key});
@@ -20,6 +22,8 @@ class GameFieldScreen extends StatefulWidget {
 
 class _GameFieldScreenState extends State<GameFieldScreen> {
   bool _isInitializing = true;
+  late final AppLinks _appLinks;
+  StreamSubscription<Uri>? _linkSubscription;
 
   // 1. Define keys here (local to this screen only)
   final GlobalKey _stackKey = GlobalKey();
@@ -62,9 +66,48 @@ class _GameFieldScreenState extends State<GameFieldScreen> {
     });
   }
 
+  bool _isCreateFlowActive = false;
+  bool _initialConsumed = false;
+
+  void _initDeepLinks() async {
+    _appLinks = AppLinks();
+    
+    bool isCreateLevelLink(Uri uri) {
+      if (uri.scheme == 'subliminalwords' && uri.host == 'create') return true;
+      if ((uri.scheme == 'https' || uri.scheme == 'http') && uri.host == 'indest.ee' && uri.path.startsWith('/create')) return true;
+      return false;
+    }
+
+    Future<void> handleCreateLevelFlow() async {
+      if (!mounted || _isCreateFlowActive) return;
+      _isCreateFlowActive = true;
+      await openCreateLevelFlow(context);
+      _isCreateFlowActive = false;
+    }
+
+    try {
+      final initialUri = await _appLinks.getInitialLink();
+      if (initialUri != null && isCreateLevelLink(initialUri)) {
+        _initialConsumed = true;
+        await handleCreateLevelFlow();
+      }
+    } catch (_) {}
+
+    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
+      if (_initialConsumed) {
+        _initialConsumed = false; // Discard the duplicate ghost payload from cold boot
+        return;
+      }
+      if (isCreateLevelLink(uri)) {
+        handleCreateLevelFlow();
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    _initDeepLinks();
     context.read<LevelModel>().initialize().then((_) {
       if (mounted) {
         setState(() {
@@ -72,6 +115,17 @@ class _GameFieldScreenState extends State<GameFieldScreen> {
         });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _linkSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
   }
 
   @override

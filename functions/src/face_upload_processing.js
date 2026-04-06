@@ -43,8 +43,9 @@ async function sanitizeUploadedFaceImage(buffer) {
       withoutEnlargement: true,
     })
     .webp({
-      quality: 82,
-      effort: 5,
+      quality: 60,
+      effort: 6,
+      smartSubsample: true,
     })
     .toBuffer();
 

@@ -173,7 +173,7 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
   Uint8List? _faceSourceImageBytes;
   Uint8List? _faceSketchImageBytes;
   Size? _faceSourceImageSize;
-  _StagePreviewMode _stagePreviewMode = _StagePreviewMode.solution;
+  late _StagePreviewMode _stagePreviewMode;
   bool _hasPuzzleInvalidatedByEdit = false;
   int _lastSeenDrawingContentVersion = 0;
   int _lastSeenWordDrawingContentVersion = 0;
@@ -250,6 +250,9 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     _wordDrawingHasContentNotifier = ValueNotifier<bool>(false);
     _wordOverlayHasContentNotifier = ValueNotifier<bool>(false);
     _editorScrollController = ScrollController();
+    _stagePreviewMode = widget.initialLevel?.hasReviewReadyPuzzleImage == true
+        ? _StagePreviewMode.puzzle
+        : _StagePreviewMode.solution;
     _editorMode = initialLevel?.editorMode ??
         (initialEditorMode != null &&
                 UserLevelEditorMode.supported.contains(initialEditorMode)
@@ -490,8 +493,8 @@ class _CreateLevelScreenState extends State<CreateLevelScreen> {
     try {
       final pickedFile = await _imagePicker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 2048,
-        maxHeight: 2048,
+        maxWidth: 1024,
+        maxHeight: 1024,
         imageQuality: 96,
       );
       if (pickedFile == null) {

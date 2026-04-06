@@ -25,6 +25,23 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            
+            <!-- Deep linking bounds for custom schema -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="subliminalwords" />
+            </intent-filter>
+
+            <!-- Universal Links (App Links) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="indest.ee" android:pathPrefix="/create" />
+                <data android:scheme="http" android:host="indest.ee" android:pathPrefix="/create" />
+            </intent-filter>
         </activity>
 
                      <meta-data

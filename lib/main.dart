@@ -172,7 +172,11 @@ class MyApp extends StatelessWidget {
         StreamProvider<List<Category>>(
           create: (context) =>
               context.read<FirebaseService>().getCategoriesStream(),
-          initialData: [],
+          initialData: const [],
+          catchError: (_, error) {
+            _log.warning('Could not fetch categories stream (App Check restricted?): $error');
+            return <Category>[];
+          },
         ),
         Provider<SettingsController>(
           lazy: false,
@@ -255,9 +259,11 @@ class MyApp extends StatelessWidget {
                       brightness: Brightness.dark,
                     ),
                     fontFamily: 'Gabarito'),
-                home: const Scaffold(
-                  body: GameFieldScreen(),
-                ));
+                initialRoute: '/',
+                routes: {
+                  '/': (context) => const Scaffold(body: GameFieldScreen()),
+                },
+              );
           },
         );
       },

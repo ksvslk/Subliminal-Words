@@ -60,4 +60,20 @@ class _AppLifecycleObserverState extends State<AppLifecycleObserver>
     WidgetsBinding.instance.addObserver(this);
     _log.info('Subscribed to app lifecycle updates');
   }
+
+  @override
+  Future<bool> didPushRouteInformation(RouteInformation routeInformation) async {
+    if (routeInformation.uri.path.startsWith('/create')) {
+      return true; // Manually consumed, block Navigator push
+    }
+    return super.didPushRouteInformation(routeInformation);
+  }
+
+  @override
+  Future<bool> didPushRoute(String route) async {
+    if (route.startsWith('/create')) {
+      return true; // Manually consumed, block Navigator push
+    }
+    return super.didPushRoute(route);
+  }
 }

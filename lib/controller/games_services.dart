@@ -92,10 +92,14 @@ class GamesServicesController {
         _signInAnonymously();
       });
       final signedIn = await gs.GamesServices.isSignedIn;
-      _signedInCompleter.complete(signedIn);
+      if (!_signedInCompleter.isCompleted) {
+        _signedInCompleter.complete(signedIn);
+      }
     } catch (e) {
       _log.severe('Cannot log into GamesServices: $e');
-      _signedInCompleter.complete(false);
+      if (!_signedInCompleter.isCompleted) {
+        _signedInCompleter.complete(false);
+      }
     }
   }
 

@@ -575,6 +575,8 @@ String generateWordOverlaySvg(List<WordOverlayLetter> letters) {
       '<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">',
     );
 
+  final letterCounts = <String, int>{};
+
   for (final letter in letters) {
     final x = letter.normalizedCenter.dx * 1024;
     final y = letter.normalizedCenter.dy * 1024;
@@ -599,7 +601,8 @@ String generateWordOverlaySvg(List<WordOverlayLetter> letters) {
       'data-scale-y="${letter.scaleY.toStringAsFixed(3)}" '
       'data-skew-x="${letter.skewXDegrees.toStringAsFixed(2)}" '
       'data-skew-y="${letter.skewYDegrees.toStringAsFixed(2)}" '
-      'data-opacity="${letter.opacity.toStringAsFixed(3)}">$content</text>',
+      'data-opacity="${letter.opacity.toStringAsFixed(3)}" '
+      'data-font="Roboto">$content</text>',
     );
   }
 
@@ -613,11 +616,17 @@ List<WordOverlayLetter> parseWordOverlayLetters(String svgString) {
   }
 
   final document = XmlDocument.parse(svgString);
-  final elements = document.findAllElements('text');
+  final textElements = document.findAllElements('text');
+  final pathElements = document.findAllElements('path');
+  final elements = [...textElements, ...pathElements];
   final letters = <WordOverlayLetter>[];
 
   for (final element in elements) {
-    final textContent = element.innerText.trim();
+    var textContent = '';
+    if (element.name.local == 'text') {
+      textContent = element.innerText.trim();
+    }
+    
     final letter = (element.getAttribute('aria-label') ?? textContent).trim();
     if (letter.isEmpty) {
       continue;

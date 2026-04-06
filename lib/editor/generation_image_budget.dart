@@ -7,8 +7,8 @@ const int kGenerationPayloadDimension = 1024;
 const int kGenerationControlTargetBytes = 64 * 1024;
 const int kStoredFactSolutionTargetBytes = 40 * 1024;
 const int kStoredFactSolutionDimension = 1024;
-const int kStoredPuzzleTargetBytes = 150 * 1024;
-const int kStoredPuzzleDimension = 1920;
+const int kStoredPuzzleTargetBytes = 180 * 1024;
+const int kStoredPuzzleDimension = 1024;
 const int kStoredPuzzleThumbnailTargetBytes = 50 * 1024;
 const int kStoredPuzzleThumbnailDimension = 400;
 
@@ -211,7 +211,7 @@ Future<Uint8List> _compressWebpNearTarget(
   required int dimension,
   bool requireUnderBudget = false,
 }) async {
-  const qualities = <int>[84, 76, 68, 60, 52, 44, 36, 30, 24, 18, 14, 10, 8];
+  const qualities = <int>[70, 64, 58, 52, 44, 36, 30, 24, 18, 14, 10, 8];
   final dimensions = <int>[];
   var nextDimension = dimension;
   while (nextDimension >= 256) {

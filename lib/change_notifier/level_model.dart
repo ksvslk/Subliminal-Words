@@ -27,6 +27,7 @@ import 'package:operation_hermes/persistence/level_persistence.dart';
 import 'package:operation_hermes/persistence/progress_persistence.dart';
 import 'package:operation_hermes/persistence/settings_persistence.dart';
 import 'package:operation_hermes/data/sw_level.dart';
+import 'package:operation_hermes/data/user_level_metadata.dart';
 import 'package:operation_hermes/ui/app_scaffold_messenger.dart';
 import 'package:operation_hermes/ui/screen/create_level_screen.dart';
 
@@ -246,7 +247,7 @@ class LevelModel with ChangeNotifier {
     final String packId = currentLevel!.packId;
     SWLevel? nextLevelData;
 
-    if (currentLevel!.isCreatorOwned) {
+    if (packId == 'my-levels') {
       nextLevelData = await firebaseService.getMyLevelByNumber(nextLevelNr);
     }
 
@@ -267,7 +268,7 @@ class LevelModel with ChangeNotifier {
       }
     }
 
-    if (nextLevelData == null && !currentLevel!.isCreatorOwned) {
+    if (nextLevelData == null && packId != 'my-levels') {
       try {
         nextLevelData = await firebaseService.getLevel(packId, nextLevelNr);
       } on FirebaseException catch (e) {
@@ -319,7 +320,26 @@ class LevelModel with ChangeNotifier {
     final oldLevel = currentLevel;
 
     try {
-      await assignInitialLevelValues(selectedLevel, fromLevelSelect: true);
+      SWLevel levelToLoad = selectedLevel;
+      if (selectedLevel.publicLevelPath != null && selectedLevel.publicLevelPath!.isNotEmpty) {
+        final liveLevel = await firebaseService.getLevelByPath(selectedLevel.publicLevelPath!);
+        if (liveLevel != null) {
+          levelToLoad = liveLevel;
+        }
+      } else if (selectedLevel.submissionStatus == UserLevelSubmissionStatus.approved &&
+          selectedLevel.submissionId != null &&
+          selectedLevel.submissionId!.contains('__')) {
+        final parts = selectedLevel.submissionId!.split('__');
+        if (parts.length >= 2) {
+          final packId = parts[0];
+          final levelNr = int.tryParse(parts[1]) ?? 0;
+          final liveLevel = await firebaseService.getLevel(packId, levelNr);
+          if (liveLevel != null && liveLevel.id.isNotEmpty) {
+            levelToLoad = liveLevel;
+          }
+        }
+      }
+      await assignInitialLevelValues(levelToLoad, fromLevelSelect: true);
     } on FirebaseException catch (e) {
       _log.severe('Failed to load level from selection.', e);
       showMessageFromMascot(
@@ -516,7 +536,7 @@ class LevelModel with ChangeNotifier {
 
   Future<void> setupFCMListeners() async {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
-    if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) {
+    if (!kIsWeb) {
       await messaging.requestPermission();
     }
 

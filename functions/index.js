@@ -264,6 +264,7 @@ function extractGeneratedImage(statusData) {
 exports.startUserLevelPuzzleGeneration = onCall({
     secrets: [runpodApiKey, runpodEndpointId],
     timeoutSeconds: 120,
+    enforceAppCheck: true,
 }, async (request) => {
     const uid = request.auth?.uid;
     if (!uid) {
@@ -373,6 +374,7 @@ exports.startUserLevelPuzzleGeneration = onCall({
 exports.getUserLevelPuzzleGenerationStatus = onCall({
     secrets: [runpodApiKey, runpodEndpointId],
     timeoutSeconds: 60,
+    enforceAppCheck: true,
 }, async (request) => {
     const uid = request.auth?.uid;
     if (!uid) {
@@ -544,11 +546,10 @@ exports.processPendingPuzzleGeneration = onDocumentWritten({
                     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
                     const rawBuffer = Buffer.from(base64Data, 'base64');
                     
-                    // Compress to lightweight WebP
                     const sharp = require('sharp');
                     const buffer = await sharp(rawBuffer)
                         .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
-                        .webp({ quality: 70, effort: 6, smartSubsample: true })
+                        .webp({ quality: 60, effort: 6, smartSubsample: true })
                         .toBuffer();
 
                     const bucket = admin.storage().bucket();
@@ -682,6 +683,7 @@ exports.processPendingPuzzleGeneration = onDocumentWritten({
 exports.sanitizeUserLevelUpload = onCall({
     timeoutSeconds: 60,
     memory: '512MiB',
+    enforceAppCheck: true,
 }, async (request) => {
     const uid = request.auth?.uid;
     const levelId = String(request.data?.levelId || '').trim();

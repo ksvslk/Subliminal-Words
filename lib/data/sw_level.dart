@@ -26,6 +26,7 @@ class SWLevel {
   final String submissionFeedback;
   final bool isLocked;
   final String? submissionId;
+  final String? publicLevelPath;
   final Map<String, dynamic> editorData;
 
   static String inferEditorMode({
@@ -55,9 +56,9 @@ class SWLevel {
     required this.puzzlePath,
     required this.puzzleThumbnailPath,
     required this.solutionPath,
-    required this.tooltipStart,
-    required this.tooltipEnd,
-    required this.isEnabled,
+    this.tooltipStart = '',
+    this.tooltipEnd = '',
+    this.isEnabled = true,
     required this.createdAt,
     required this.modifiedAt,
     this.isBundled = false,
@@ -69,6 +70,7 @@ class SWLevel {
     this.submissionFeedback = '',
     this.isLocked = false,
     this.submissionId,
+    this.publicLevelPath,
     this.editorData = const <String, dynamic>{},
   }) : contentCategory = UserLevelContentCategory.normalize(
           contentCategory,
@@ -109,6 +111,7 @@ class SWLevel {
       submissionFeedback: data['submissionFeedback'] ?? '',
       isLocked: data['isLocked'] ?? false,
       submissionId: data['submissionId'],
+      publicLevelPath: data['publicLevelPath'] as String?,
       editorData: Map<String, dynamic>.from(data['editorData'] ?? const {}),
     );
   }
@@ -144,6 +147,7 @@ class SWLevel {
       submissionFeedback: json['submissionFeedback'] ?? '',
       isLocked: json['isLocked'] ?? false,
       submissionId: json['submissionId'],
+      publicLevelPath: json['publicLevelPath'] as String?,
       editorData: Map<String, dynamic>.from(json['editorData'] ?? const {}),
     );
   }
@@ -174,6 +178,7 @@ class SWLevel {
       'submissionFeedback': submissionFeedback,
       'isLocked': isLocked,
       'submissionId': submissionId,
+      'publicLevelPath': publicLevelPath,
       'editorData': editorData,
     };
   }

@@ -239,9 +239,22 @@ class PictureModel with ChangeNotifier {
       }
     }
 
-    final allText = document.findAllElements('text');
-    for (var element in allText) {
-      final text = element.innerText.trim();
+    final allTextElements = document.findAllElements('text');
+    final allPathElements = document.findAllElements('path');
+    final allNodes = [...allTextElements, ...allPathElements];
+
+    for (var element in allNodes) {
+      if (element.name.local == 'path' && element.getAttribute('d')?.trim().isNotEmpty == true) {
+        // If it's a path with real path geometry, it's already handled in the loop above.
+        // But what if it's both? For safety, we only process 'text' or empty 'path' elements here.
+        continue;
+      }
+
+      var text = '';
+      if (element.name.local == 'text') {
+        text = element.innerText.trim();
+      }
+
       final letter = (element.getAttribute('aria-label') ?? text).trim();
       if (letter.isEmpty) {
         continue;

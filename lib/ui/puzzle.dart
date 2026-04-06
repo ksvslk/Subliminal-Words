@@ -80,29 +80,31 @@ class Puzzle extends StatelessWidget {
                                 levelModel.currentLevel?.isBundled ?? false;
                             final solutionPath = model.svgPath;
 
-                            ImageProvider imageProvider;
-                            if (isBundled) {
-                              imageProvider = AssetImage(solutionPath);
-                            } else {
-                              imageProvider =
-                                  CachedNetworkImageProvider(solutionPath);
-                            }
+                            ImageProvider? imageProvider;
+                            if (solutionPath.isNotEmpty) {
+                              if (isBundled) {
+                                imageProvider = AssetImage(solutionPath);
+                              } else {
+                                imageProvider =
+                                    CachedNetworkImageProvider(solutionPath);
+                              }
 
-                            imageProvider
-                                .resolve(const ImageConfiguration())
-                                .addListener(ImageStreamListener(
-                                    (imageInfo, synchronousCall) {
-                              model.beginSolutionAnimation();
-                            }));
+                              imageProvider
+                                  .resolve(const ImageConfiguration())
+                                  .addListener(ImageStreamListener(
+                                      (imageInfo, synchronousCall) {
+                                model.beginSolutionAnimation();
+                              }));
+                            }
 
                             solutionWidget = Opacity(
                               opacity: model.solutionOpacity,
-                              child: Image(
+                              child: imageProvider != null ? Image(
                                 image: imageProvider,
                                 fit: BoxFit.contain,
                                 errorBuilder: (context, error, stackTrace) =>
                                     const Icon(Icons.error),
-                              ),
+                              ) : const SizedBox.shrink(),
                             );
                           }
 
@@ -140,11 +142,13 @@ class Puzzle extends StatelessWidget {
                                                 (context, url, error) =>
                                                     const Icon(Icons.error),
                                           )
-                                        : Image.asset(
-                                            model.picturePath,
-                                            fit: BoxFit.contain,
-                                            gaplessPlayback: true,
-                                          ),
+                                        : model.picturePath.isEmpty 
+                                            ? const Icon(Icons.broken_image) 
+                                            : Image.asset(
+                                                model.picturePath,
+                                                fit: BoxFit.contain,
+                                                gaplessPlayback: true,
+                                              ),
                                   ),
                                   solutionWidget,
                                   ...model.highlightLetters.map((svgLetter) {

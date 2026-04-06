@@ -261,5 +261,18 @@
 		<true/>
 		<key>UIFileSharingEnabled</key>
 		<true/>
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLName</key>
+				<string>create_level</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>subliminalwords</string>
+				</array>
+			</dict>
+		</array>
 	</dict>
 </plist>
