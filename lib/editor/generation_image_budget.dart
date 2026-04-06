@@ -213,7 +213,7 @@ Future<Uint8List> _compressWebpNearTarget(
   bool requireUnderBudget = false,
   bool allowDownscaling = true,
 }) async {
-  const qualities = <int>[80, 74, 68, 62, 56, 50, 44, 38, 30, 24, 18, 14, 10, 8];
+  const qualities = <int>[80, 74, 68, 62, 56, 50, 44, 38, 30, 24, 18, 14, 10, 8, 5, 2, 0];
   final dimensions = <int>[dimension];
   
   if (allowDownscaling) {
