@@ -76,35 +76,17 @@ class Puzzle extends StatelessWidget {
                           Widget solutionWidget = const SizedBox.shrink();
                           if (model.isFactTypeLevel &&
                               model.isFactLevelComplete) {
-                            final isBundled =
-                                levelModel.currentLevel?.isBundled ?? false;
-                            final solutionPath = model.svgPath;
-
-                            ImageProvider? imageProvider;
-                            if (solutionPath.isNotEmpty) {
-                              if (isBundled) {
-                                imageProvider = AssetImage(solutionPath);
-                              } else {
-                                imageProvider =
-                                    CachedNetworkImageProvider(solutionPath);
-                              }
-
-                              imageProvider
-                                  .resolve(const ImageConfiguration())
-                                  .addListener(ImageStreamListener(
-                                      (imageInfo, synchronousCall) {
-                                model.beginSolutionAnimation();
-                              }));
-                            }
-
                             solutionWidget = Opacity(
                               opacity: model.solutionOpacity,
-                              child: imageProvider != null ? Image(
-                                image: imageProvider,
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    const Icon(Icons.error),
-                              ) : const SizedBox.shrink(),
+                              child: (model.solutionImageBytes != null && model.solutionImageBytes!.isNotEmpty) 
+                                  ? Image.memory(
+                                      model.solutionImageBytes!,
+                                      fit: BoxFit.contain,
+                                      gaplessPlayback: true,
+                                      errorBuilder: (context, error, stackTrace) =>
+                                          const Icon(Icons.error),
+                                    ) 
+                                  : const SizedBox.shrink(),
                             );
                           }
 

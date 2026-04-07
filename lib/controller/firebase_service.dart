@@ -431,6 +431,22 @@ class FirebaseService {
         if (doc.exists && doc.data() != null) {
           return SWLevel.fromFirestore(doc.id, packId, doc.data()!);
         }
+
+        final parsedNr = int.tryParse(levelId.toString());
+        if (parsedNr != null) {
+          final querySnapshot = await _db
+              .collection('packs')
+              .doc(packId)
+              .collection('levels')
+              .where('nr', isEqualTo: parsedNr)
+              .limit(1)
+              .get(forceServer ? const GetOptions(source: Source.server) : null);
+
+          if (querySnapshot.docs.isNotEmpty) {
+            return SWLevel.fromFirestore(querySnapshot.docs.first.id, packId, querySnapshot.docs.first.data());
+          }
+        }
+
         _log.warning("[FirebaseService] Level doc not found: $packId/$levelId");
         return SWLevel(
             id: "",

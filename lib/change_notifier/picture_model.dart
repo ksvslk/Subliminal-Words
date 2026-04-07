@@ -28,6 +28,7 @@ class PictureModel with ChangeNotifier {
   bool isFactTypeLevel = false;
   bool isFactLevelComplete = false;
   Uint8List? puzzleImageBytes;
+  Uint8List? solutionImageBytes;
   double solutionOpacity = 0.0;
   Timer? _solutionAnimationTimer;
   bool _isFadingIn = true;
@@ -81,8 +82,19 @@ class PictureModel with ChangeNotifier {
         _log.severe('Failed to load SVG letters mapping', e);
         highlightLetters = [];
       }
+      solutionImageBytes = null;
     } else {
       highlightLetters = [];
+      if (svgPath.isNotEmpty) {
+        try {
+          solutionImageBytes = await _loadPuzzleImageBytes(svgPath);
+        } catch (e) {
+          _log.severe('Failed to load solution image bytes', e);
+          solutionImageBytes = null;
+        }
+      } else {
+        solutionImageBytes = null;
+      }
     }
     notifyListeners();
   }
@@ -119,6 +131,7 @@ class PictureModel with ChangeNotifier {
   void setLevelComplete() {
     if (isFactTypeLevel) {
       isFactLevelComplete = true;
+      beginSolutionAnimation();
       notifyListeners();
     } else {
       for (var element in highlightLetters) {
