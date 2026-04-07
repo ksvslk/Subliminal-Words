@@ -39,14 +39,14 @@ class GameFieldPlaceholder extends StatelessWidget {
       highlightColor: colorScheme.surfaceContainerHighest,
       child: Column(
         children: [
-          const Flexible(child: FractionallySizedBox(heightFactor: 0.5)),
-          Flexible(
+          const Spacer(flex: 1),
+          Expanded(
             flex: 10,
             child: _buildShimmerRow(7),
           ),
-          const Flexible(child: FractionallySizedBox(heightFactor: 0.5)),
+          const Spacer(flex: 1),
           ...List.generate(2, (rowIndex) {
-            return Flexible(
+            return Expanded(
               flex: 10,
               child: _buildShimmerRow(7),
             );
@@ -60,15 +60,17 @@ class GameFieldPlaceholder extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(count, (_) {
-        return Flexible(
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: Padding(
-              padding: const EdgeInsets.all(2.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(4),
+        return Expanded(
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: Padding(
+                padding: const EdgeInsets.all(2.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                 ),
               ),
             ),

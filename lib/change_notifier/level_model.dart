@@ -71,7 +71,7 @@ class LevelModel with ChangeNotifier {
   List<ProgressAchievement> progressAchievements = [];
 
   String? _pendingPackId;
-  int? _pendingLevelNumber;
+  dynamic _pendingLevelId;
   String? _cachedFcmToken;
   StreamSubscription<User?>? _authStateSubscription;
   StreamSubscription<String>? _tokenRefreshSubscription;
@@ -143,10 +143,18 @@ class LevelModel with ChangeNotifier {
       );
     }
 
-    await loadLevelFromSelection(initialLevelData);
-    await _initializeOnlineServices();
     await setupFCMListeners();
-    await _loadPendingLevel();
+
+    if (_pendingPackId != null && _pendingLevelId != null) {
+      final success = await _loadPendingLevel();
+      if (!success) {
+        await loadLevelFromSelection(initialLevelData);
+      }
+    } else {
+      await loadLevelFromSelection(initialLevelData);
+    }
+
+    await _initializeOnlineServices();
     _loadProgressAchievements();
   }
 
@@ -543,6 +551,7 @@ class LevelModel with ChangeNotifier {
     final currentToken = await messaging.getToken();
     if (currentToken != null && currentToken.isNotEmpty) {
       _cachedFcmToken = currentToken.trim();
+      debugPrint('\n\n===== TARGET DEVICE FCM TOKEN =====\n$currentToken\n===================================\n\n');
       await _syncPushTokenToSignedInUser(currentToken);
     }
 
@@ -565,9 +574,10 @@ class LevelModel with ChangeNotifier {
 
     RemoteMessage? initialMessage = await messaging.getInitialMessage();
     if (initialMessage != null) {
-      _handleNotificationTap(initialMessage);
+      await FirebaseAuth.instance.authStateChanges().first;
+      _handleNotificationTap(initialMessage, isInitial: true);
     }
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+    FirebaseMessaging.onMessageOpenedApp.listen((message) => _handleNotificationTap(message, isInitial: false));
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       if (message.data['notificationType'] == 'user_submission_rejected') {
         final levelName = (message.data['levelName']?.toString() ?? '').trim();
@@ -633,7 +643,7 @@ class LevelModel with ChangeNotifier {
     }
   }
 
-  void _handleNotificationTap(RemoteMessage message) async {
+  void _handleNotificationTap(RemoteMessage message, {bool isInitial = false}) async {
     if (message.data['notificationType'] == 'puzzle_generation_completed') {
       final draftLevelId = (message.data['draftLevelId']?.toString() ?? '').trim();
       if (draftLevelId.isNotEmpty) {
@@ -673,47 +683,45 @@ class LevelModel with ChangeNotifier {
     final levelNumberString = message.data['levelNumber'];
 
     if (packId != null && levelNumberString != null) {
-      final levelNumber = int.tryParse(levelNumberString);
-      if (levelNumber != null) {
-        _pendingPackId = packId;
-        _pendingLevelNumber = levelNumber;
+      final parsedInt = int.tryParse(levelNumberString.toString());
+      final dynamic levelId = parsedInt ?? levelNumberString.toString();
+      _pendingPackId = packId.toString();
+      _pendingLevelId = levelId;
+      if (!isInitial) {
         _loadPendingLevel();
-      } else {
-        _log.warning(
-            "Could not parse levelNumber from notification: $levelNumberString");
       }
     } else {
       _log.warning("Notification data is missing 'packId' or 'levelNumber'.");
     }
   }
 
-  Future<void> _loadPendingLevel() async {
-    if (_pendingPackId == null || _pendingLevelNumber == null) {
-      return;
-    }
-    if (currentLevel == null) {
-      return;
+  Future<bool> _loadPendingLevel() async {
+    if (_pendingPackId == null || _pendingLevelId == null) {
+      return false;
     }
 
     try {
       final String packId = _pendingPackId!;
-      final int levelNr = _pendingLevelNumber!;
+      final dynamic levelId = _pendingLevelId;
 
       _pendingPackId = null;
-      _pendingLevelNumber = null;
+      _pendingLevelId = null;
 
       final SWLevel? levelToLoad =
-          await firebaseService.getLevel(packId, levelNr, forceServer: true);
+          await firebaseService.getLevel(packId, levelId, forceServer: true);
 
-      if (levelToLoad != null && levelToLoad.isEnabled) {
+      if (levelToLoad != null && levelToLoad.nr != -1 && levelToLoad.isEnabled) {
         await loadLevelFromSelection(levelToLoad);
+        return true;
       } else {
-        _log.warning('Could not load pending level. Not found or not enabled.');
-        showMessageFromMascot('Could not load the requested level.');
+        _log.warning('Could not load pending level. Not found or not enabled. packId: $packId, levelId: $levelId');
+        showMessageFromMascot('Level "$levelId" could not be found or is unpublished.');
+        return false;
       }
     } catch (e, st) {
       _log.severe('Error loading pending level from notification', e, st);
-      showMessageFromMascot('An error occurred loading the level.');
+      showMessageFromMascot('An error occurred while loading the level.');
+      return false;
     }
   }
 

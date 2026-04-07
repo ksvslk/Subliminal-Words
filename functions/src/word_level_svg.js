@@ -4,7 +4,7 @@ const MAX_FONT_SIZE = 512;
 const MIN_NORMALIZED_POSITION = 0;
 const MAX_NORMALIZED_POSITION = 1;
 const MIN_SCALE = 0.2;
-const MAX_SCALE = 4.0;
+const MAX_SCALE = 12.0;
 const MAX_ABS_ROTATION = 360;
 const MAX_ABS_SKEW = 80;
 const MIN_OPACITY = 0;
@@ -82,58 +82,40 @@ function sanitizeWordLettersForSolution(rawLetters, { answer = '' } = {}) {
     return {
       id: `letter_${index + 1}`,
       letter,
-      x: requireNumberInRange(
-        rawLetter?.x,
-        MIN_NORMALIZED_POSITION,
-        MAX_NORMALIZED_POSITION,
+      x: requireFiniteNumber(
+        rawLetter?.x ?? 0,
         'Word letter position is invalid.',
       ),
-      y: requireNumberInRange(
-        rawLetter?.y,
-        MIN_NORMALIZED_POSITION,
-        MAX_NORMALIZED_POSITION,
+      y: requireFiniteNumber(
+        rawLetter?.y ?? 0,
         'Word letter position is invalid.',
       ),
-      fontSize: requireNumberInRange(
-        rawLetter?.fontSize,
-        MIN_FONT_SIZE,
-        MAX_FONT_SIZE,
+      fontSize: requireFiniteNumber(
+        rawLetter?.fontSize ?? 12,
         'Word letter size is invalid.',
       ),
-      rotationDegrees: requireNumberInRange(
+      rotationDegrees: requireFiniteNumber(
         rawLetter?.rotationDegrees ?? 0,
-        -MAX_ABS_ROTATION,
-        MAX_ABS_ROTATION,
         'Word letter rotation is invalid.',
       ),
-      scaleX: requireNumberInRange(
+      scaleX: requireFiniteNumber(
         rawLetter?.scaleX ?? 1,
-        MIN_SCALE,
-        MAX_SCALE,
         'Word letter scale is invalid.',
       ),
-      scaleY: requireNumberInRange(
+      scaleY: requireFiniteNumber(
         rawLetter?.scaleY ?? 1,
-        MIN_SCALE,
-        MAX_SCALE,
         'Word letter scale is invalid.',
       ),
-      skewXDegrees: requireNumberInRange(
+      skewXDegrees: requireFiniteNumber(
         rawLetter?.skewXDegrees ?? 0,
-        -MAX_ABS_SKEW,
-        MAX_ABS_SKEW,
         'Word letter skew is invalid.',
       ),
-      skewYDegrees: requireNumberInRange(
+      skewYDegrees: requireFiniteNumber(
         rawLetter?.skewYDegrees ?? 0,
-        -MAX_ABS_SKEW,
-        MAX_ABS_SKEW,
         'Word letter skew is invalid.',
       ),
-      opacity: requireNumberInRange(
+      opacity: requireFiniteNumber(
         rawLetter?.opacity ?? 1,
-        MIN_OPACITY,
-        MAX_OPACITY,
         'Word letter opacity is invalid.',
       ),
       fontWeightValue: normalizeWordLetterWeightValue(

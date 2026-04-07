@@ -126,22 +126,28 @@ class Puzzle extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(4),
                                     child: levelModel.currentLevel?.isBundled ==
                                             false
-                                        ? model.picturePath.isEmpty
-                                            ? const Icon(Icons.broken_image)
-                                            : CachedNetworkImage(
-                                                imageUrl: model.picturePath,
-                                            placeholder: (context, url) =>
-                                                const Center(
-                                              child: SizedBox.square(
-                                                dimension: 24,
-                                                child: CircularProgressIndicator
-                                                    .adaptive(),
-                                              ),
-                                            ),
-                                            errorWidget:
-                                                (context, url, error) =>
-                                                    const Icon(Icons.error),
-                                          )
+                                        ? (model.puzzleImageBytes != null && model.puzzleImageBytes!.isNotEmpty)
+                                            ? Image.memory(
+                                                model.puzzleImageBytes!,
+                                                fit: BoxFit.contain,
+                                                gaplessPlayback: true,
+                                              )
+                                            : model.picturePath.isEmpty
+                                                ? const Icon(Icons.broken_image)
+                                                : CachedNetworkImage(
+                                                    imageUrl: model.picturePath,
+                                                    placeholder: (context, url) =>
+                                                        const Center(
+                                                      child: SizedBox.square(
+                                                        dimension: 24,
+                                                        child: CircularProgressIndicator
+                                                            .adaptive(),
+                                                      ),
+                                                    ),
+                                                    errorWidget:
+                                                        (context, url, error) =>
+                                                            const Icon(Icons.error),
+                                                  )
                                         : model.picturePath.isEmpty 
                                             ? const Icon(Icons.broken_image) 
                                             : Image.asset(

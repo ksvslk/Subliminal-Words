@@ -9,6 +9,7 @@ import 'package:operation_hermes/ui/create_level_flow.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
+import 'package:package_info_plus/package_info_plus.dart';
 
 enum MenuItem {
   createXlevel,
@@ -218,7 +219,23 @@ class _SettingsMenuState extends State<SettingsMenu> {
                             : "developer"));
                 }
               }).toList(),
-              child: Text(item.name),
+              child: GestureDetector(
+                onLongPress: () async {
+                  try {
+                    final packageInfo = await PackageInfo.fromPlatform();
+                    if (!mainContext.mounted) return;
+                    ScaffoldMessenger.of(mainContext).showSnackBar(
+                      SnackBar(
+                        content: Text('Version: ${packageInfo.version} (${packageInfo.buildNumber})'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  } catch (e) {
+                    // Ignore errors
+                  }
+                },
+                child: Text(item.name),
+              ),
             );
           case MenuItem.restoreXpurchases:
             return MenuItemButton(

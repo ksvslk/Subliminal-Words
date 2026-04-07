@@ -169,7 +169,7 @@ class _GameFieldScreenState extends State<GameFieldScreen> {
                             child: const Puzzle(),
                           ),
                         ),
-                        Flexible(
+                        Expanded(
                           flex: 3,
                           child: AnimatedOpacity(
                             opacity: levelModel.isLevelReady ? 1.0 : 0.0,

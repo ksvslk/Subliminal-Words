@@ -1,6 +1,6 @@
 const { onDocumentUpdated, onDocumentWritten } = require('firebase-functions/v2/firestore');
-const { HttpsError, logger } = require('firebase-functions/v2');
-const { onCall } = require('firebase-functions/v2/https');
+const { logger } = require('firebase-functions/v2');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const vision = require('@google-cloud/vision');
 const admin = require('firebase-admin');

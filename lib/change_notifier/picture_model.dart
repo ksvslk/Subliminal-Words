@@ -75,7 +75,12 @@ class PictureModel with ChangeNotifier {
     }
 
     if (level.isHighlightType) {
-      highlightLetters = await _loadSvgLetters(svgPath: svgPath);
+      try {
+        highlightLetters = await _loadSvgLetters(svgPath: svgPath);
+      } catch (e) {
+        _log.severe('Failed to load SVG letters mapping', e);
+        highlightLetters = [];
+      }
     } else {
       highlightLetters = [];
     }

@@ -414,7 +414,7 @@ class FirebaseService {
     return packs;
   }
 
-  Future<SWLevel?> getLevel(String packId, int levelNr, {bool forceServer = false}) async {
+  Future<SWLevel?> getLevel(String packId, dynamic levelId, {bool forceServer = false}) async {
     int maxRetries = 3;
     Duration delay = const Duration(seconds: 1);
     int attempt = 0;
@@ -425,13 +425,13 @@ class FirebaseService {
             .collection('packs')
             .doc(packId)
             .collection('levels')
-            .doc(levelNr.toString())
+            .doc(levelId.toString())
             .get(forceServer ? const GetOptions(source: Source.server) : null);
 
         if (doc.exists && doc.data() != null) {
           return SWLevel.fromFirestore(doc.id, packId, doc.data()!);
         }
-        _log.warning("[FirebaseService] Level doc not found: $packId/$levelNr");
+        _log.warning("[FirebaseService] Level doc not found: $packId/$levelId");
         return SWLevel(
             id: "",
             documentId: "",
@@ -458,12 +458,12 @@ class FirebaseService {
           attempt++;
         } else {
           _log.warning(
-              "[FirebaseService] Failed to get level $packId/$levelNr: $e");
+              "[FirebaseService] Failed to get level $packId/$levelId: $e");
           rethrow;
         }
       } catch (e, st) {
         _log.severe(
-            "[FirebaseService] Unexpected error in getLevel: $packId/$levelNr",
+            "[FirebaseService] Unexpected error in getLevel: $packId/$levelId",
             e,
             st);
         rethrow;
