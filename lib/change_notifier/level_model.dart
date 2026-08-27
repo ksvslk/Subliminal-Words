@@ -5,6 +5,7 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -551,7 +552,9 @@ class LevelModel with ChangeNotifier {
     final currentToken = await messaging.getToken();
     if (currentToken != null && currentToken.isNotEmpty) {
       _cachedFcmToken = currentToken.trim();
-      debugPrint('\n\n===== TARGET DEVICE FCM TOKEN =====\n$currentToken\n===================================\n\n');
+      if (kDebugMode) {
+        debugPrint('\n\n===== TARGET DEVICE FCM TOKEN =====\n$currentToken\n===================================\n\n');
+      }
       await _syncPushTokenToSignedInUser(currentToken);
     }
 
@@ -579,6 +582,12 @@ class LevelModel with ChangeNotifier {
     }
     FirebaseMessaging.onMessageOpenedApp.listen((message) => _handleNotificationTap(message, isInitial: false));
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.data['claimUrl'] != null) {
+        // Code-gift push while playing: no system banner in foreground, and
+        // the generic "new level" toast below would be wrong. Handled by the
+        // claim tap flow when it arrives in background; stay quiet here.
+        return;
+      }
       if (message.data['notificationType'] == 'user_submission_rejected') {
         final levelName = (message.data['levelName']?.toString() ?? '').trim();
         final body = levelName.isEmpty

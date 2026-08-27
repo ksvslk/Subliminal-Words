@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,6 +37,73 @@ import 'package:operation_hermes/ui/app_scaffold_messenger.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {}
+
+/// Stagenator code-gift pushes carry a claimUrl in their data payload. Open it
+/// on tap from any app state. Same pattern as AI Movie Quiz: native intent
+/// capture closes the engine-boot race; a persisted consumed-message-id set
+/// (native) plus a session set and URL window (here) prevent replays and
+/// double-opens.
+void _handleClaimUrlTaps() {
+  String? lastUrl;
+  DateTime? lastAt;
+  const nativeGuard = MethodChannel('stagenator/claim');
+  final sessionIds = <String>{};
+  Future<void> open(RemoteMessage? message) async {
+    final id = message?.messageId;
+    if (id != null) {
+      if (!sessionIds.add(id)) return;
+      bool fresh = true;
+      try {
+        fresh = await nativeGuard.invokeMethod<bool>('consume', id) ?? true;
+      } catch (_) {
+        // iOS / channel unavailable: session set + URL window suffice
+      }
+      if (!fresh) return;
+    }
+    final url = message?.data['claimUrl'];
+    if (url is String && url.startsWith('https://')) {
+      final now = DateTime.now();
+      if (url == lastUrl &&
+          lastAt != null &&
+          now.difference(lastAt!) < const Duration(seconds: 15)) {
+        return;
+      }
+      lastUrl = url;
+      lastAt = now;
+      try {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      } catch (e) {
+        debugPrint('claimUrl launch failed: $e');
+      }
+    }
+  }
+
+  Future<void> openRaw(dynamic url) async {
+    if (url is String) {
+      await open(RemoteMessage(data: {'claimUrl': url}));
+    }
+  }
+
+  nativeGuard.setMethodCallHandler((call) async {
+    if (call.method == 'claimUrl') await openRaw(call.arguments);
+  });
+  nativeGuard
+      .invokeMethod<String>('getPendingClaimUrl')
+      .then(openRaw)
+      .catchError((_) => null);
+
+  FirebaseMessaging.instance.getInitialMessage().then(open);
+  FirebaseMessaging.onMessageOpenedApp.listen(open);
+}
+
+class _OnResume extends WidgetsBindingObserver {
+  _OnResume(this.onResume);
+  final void Function() onResume;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) onResume();
+  }
+}
 
 Future<void> initPurchases() async {
   await Purchases.setLogLevel(LogLevel.debug);
@@ -124,6 +194,31 @@ Future<void> main() async {
   FirebaseService firebaseService = FirebaseService();
   final localNotificationService = LocalNotificationService();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  _handleClaimUrlTaps();
+  // Tier-1 identity: tag analytics with the pseudonymous auth uid (no PII)
+  // whenever a sign-in lands.
+  FirebaseAuth.instance.authStateChanges().listen((user) {
+    if (user != null) {
+      FirebaseAnalytics.instance
+          .setUserId(id: user.uid)
+          .catchError((_) {});
+    }
+  });
+  // Keep "last seen" honest for long-lived processes (hourly throttle).
+  DateTime? lastTouch;
+  WidgetsBinding.instance.addObserver(
+    _OnResume(() {
+      final now = DateTime.now();
+      if (lastTouch != null &&
+          now.difference(lastTouch!) < const Duration(hours: 1)) {
+        return;
+      }
+      lastTouch = now;
+      FirebaseMessaging.instance.getToken().then((t) {
+        if (t != null) firebaseService.savePushToken(t).catchError((_) {});
+      });
+    }),
+  );
   await localNotificationService.initialize();
 
   runApp(

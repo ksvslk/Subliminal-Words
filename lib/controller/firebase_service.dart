@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -187,11 +188,13 @@ class FirebaseService {
       return;
     }
 
+    final info = await PackageInfo.fromPlatform();
     await _db.collection(collectionName).doc(uid).set(
       <String, dynamic>{
         'token': normalizedToken,
         'updatedAt': FieldValue.serverTimestamp(),
         'platform': defaultTargetPlatform.name,
+        'appVersion': info.version,
       },
       SetOptions(merge: true),
     );
