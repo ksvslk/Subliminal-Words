@@ -27,3 +27,5 @@ Level pictures, music and sounds are not included.
 - `lib/ui/screen/create_level_screen.dart` is 6,006 lines long.
 
 © 2023–2026 Indest OÜ. All rights reserved.
+
+Files with the Flutter project authors' header come from [Flutter's casual games template](https://github.com/flutter/games) and keep its BSD license ([third_party/flutter-games/LICENSE](third_party/flutter-games/LICENSE)). The fonts use the SIL Open Font License.
