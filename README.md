@@ -1,16 +1,29 @@
-# operation_hermes
+<p align="center">
+  <img src=".github/icon.png" width="140" alt="Subliminal Words app icon">
+</p>
 
-A new Flutter project.
+<h1 align="center">Subliminal Words</h1>
 
-## Getting Started
+<p align="center">A picture puzzle game. Each picture hides a word. Find it and spell it.<br>
+Featured in “New Games We Love” on the App Store, 2024.</p>
 
-This project is a starting point for a Flutter application.
+<p align="center">
+  <a href="https://apps.apple.com/app/id6468366578"><img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" height="40" align="middle" alt="Download on the App Store"></a>
+  &nbsp;
+  <a href="https://play.google.com/store/apps/details?id=com.indest.subliminalwords"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" height="60" align="middle" alt="Get it on Google Play"></a>
+</p>
 
-A few resources to get you started if this is your first Flutter project:
+<p align="center">Flutter · Firebase · RevenueCat · AdMob</p>
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## About the code
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+I built the first version in 2023 and 2024, starting from Flutter's casual games template. `lib/ui/letter_box.dart` and `lib/change_notifier/field_model.dart` are still mostly that code. Most changes since 2025 were made with AI coding agents.
+
+Level pictures, music and sounds are not included.
+
+## Known issues
+
+- Decoy letters always come from the start of the alphabet, so answer letters late in the alphabet are easy to spot (`field_model.dart`).
+- `lib/ui/screen/create_level_screen.dart` is 6,006 lines long.
+
+© 2023–2026 Indest OÜ. All rights reserved.
